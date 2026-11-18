@@ -302,7 +302,7 @@ export const GATE = 'required-jobs-ran.yml';
 /** The reviewed gate, byte for byte. Its shape rules don't constrain what the script does, and a
  *  doctored copy on main would pass every future PR, so a change to it changes this constant in
  *  the same reviewed change (review RJG-8). */
-export const GATE_SHA256 = '1f77c6aa421320be2a9a16aacb0c756114b2050ed4d5d1fec9976bd7db255ad0';
+export const GATE_SHA256 = '8130c57d3493c3ef88b323839058081aa0bd8bb9633a87fec5edb2452d3a2286';
 const GATE_EXPRESSIONS = new Set(['github.token', 'github.repository', 'github.event.workflow_run.head_sha']);
 export function gateProblems(files: Record<string, string>): string[] {
 	const yml = files[GATE];
@@ -505,7 +505,7 @@ all="$*"
 echo "$all" >> "$FIX/log"
 case "$all" in
   *"-X POST"*) for a; do case "$a" in state=*) echo "\${a#state=}" > "$FIX/state";; esac; done ;;
-  *"/workflows/"*"/runs?"*) [[ "$1 $2" == "api --paginate" ]] || exit 9; [[ -f "$FIX/fail-runs" ]] && exit 1; w="\${all#*/workflows/}"; w="\${w%%/*}"; [[ -f "$FIX/runs-$w" ]] && cat "$FIX/runs-$w"; true ;;
+  *"/workflows/"*"/runs?"*) [[ "$1 $2" == "api --paginate" ]] || exit 9; [[ -f "$FIX/fail-runs" ]] && exit 1; [[ -f "$FIX/kill-runs" ]] && kill -KILL $PPID; w="\${all#*/workflows/}"; w="\${w%%/*}"; [[ -f "$FIX/runs-$w" ]] && cat "$FIX/runs-$w"; true ;;
   *"/runs/"*"/jobs?"*) i="\${all#*/runs/}"; i="\${i%%/*}"; cat "$FIX/job-$i" ;;
   *) exit 8 ;;
 esac
@@ -539,6 +539,7 @@ esac
 		['gate script: a required run still in progress', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress pull_request\n' }, 'pending'],
 		['gate script: a failure beats a pending run', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress pull_request\n', 'job-3': 'failure\n' }, 'failure'],
 		['gate script: push runs alone are pending until the PR run is judged', { ...allGreen, 'runs-workflow-lint.yml': '2 completed push\n' }, 'pending'],
+		['gate script RJG-23: a run killed mid-read after an earlier success leaves no success', { ...allGreen, 'state': 'success\n', 'kill-runs': '' }, 'pending'],
 		['gate script: an API read failure after an earlier success posts failure', { ...allGreen, 'state': 'success\n', 'fail-runs': '' }, 'failure'],
 	];
 	for (const [name, fixture, want] of gateRuns) {

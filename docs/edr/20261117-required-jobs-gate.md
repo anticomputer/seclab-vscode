@@ -38,6 +38,10 @@ repository's token while handling PR-controlled events, and are almost always us
   - failure for anything else, including a missing run or job, and any error before the final
     post (an EXIT trap posts failure, so an API failure can't leave an earlier success standing).
 
+  Each run posts pending before it reads anything, so a run cancelled, timed out or killed part
+  way can't leave an earlier success standing either (review RJG-23). The first `requested` event
+  of a commit can post failure for runs not yet created; later events correct it.
+
   The coordinator makes it a required check once it has posted a green status on a real PR. A PR
   that deletes or disables CI then never gets the status, so it stays blocked.
 - **Invariants**, enforced by `build/check-required-checks.ts` in the required `lint` job, and by

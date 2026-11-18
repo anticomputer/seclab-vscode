@@ -47,7 +47,9 @@ jobs:
           # Any failure before the final post leaves failure, never an earlier success (Copilot
           # review on PR 63).
           post() { gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$1" -f context=required-jobs-ran -f description="$2" >/dev/null; }
-          trap 'post failure "the gate could not read the runs"' EXIT
+          trap 'post failure "the gate could not read the runs"' EXIT INT TERM
+          # Pending first: a cancelled, timed-out or killed run can't leave an earlier success (RJG-23).
+          post pending "reading the runs"
           state=success
           detail=""
           # workflow file, required job (= the required context): REQUIRED
@@ -88,4 +90,4 @@ jobs:
           done
           echo "required-jobs-ran: $state ($detail )"
           post "$state" "${detail# }"
-          trap - EXIT
+          trap - EXIT INT TERM
