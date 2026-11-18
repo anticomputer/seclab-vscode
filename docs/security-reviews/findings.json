@@ -15386,7 +15386,7 @@
 			"component": "docs link check (lychee)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"commit": "3de1c6cec55b",
 			"gap": "A cache-key version; nothing to test beyond the key."
 		},
 		{
@@ -15413,7 +15413,7 @@
 			"component": "docs link check (lychee)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"commit": "3de1c6cec55b",
 			"gap": "Timing depends on GitHub throttling; shown only by CI runs."
 		},
 		{
@@ -15455,7 +15455,7 @@
 			"component": "docs link check (lychee)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"commit": "3de1c6cec55b",
 			"gap": "An argument; nothing to test offline."
 		},
 		{
@@ -15486,7 +15486,7 @@
 				"file": "seclab",
 				"name": "this repo's github.com link was checked, not excluded"
 			},
-			"commit": "patch:39524975df5e74422467599ea993f56473f32621"
+			"commit": "1a41c6f66d6e"
 		},
 		{
 			"record": "20261117-link-check-retries.md",
@@ -15501,7 +15501,7 @@
 				"file": "seclab",
 				"name": "a dead upstream permalink did not fail at raw"
 			},
-			"commit": "patch:39524975df5e74422467599ea993f56473f32621"
+			"commit": "1a41c6f66d6e"
 		},
 		{
 			"record": "20261117-link-check-retries.md",

@@ -2001,8 +2001,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | LCR-6 | info | false-positive | Cache poisoning from pull requests. | The review recorded no issue. |
 | LCR-7 | low | fixed-untested | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
 | LCR-8 | info | false-positive | Prompt injection. | The review recorded no issue. |
-| LCR2-1 | low | fixed | A raw exclude for this repo also skipped raw self-links written in a doc, which used to be checked. | patch:39524975df5e74422467599ea993f56473f32621 · `seclab` "this repo's github.com link was checked, not excluded" |
-| LCR2-2 | info | fixed | http, raw and blame permalinks were not remapped to raw. | patch:39524975df5e74422467599ea993f56473f32621 · `seclab` "a dead upstream permalink did not fail at raw" |
+| LCR2-1 | low | fixed | A raw exclude for this repo also skipped raw self-links written in a doc, which used to be checked. | 1a41c6f66d6e · `seclab` "this repo's github.com link was checked, not excluded" |
+| LCR2-2 | info | fixed | http, raw and blame permalinks were not remapped to raw. | 1a41c6f66d6e · `seclab` "a dead upstream permalink did not fail at raw" |
 | LCR2-3 | info | false-positive | A directory blob URL or a private repository fails at raw. | Fails closed; the review recorded no issue. |
 | LCR2-4 | info | false-positive | The cache key is not bumped for the new host. | The review recorded no issue. |
 | LCR2-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
