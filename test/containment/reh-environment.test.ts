@@ -578,6 +578,9 @@ async function hostSettings(b: Build, authority: string): Promise<string[]> {
 		extensionsSyncManagementService: { updateIgnoredExtensions: async () => { changed.push('sync ignore'); } },
 		userDataAutoSyncService: { triggerSync: async () => { } },
 	}, { identifier: { id: 'host.ext' } }));
+	await attempt('dismissed notifications', () => evaluate<(v: string) => void>(asFunction(slice(b.sources.workbench, /\n\tprivate setDismissedNotificationsValue\(/)!), 'setDismissedNotificationsValue', { ...b.deps, EXTENSIONS_DISMISSED_NOTIFICATIONS_KEY: 'k', StorageScope: { PROFILE: 0 }, StorageTarget: { USER: 0 } }).call({
+		seclabEnvironment: { remoteAuthority: authority }, storageService: { store: () => { changed.push('dismissed notifications'); } },
+	}, '[]'));
 	const guard = slice(b.sources.importExport, /\n\tprivate seclabNoImport\(/);
 	const self = {
 		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
@@ -869,7 +872,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
 	'a tab window runs a one-time migration of host state', 'a tab window changes host extension settings: bisect',
 	'a tab window changes host extension settings: auto-update', 'a tab window changes host extension settings: untrust',
-	'a tab window changes host extension settings: sync ignore', 'a tab window changes host extension settings: profile import',
+	'a tab window changes host extension settings: sync ignore', 'a tab window changes host extension settings: dismissed notifications', 'a tab window changes host extension settings: profile import',
 	'a tab extension offers the host\'s AI features setting', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
@@ -961,7 +964,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
-		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'profile import']);
+		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'dismissed notifications', 'profile import']);
 		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
 		assert.deepEqual(await enablement(b, other, 1), ['tab.pack', 'host.ext']);
 		assert.deepEqual(await globalEnablement(b, other), { written: ['enable', 'disable'], events: true });
@@ -1013,6 +1016,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['auto-update from a tab', { patch: ["(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
 			['untrust from a tab', { patch: ["(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (false) {"] }, 'a tab window changes host extension settings: untrust'],
 			['sync ignore from a tab', { patch: ["(patch 0059, review ENV-48).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-48).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: sync ignore'],
+			['dismissals written from a tab', { patch: ["review ENV-51).\n+		if (seclabIsTabAuthority(this.seclabEnvironment.remoteAuthority)) {", "review ENV-51).\n+		if (false) {"] }, 'a tab window changes host extension settings: dismissed notifications'],
 			['AI features from a tab extension', { patch: ["+		if (seclabIsTabAuthority(this.extension.local.location.authority)) {", "+		if (false) {"] }, 'a tab extension offers the host\'s AI features setting'],
 			['profile import in a tab', { patch: [" 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+		this.seclabNoImport();\n", " 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+\n"] }, 'a tab window changes host extension settings: profile import'],
 			['upstream enablement registered', { patch: ["registerSingleton(IGlobalExtensionEnablementService, SeclabGlobalExtensionEnablementService,", "registerSingleton(IGlobalExtensionEnablementService, GlobalExtensionEnablementService,"] }, 'the host\'s global enablement is registered unguarded'],
