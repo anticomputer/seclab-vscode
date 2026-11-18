@@ -188,8 +188,9 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   `remoteExtensionsScanner.ts`, `extensionManagementServerService.ts`, `nativeExtensionManagementService.ts`,
   `remoteExtensionManagementService.ts`, `remote.contribution.ts`, `nativeMcpRemoteDiscovery.ts`,
   `mcpCopilotGlobalConfigurationService.ts`, `mcpWorkbenchManagementService.ts`, `extensionsWorkbenchService.ts`,
-  `extensionsActions.ts`, `extensionManagementService.ts`, `extensionEnablementService.ts` and
-  `unsupportedExtensionsMigrationContribution.ts`. A tab's server names where the window keeps that tab's settings,
+  `extensionsActions.ts`, `extensionManagementService.ts`, `extensionEnablementService.ts`,
+  `unsupportedExtensionsMigrationContribution.ts`, `localization.contribution.ts`,
+  `extensionGalleryManifestService.ts` and `workbench.common.main.ts`. A tab's server names where the window keeps that tab's settings,
   storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
   module). That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
@@ -200,13 +201,15 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   out to the host), nor the packs and dependencies a tab
   extension's manifest names, and the window doesn't retry installs the tab's server reports failed
   (`host-install`). Behind all of those, a tab window's channel to the host's own extension
-  management is read-only (`seclabHostExtensionsChannel`), it changes the enablement of the tab's
-  extensions only, and it skips the unsupported-extensions migration (reviews ENV-28 to ENV-31).
+  management is read-only (`seclabHostExtensionsChannel`), the host's global enablement is
+  read-only (`SeclabGlobalExtensionEnablementService`, logged `host-enablement`), it skips the
+  unsupported-extensions migration and the display-language prompt on the tab's install events,
+  sends the tab's server no marketplace token and keeps no publisher trust (reviews ENV-28 to ENV-38).
   A foreign location refuses the environment or reply,
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-32;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-38;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this

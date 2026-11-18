@@ -977,7 +977,7 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
  */
 export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean | 'strings';
 
-export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install' | 'mcp-discovery' | 'mcp-management';
+export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install' | 'host-enablement' | 'mcp-discovery' | 'mcp-management';
 
 /**
  * Record that a tab window refused a location its server named outside the tab (patch 0059). The
@@ -1131,8 +1131,12 @@ export function seclabTabMcpChannel(channel: IChannel, remoteAuthority: string):
 	};
 }
 
-/** What a tab window may ask of the host's own extension management: reading, and packing a host extension to install it in the tab. */
-const SECLAB_HOST_EXTENSION_READS: ReadonlySet<string> = new Set(['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip']);
+/**
+ * What a tab window may ask of the host's own extension management: reading, packing a host
+ * extension to install it in the tab, and downloading a gallery package into the host's download
+ * cache to install it in the tab (review ENV-35). None installs anything on the host.
+ */
+const SECLAB_HOST_EXTENSION_READS: ReadonlySet<string> = new Set(['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip', 'download']);
 
 /**
  * The host's `extensions` channel as a tab window may use it: read-only. In a tab window the
