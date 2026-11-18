@@ -24,3 +24,18 @@ Nothing at high or above. No injection: git runs without a shell and every commi
 | FAB-7 | Info | git | An inherited `GIT_DIR` could make HEAD another repository's. | Fixed | git runs without inherited `GIT_*` variables. |
 | FAB-8 | Info | test builds | A test build at HEAD passed any run, and a variant's REH image wasn't bound to a commit. | Fixed | Test builds run only from `.work/test-builds/`; `image oci --test-variant` requires the REH's build info to name the commit under test. |
 | FAB-9 | Info | prompt injection | None found. | No finding | — |
+
+## Round FAB2
+A re-review of the round FAB fixes. Nothing at high or above; three mediums, one of them in an
+agentic harness the change had not touched.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| FAB2-1 | Medium | release fetch | A refused or failed `fetch macos` left the earlier release app, which every run then accepted. | Fixed | The fetch writes `.work/app-fetch-pending` until the new app is in place; runs refuse the release app while it exists. |
+| FAB2-2 | Medium | local builds | A dirty tree's build recorded HEAD, and a local build info looked like a CI one. | Fixed | Only a clean tree's build records a commit; `runId` only for CI builds. |
+| FAB2-3 | Medium | agentic | The agentic runner's "ran the requested build" check could not fail, and neither agentic harness checked the build at prepare. | Fixed | Both refuse a wrong build at prepare; the check requires the launched app, unchanged build info and a passing build check. |
+| FAB2-4 | Low | probe copies | A probe's altered copies were judged by their own location's rule, not their source's. | Fixed | The source app is judged once; copies run as its commit. |
+| FAB2-5 | Low | git | The variant fetch's ancestry gate, and the new shell sites, kept inherited `GIT_*` variables. | Fixed | One helper drops every `GIT_*` variable. |
+| FAB2-6 | Low | Linux driver | The Linux editor tarball was never bound to a commit. | Fixed | The build info beside the tarball goes beside the extracted editor, with this checkout's HEAD as the commit; a REH-only build's info is refused. |
+| FAB2-7 | Low | fetch | The dispatcher hardcoded the branch location, and FAB-1 had no automated test. | Fixed | Usage is checked inside the fetch after the clear; `./seclab fetch --self-test` runs in CI. |
+| FAB2-8 | Info | prompt injection | None found. | No finding | — |
