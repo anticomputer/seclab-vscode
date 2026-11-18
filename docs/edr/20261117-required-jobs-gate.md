@@ -69,6 +69,13 @@ repository's token while handling PR-controlled events, and are almost always us
     each gutted validator passes its own tree; a clean merge passes.
   - **Coordinator review before arming.** A PR touching `.github/workflows/**`, `seclab` or
     `build/` waits for the coordinator's go-ahead before it is armed (AGENTS.md "Landing").
+- **Owner acceptances a merge changed** (compensating control for HHHH-4, accepted by the
+  project owner 2026-11-18). `landing verify` lists every merged commit that changes
+  `docs/security-reviews/owner-acceptances.md`, with the rows it added or changed and those it
+  removed, so the coordinator checks each against an owner decision. It reports; it doesn't
+  refuse, since a legitimate owner row lands the same way. The rows are printed as data, with
+  control characters removed. `./seclab landing --self-test` injects an unannounced row and
+  requires the report to name its commit and the row, and nothing for a clean merge.
 - **Liveness.** A `workflow_run` workflow runs only from the default branch, so it has no run
   before it lands. The liveness register may carry it as `pending` (since when, and the proof PR
   whose run is recorded), only for a workflow whose sole trigger is `workflow_run`. More than 3

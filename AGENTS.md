@@ -199,7 +199,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
      and concluded success, and the `required-jobs-ran` gate posted success. It then re-runs that
      old `main`'s own validators (the lint job's, the docs check and the findings register) over
      the merged tree in containers, so a validator the change gutted is caught here
-     ([EDR](docs/edr/20261117-required-jobs-gate.md)). Also confirm that workflow-lint's
+     ([EDR](docs/edr/20261117-required-jobs-gate.md)). It also lists every merged commit that
+     changed `docs/security-reviews/owner-acceptances.md`, with its rows: send that part to the
+     coordinator, who checks each row against an owner decision. Also confirm that workflow-lint's
      `denylist` job ran on that push. Tell the coordinator before the next PR is armed.
 
   A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's, and
