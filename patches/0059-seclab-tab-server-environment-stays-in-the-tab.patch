@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts b/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts
---- a/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts	2026-11-18 14:54:21
 @@ -24,6 +24,8 @@
  import { IWorkspaceContextService, WorkbenchState, IWorkspaceFolder } from '../../../../platform/workspace/common/workspace.js';
  import { IHostService } from '../../../services/host/browser/host.js';
@@ -33,8 +33,8 @@ diff -ruN a/src/vs/workbench/contrib/extensions/browser/extensionsActions.ts b/s
  		const vsixs: URI[] = [];
  		const targetPlatform = await this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.getTargetPlatform();
 diff -ruN a/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts b/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts
---- a/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts	2026-11-18 14:54:21
 @@ -56,6 +56,8 @@
  import { isDefined, isString, isUndefined } from '../../../../base/common/types.js';
  import { IExtensionManifestPropertiesService } from '../../../services/extensions/common/extensionManifestPropertiesService.js';
@@ -68,9 +68,34 @@ diff -ruN a/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchServi
  		await this.doInstall(extension, async () => {
  			const local = extension.local;
  			if (!local) {
+diff -ruN a/src/vs/workbench/contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts b/src/vs/workbench/contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts
+--- a/src/vs/workbench/contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts	2026-11-18 14:54:21
+@@ -8,6 +8,8 @@
+ import { migrateUnsupportedExtensions } from '../../../../platform/extensionManagement/common/unsupportedExtensionsMigration.js';
+ import { ILogService } from '../../../../platform/log/common/log.js';
+ import { IWorkbenchContribution } from '../../../common/contributions.js';
++import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
++import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
+ import { IExtensionManagementServerService } from '../../../services/extensionManagement/common/extensionManagement.js';
+ 
+ export class UnsupportedExtensionsMigrationContrib implements IWorkbenchContribution {
+@@ -18,9 +20,11 @@
+ 		@IExtensionStorageService extensionStorageService: IExtensionStorageService,
+ 		@IGlobalExtensionEnablementService extensionEnablementService: IGlobalExtensionEnablementService,
+ 		@ILogService logService: ILogService,
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
+ 	) {
+ 		// Unsupported extensions are not migrated for local extension management server, because it is done in shared process
+-		if (extensionManagementServerService.remoteExtensionManagementServer) {
++		// seclab: nor in a tab window, where the control manifest and the extensions are the tab's server's (patch 0059, review ENV-31).
++		if (extensionManagementServerService.remoteExtensionManagementServer && !seclabIsTabAuthority(environmentService.remoteAuthority)) {
+ 			migrateUnsupportedExtensions(undefined, extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService, extensionGalleryService, extensionStorageService, extensionEnablementService, logService);
+ 		}
+ 		if (extensionManagementServerService.webExtensionManagementServer) {
 diff -ruN a/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts b/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts
---- a/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts	2026-11-18 14:54:21
 @@ -13,6 +13,7 @@
  import { IRemoteAgentService } from '../../../../services/remote/common/remoteAgentService.js';
  import { IMcpRegistry } from '../mcpRegistryTypes.js';
@@ -91,8 +116,8 @@ diff -ruN a/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscove
  			service.load().then(
  				data => this.setDetails(data),
 diff -ruN a/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts b/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts
---- a/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts	2026-11-18 14:54:21
 @@ -12,6 +12,7 @@
  import { getCopilotGlobalMcpConfigurationResource } from '../../../../platform/mcp/common/mcpCopilotGlobalConfiguration.js';
  import { INativeMcpDiscoveryData, INativeMcpDiscoveryHelperService, NativeMcpDiscoveryHelperChannelName } from '../../../../platform/mcp/common/nativeMcpDiscoveryHelper.js';
@@ -112,8 +137,8 @@ diff -ruN a/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationSer
  		return this.loadLocalDiscoveryData();
  	}
 diff -ruN a/src/vs/workbench/contrib/remote/common/remote.contribution.ts b/src/vs/workbench/contrib/remote/common/remote.contribution.ts
---- a/src/vs/workbench/contrib/remote/common/remote.contribution.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/contrib/remote/common/remote.contribution.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/contrib/remote/common/remote.contribution.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/contrib/remote/common/remote.contribution.ts	2026-11-18 14:54:21
 @@ -28,6 +28,7 @@
  import { RemoteLoggerChannelClient } from '../../../../platform/log/common/logIpc.js';
  import { REMOTE_DEFAULT_IF_LOCAL_EXTENSIONS } from '../../../../platform/remote/common/remote.js';
@@ -134,9 +159,39 @@ diff -ruN a/src/vs/workbench/contrib/remote/common/remote.contribution.ts b/src/
  		}
  	}
  }
+diff -ruN a/src/vs/workbench/services/extensionManagement/browser/extensionEnablementService.ts b/src/vs/workbench/services/extensionManagement/browser/extensionEnablementService.ts
+--- a/src/vs/workbench/services/extensionManagement/browser/extensionEnablementService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/extensionManagement/browser/extensionEnablementService.ts	2026-11-18 14:54:21
+@@ -36,6 +36,8 @@
+ import { IProductService } from '../../../../platform/product/common/productService.js';
+ import { isWeb } from '../../../../base/common/platform.js';
+ import { ChatEntitlementService, IChatEntitlementService } from '../../chat/common/chatEntitlementService.js';
++import { Schemas } from '../../../../base/common/network.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation } from '../../extensions/common/seclabRpcFilter.js';
+ import { IDefaultAccountService } from '../../../../platform/defaultAccount/common/defaultAccount.js';
+ 
+ const SOURCE = 'IWorkbenchExtensionEnablementService';
+@@ -318,6 +320,17 @@
+ 
+ 		if (newState === EnablementState.EnabledGlobally || newState === EnablementState.EnabledWorkspace) {
+ 			extensions.push(...this.getExtensionsToEnableRecursively(extensions, this.extensionsManager.extensions, newState, { dependencies: true, pack: true }));
++		}
++		// seclab: a tab window changes the enablement of the tab's extensions only. Its extensions'
++		// packs and dependencies, which the tab's server writes, would otherwise reach the host's
++		// (patch 0059, review ENV-30).
++		const authority = this.environmentService.remoteAuthority;
++		if (authority && seclabIsTabAuthority(authority)) {
++			const own = extensions.filter(e => e.location.scheme === Schemas.vscodeRemote && e.location.authority === authority);
++			if (own.length !== extensions.length) {
++				seclabRefuseServerLocation(authority, 'host-install');
++				extensions = own;
++			}
+ 		}
+ 
+ 		const workspace = newState === EnablementState.DisabledWorkspace || newState === EnablementState.EnabledWorkspace;
 diff -ruN a/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts b/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts
---- a/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/extensionManagement/common/extensionManagementService.ts	2026-11-18 14:54:21
 @@ -50,6 +50,8 @@
  import { Codicon } from '../../../../base/common/codicons.js';
  import { IStringDictionary } from '../../../../base/common/collections.js';
@@ -186,19 +241,26 @@ diff -ruN a/src/vs/workbench/services/extensionManagement/common/extensionManage
  		} else {
  			servers.push(server);
 diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts b/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts
---- a/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 14:54:21
 @@ -16,6 +16,7 @@
  import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
  import { NativeExtensionManagementService } from './nativeExtensionManagementService.js';
  import { Disposable } from '../../../../base/common/lifecycle.js';
-+import { seclabTabExtensionsChannel } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabHostExtensionsChannel, seclabTabExtensionsChannel } from '../../extensions/common/seclabRpcFilter.js';
  
  export class ExtensionManagementServerService extends Disposable implements IExtensionManagementServerService {
  
-@@ -36,7 +37,11 @@
- 		this.localExtensionManagementServer = { extensionManagementService: localExtensionManagementService, id: 'local', label: localize('local', "Local") };
+@@ -32,11 +33,16 @@
+ 		@IInstantiationService instantiationService: IInstantiationService,
+ 	) {
+ 		super();
+-		const localExtensionManagementService = this._register(instantiationService.createInstance(NativeExtensionManagementService, sharedProcessService.getChannel('extensions')));
+-		this.localExtensionManagementServer = { extensionManagementService: localExtensionManagementService, id: 'local', label: localize('local', "Local") };
  		const remoteAgentConnection = remoteAgentService.getConnection();
++		// seclab: a tab window only reads the host's extensions (patch 0059).
++		const localExtensionManagementService = this._register(instantiationService.createInstance(NativeExtensionManagementService, seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), remoteAgentConnection?.remoteAuthority)));
++		this.localExtensionManagementServer = { extensionManagementService: localExtensionManagementService, id: 'local', label: localize('local', "Local") };
  		if (remoteAgentConnection) {
 -			const extensionManagementService = instantiationService.createInstance(NativeRemoteExtensionManagementService, remoteAgentConnection.getChannel<IChannel>('extensions'), this.localExtensionManagementServer);
 +			// seclab: in a tab window each location the server's extension management names must be on
@@ -210,8 +272,8 @@ diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/exten
  				id: 'remote',
  				extensionManagementService,
 diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts b/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts
---- a/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/extensionManagement/electron-browser/nativeExtensionManagementService.ts	2026-11-18 14:54:21
 @@ -19,6 +19,9 @@
  import { ExtensionIdentifier, ExtensionType, isResolverExtension } from '../../../../platform/extensions/common/extensions.js';
  import { INativeWorkbenchEnvironmentService } from '../../environment/electron-browser/environmentService.js';
@@ -254,8 +316,8 @@ diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/nativ
  		try {
  			return await super.install(location, options);
 diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts b/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts
---- a/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService.ts	2026-11-18 14:54:21
 @@ -25,6 +25,8 @@
  import { IRemoteUserDataProfilesService } from '../../userDataProfile/common/remoteUserDataProfiles.js';
  import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
@@ -290,8 +352,8 @@ diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/remot
  		const installed = await this.localExtensionManagementServer.extensionManagementService.getInstalled();
  		const toInstall = uiExtensions.filter(e => installed.every(i => !areSameExtensions(i.identifier, e.identifier)));
 diff -ruN a/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts b/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts
---- a/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts	2026-11-18 14:54:21
 @@ -15,6 +15,7 @@
  import { MCP_CONFIGURATION_KEY, WORKSPACE_STANDALONE_CONFIGURATIONS } from '../../configuration/common/configuration.js';
  import { ILogService } from '../../../../platform/log/common/log.js';
@@ -313,8 +375,8 @@ diff -ruN a/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.t
  
  		this._register(this.mcpManagementService.onInstallMcpServer(e => {
 diff -ruN a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts
---- a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 14:54:21
 @@ -20,6 +20,7 @@
  import { IProductService } from '../../../../platform/product/common/productService.js';
  import { IUserDataProfileService } from '../../userDataProfile/common/userDataProfile.js';
@@ -337,8 +399,8 @@ diff -ruN a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.t
  	}
  
 diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts
---- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 14:54:21
 @@ -14,6 +14,7 @@
  import { revive } from '../../../../base/common/marshalling.js';
  import { IUserDataProfile } from '../../../../platform/userDataProfile/common/userDataProfile.js';
@@ -368,8 +430,8 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChanne
  			? data.reconnectionGraceTime
  			: ProtocolConstants.ReconnectionGraceTime;
 diff -ruN a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts
---- a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 14:26:53
+--- a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 14:54:21
 @@ -18,6 +18,7 @@
  import { IWorkbenchExtensionManagementService } from '../../extensionManagement/common/extensionManagement.js';
  import { Mutable } from '../../../../base/common/types.js';
@@ -429,8 +491,8 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts b
  				[]
  			);
 diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts
---- a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 14:26:53
-+++ b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 14:26:54
+--- a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 14:54:21
 @@ -12,7 +12,39 @@
  import { ILogService } from '../../../../platform/log/common/log.js';
  import { IRemoteAgentEnvironment } from '../../../../platform/remote/common/remoteAgentEnvironment.js';
@@ -480,8 +542,8 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClie
  	}
  }
 diff -ruN a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts
---- a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 14:26:54
-+++ b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 14:26:54
+--- a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 14:54:21
++++ b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 14:54:21
 @@ -16,6 +16,7 @@
  import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
  import { UserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfileIpc.js';

@@ -1131,6 +1131,32 @@ export function seclabTabMcpChannel(channel: IChannel, remoteAuthority: string):
 	};
 }
 
+/** What a tab window may ask of the host's own extension management: reading, and packing a host extension to install it in the tab. */
+const SECLAB_HOST_EXTENSION_READS: ReadonlySet<string> = new Set(['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip']);
+
+/**
+ * The host's `extensions` channel as a tab window may use it: read-only. In a tab window the
+ * extensions the workbench acts on, and their manifests, come from the tab's server, and every
+ * route by which those steered a host install, update, uninstall or metadata change (reviews ENV-13,
+ * ENV-15, ENV-22, ENV-25, ENV-28 and ENV-29) ends here: anything but a read is refused and logged
+ * as host-install. Host extensions are managed from a window that isn't a tab.
+ */
+export function seclabHostExtensionsChannel(channel: IChannel, remoteAuthority: string | undefined): IChannel {
+	if (!remoteAuthority || !seclabIsTabAuthority(remoteAuthority)) {
+		return channel;
+	}
+	return {
+		call: <T>(command: string, arg?: unknown, token?: CancellationToken): Promise<T> => {
+			if (!SECLAB_HOST_EXTENSION_READS.has(command)) {
+				seclabRefuseServerLocation(remoteAuthority, 'host-install');
+				return Promise.reject(new Error('A sandboxed tab\'s window does not change the host\'s extensions'));
+			}
+			return channel.call<T>(command, arg, token);
+		},
+		listen: <T>(event: string, arg?: unknown): Event<T> => channel.listen<T>(event, arg),
+	};
+}
+
 /** An install event with any `source` other than a wire URI (a gallery entry) has it removed. */
 function seclabNoGallerySource(e: unknown): unknown {
 	if (Array.isArray(e)) {
