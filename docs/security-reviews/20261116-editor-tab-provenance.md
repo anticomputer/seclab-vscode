@@ -73,3 +73,8 @@ Five threads from the automated pull-request review, each checked against the co
 | EDT-16 | Low | edtabs harness | A scale phase's marker was written even when every open failed, so marker existence didn't prove the workload ran. | fixed | The marker carries how many documents the tab holds open, and a phase counts only at the expected total. Phase 0 asks for a file that doesn't exist and must not count; with the old check it does. | test/edtabs/probe.ts "EDT-16 a scale phase whose opens failed is not counted" |
 | EDT-17 | Low | edtabs harness | The harness copied the probe's VSIX into the tab's workspace from the host after the tab was running, so a tab symlink there could redirect the copy onto a host file. | fixed | The VSIX is staged before the tab is claimed. Nothing in the tab runs before the probe is installed, so no run plants the symlink. | none |
 | EDT-18 | Low | edtabs harness | The report check ran a regex on a tab-controlled `sha256` before checking its type: an object with a null `toString` threw and ended the run before its teardown gate. | fixed | Every value is type-checked before a regex, and the check runs inside a guard. Each run first feeds the check a hostile token, which it must reject without throwing; without the type check it throws. | test/edtabs/probe.ts "EDT-18 the report check rejects a malformed tab value without throwing" |
+
+## EDT-11 closed (2026-11-18)
+The docsync probe now drives host actions from the window through the headless driver and passes
+on main; on a build without 0035 it fails only its leak assertions
+([EDR docsync-probe-driven](../edr/20261118-docsync-probe-driven.md)).

@@ -445,10 +445,9 @@ SECLAB_BENIGN_ONLY=1 SECLAB_TAB_IMAGE=seclab-tab-oci:test-containment node test/
 node test/focus/probe.ts prepare [--app .work/app-branch/seclab-vscode.app]   # then run the printed launch line
 node test/focus/probe.ts check                                                 # marks vs steals, then the teardown gate
 
-# Document sync (patch 0035): no host document reaches a tab, with both hijacks and positive controls
-node test/docsync/probe.ts prepare [--app PATH.app]   # then run the printed launch line
-node test/docsync/probe.ts seed                       # seeds the window-log canary when the probe asks
-node test/docsync/probe.ts check [--measure]          # ~5 min after launch; --measure prints scheme counts only
+# Document sync (patch 0035): the window opens host content through the headless driver; none may
+# reach the tab. Both hijacks (refused by the filter) and positive controls. About 3 minutes.
+node test/docsync/probe.ts drive --app PATH.app
 
 # sbx inspection
 sbx ls; sbx policy ls --wide --json; sbx policy log <sandbox>; sbx secret ls --json

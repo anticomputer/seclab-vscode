@@ -132,4 +132,5 @@ Same rules as ADRs:
 | 2026-11-17 | [Landing through pull requests: Copilot review and resolved threads](20261117-pr-landing-review.md) | accepted |
 | 2026-11-17 | [File and text search in tabs, for the tab's own file system](20261117-search-in-tabs.md) | accepted |
 | 2026-11-17 | [Code-OSS 1.145.0 → 1.145.3](20261117-upstream-1145-3.md) | accepted |
+| 2026-11-18 | [The document-sync probe drives host actions from the window (EDT-11)](20261118-docsync-probe-driven.md) | accepted |
 <!-- index:end -->
