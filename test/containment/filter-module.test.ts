@@ -306,6 +306,47 @@ test('response: angle-bracket link destinations keep working (review on #48)', a
 	}
 });
 
+test('response: a tab command that fails keeps its error; only a missing one is refused (review on #48)', async () => {
+	const seen: Array<Record<string, unknown>> = [];
+	const sub = F.seclabOnDecision((d: Record<string, unknown>) => seen.push(d));
+	try {
+		const boom = new Error('the command failed on purpose');
+		const failing = F.seclabFromTab(AUTH, async () => { throw boom; });
+		const t1 = failing.command({ id: 'pub.ext.own', title: 't' }).arguments[0];
+		await assert.rejects(run(t1), (err: unknown) => err === boom);
+		assert.ok(!seen.some(d => d.ref === 'cmd:pub.ext.own'), 'an execution failure was logged as a refusal');
+		for (const message of ["Contributed command 'pub.ext.gone' does not exist.", 'Unknown command']) {
+			const missing = F.seclabFromTab(AUTH, async () => { throw new Error(message); });
+			const t2 = missing.command({ id: 'pub.ext.gone', title: 't' }).arguments[0];
+			await assert.rejects(run(t2), /Unsupported operation/);
+		}
+		assert.ok(seen.some(d => d.ref === 'cmd:pub.ext.gone' && d.verdict === 'deny'), 'a missing command was not refused');
+	} finally {
+		sub.dispose();
+	}
+});
+
+test('response: a URI autolink stays a link, and a command autolink runs the token (review on #48)', async () => {
+	const { Marked } = await import(pathToFileURL(MARKED).href);
+	const links = (md: string) => {
+		const out: string[] = [];
+		const m = new Marked();
+		m.walkTokens(m.lexer(md), (t: { type: string; href?: string }) => { if (t.type === 'link') { out.push(t.href ?? ''); } });
+		return out;
+	};
+	const ran: unknown[] = [];
+	const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ran.push([id, args]); return 'ok'; });
+	assert.equal(s.markdown({ value: 'see <https://example.test/x>' }).value, 'see <https://example.test/x>');
+	const out = s.markdown({ value: 'run <command:pub.ext.own?%5B1%5D> now' }).value;
+	const hrefs = links(out);
+	assert.equal(hrefs.length, 1, out);
+	assert.ok(hrefs[0].startsWith(`command:${F.SECLAB_TAB_COMMAND}?`), hrefs[0]);
+	await run(tokenOf(hrefs[0]));
+	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
+	// Tag-like text that is no autolink is still escaped.
+	assert.doesNotMatch(s.markdown({ value: '<img src="https://example.test/a.png">' }).value, OPENS_IMAGE_OR_TAG);
+});
+
 test('response: code in tab markdown is shown as written; everything else is still escaped (review on #48)', () => {
 	const s = F.seclabFromTab(AUTH, async () => undefined);
 	const fence = '```typescript\nfunction f(): Promise<Result> { return ![x](https://example.test/c.png); }\n```\n';
@@ -376,7 +417,7 @@ test('response: a denied command runs in the tab, never on the trusted side, and
 	const sub = F.seclabOnDecision((d: Record<string, unknown>) => seen.push(d));
 	try {
 		const ranInTab: unknown[][] = [];
-		const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ranInTab.push([id, args]); throw new Error('not found'); });
+		const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ranInTab.push([id, args]); throw new Error(`Contributed command '${id}' does not exist.`); });
 		const trusted = { seclabExecuteFromTab: async () => { throw new Error('must not run on the trusted side'); } };
 		const token = s.command({ id: 'workbench.action.terminal.newLocal', title: 't', arguments: [1] }).arguments[0];
 		await assert.rejects(run(token, trusted), /Unsupported operation/);
@@ -484,8 +525,11 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['a host scheme stays in the selector', ".filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')", ".filter(() => true)"],
 		['code is escaped like text', 'kept += rewrite(src.slice(at, start), true) + src.slice(start, end);', 'kept += rewrite(src.slice(at, end), true);'],
 		['oversized markdown is lexed', 'if (value.length > SECLAB_MARKDOWN_MAX) {\n\t\treturn all;', 'if (false) {\n\t\treturn all;'],
-		['angle link destinations are escaped', 'keepLinks && /', 'false && /'],
+		['angle link destinations are escaped', '&& SECLAB_ANGLE_DESTINATION.test(text.slice(i)))', '&& false)'],
 		['an angle destination ends at a parenthesis', "const angle = m.index > 0 && value[m.index - 1] === '<';", 'const angle = false;'],
+		['every tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (true) {'],
+		['no tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (false) {'],
+		['autolinks are escaped', '|| SECLAB_AUTOLINK.test(text.slice(i))) ? lt', '|| false) ? lt'],
 		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],

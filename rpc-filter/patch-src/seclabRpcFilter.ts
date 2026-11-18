@@ -1078,6 +1078,9 @@ function seclabToken(entry: SeclabDataCommand): string {
  * does nothing. If the tab doesn't have it either, the refusal is logged. An unknown token is
  * refused: a tab never sees one, and they are random.
  */
+/** How upstream's extension host rejects a contributed command it doesn't have (extHostCommands.ts). */
+const SECLAB_TAB_LACKS_COMMAND = /^(Contributed command '[^\n]*' does not exist\.|Unknown command)$/;
+
 CommandsRegistry.registerCommand(SECLAB_TAB_COMMAND, async (accessor, token: unknown) => {
 	const entry = typeof token === 'string' ? seclabTokens.get(token) : undefined;
 	if (!entry) {
@@ -1088,8 +1091,14 @@ CommandsRegistry.registerCommand(SECLAB_TAB_COMMAND, async (accessor, token: unk
 	}
 	try {
 		return await entry.runInTab(entry.id, entry.args);
-	} catch {
-		throw entry.filter.refuseDataCommand(entry.id);
+	} catch (err) {
+		// Only "the tab has no such command" is a refusal; a command that ran and failed keeps its
+		// own error (PR review on #48). The tab chooses the message, so it can only mislabel how
+		// its own command ended: nothing runs on the trusted side either way.
+		if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {
+			throw entry.filter.refuseDataCommand(entry.id);
+		}
+		throw err;
 	}
 });
 
@@ -1159,11 +1168,17 @@ const SECLAB_IMAGE_OPEN = /!\[/g;
 const SECLAB_HTML_OPEN = /<(?=[A-Za-z/!?])/g;
 /** A link destination in angle brackets, right after `](`: `<` then no `<`, `>` or newline, then `>`. */
 const SECLAB_ANGLE_DESTINATION = /^<[^<>\n\\]*>/;
+/** A URI autolink as CommonMark has it: `<`, a scheme, `:`, no space, `<` or `>`, then `>`. */
+const SECLAB_AUTOLINK = /^<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/;
 
-/** Every tag opener becomes an entity; with `keepLinks`, not the `<` of an angle link destination. */
+/**
+ * Every tag opener becomes an entity; with `keepLinks`, not the `<` of an angle link destination
+ * or of a URI autolink (`<command:…>`, `<https://…>`), which are links, not tags (PR review on
+ * #48). The re-lex check in seclabOutsideCode still decides.
+ */
 function seclabEscapeTags(text: string, keepLinks: boolean): string {
 	return text.replace(SECLAB_HTML_OPEN, (lt, i: number) =>
-		keepLinks && /\]\(\s*$/.test(text.slice(Math.max(0, i - 64), i)) && SECLAB_ANGLE_DESTINATION.test(text.slice(i)) ? lt : '&lt;');
+		keepLinks && ((/\]\(\s*$/.test(text.slice(Math.max(0, i - 64), i)) && SECLAB_ANGLE_DESTINATION.test(text.slice(i))) || SECLAB_AUTOLINK.test(text.slice(i))) ? lt : '&lt;');
 }
 /** A snippet that reads the clipboard (upstream SnippetParser.guessNeedsClipboard, widened). */
 const SECLAB_SNIPPET_CLIPBOARD = /\$\{?\s*CLIPBOARD/;
