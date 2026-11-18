@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1588 @@
+@@ -0,0 +1,1631 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4771,8 +4771,12 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +}
 +
 +/** Where a tab's server named a location outside the tab (patch 0059). */
-+/** Whether the walk takes `key` of the object at path `owner` as sent, unchecked. */
-+export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean;
++/**
++ * How the walk takes `key` of the object at path `owner`: `true`, as sent, unchecked; `'strings'`, as
++ * sent if it is a plain object of strings (a record whose keys the config's author chose, which may
++ * be URI key names), else as foreign; `false`, walked.
++ */
++export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean | 'strings';
 +
 +export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install' | 'mcp-discovery' | 'mcp-management';
 +
@@ -4835,7 +4839,16 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		const out: Record<string, unknown> = {};
 +		for (const k of Object.keys(o)) {
 +			if (k !== '__proto__') {
-+				out[k] = skip?.(at, k) ? o[k] : walk(o[k], [...at, k]);
++				const how = skip?.(at, k);
++				if (how === 'strings') {
++					const r = o[k];
++					if (r !== undefined && (!r || typeof r !== 'object' || Array.isArray(r) || Object.getPrototypeOf(r) !== Object.prototype || Object.values(r).some(x => typeof x !== 'string'))) {
++						throw foreign();
++					}
++					out[k] = r;
++				} else {
++					out[k] = how ? o[k] : walk(o[k], [...at, k]);
++				}
 +			}
 +		}
 +		return out;
@@ -4884,6 +4897,36 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	return key === 'manifest' && (owner.length === 0
 +		|| (owner.length === 1 && (typeof owner[0] === 'number' || owner[0] === 'local'))
 +		|| (owner.length === 2 && typeof owner[0] === 'number' && owner[1] === 'local'));
++}
++
++/**
++ * The tab server's `mcpManagement` channel as a tab window may use it: every location must be on the
++ * tab (review ENV-20), servers' own manifests aren't walked, their `config.env` and `config.headers`
++ * are records of strings (ENV-24), and a server loses the URLs the window would load or open as
++ * given, its `icon`, `galleryUrl` and `repositoryUrl`: the renderer would fetch the icon over the
++ * host's network (ENV-23).
++ */
++export function seclabTabMcpChannel(channel: IChannel, remoteAuthority: string): IChannel {
++	if (!seclabIsTabAuthority(remoteAuthority)) {
++		return channel;
++	}
++	const skip: SeclabSkip = (owner, key) => seclabUnrevivedManifest(owner, key)
++		|| ((key === 'env' || key === 'headers') && owner[owner.length - 1] === 'config' && seclabUnrevivedManifest(owner.slice(0, -1), 'manifest') ? 'strings' : false);
++	const checked = seclabTabServerChannel(channel, remoteAuthority, 'mcp-management', skip);
++	const server = (v: unknown): unknown => {
++		if (!v || typeof v !== 'object' || Array.isArray(v)) {
++			return v;
++		}
++		const { icon: _i, galleryUrl: _g, repositoryUrl: _r, ...rest } = v as Record<string, unknown>;
++		return rest;
++	};
++	const servers = (v: unknown): unknown => Array.isArray(v)
++		? v.map(x => x && typeof x === 'object' && Object.hasOwn(x, 'local') ? { ...x, local: server((x as { local: unknown }).local) } : server(x))
++		: v && typeof v === 'object' && Object.hasOwn(v, 'local') ? { ...v, local: server((v as { local: unknown }).local) } : server(v);
++	return {
++		call: async <T>(command: string, arg?: unknown, token?: CancellationToken) => servers(await checked.call<T>(command, arg, token)) as T,
++		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => checked.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables),
++	};
 +}
 +
 +/** An install event with any `source` other than a wire URI (a gallery entry) has it removed. */
