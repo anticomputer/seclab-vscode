@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 249 | 409 | 52 | 815 |
+| fixed | 14 | 91 | 249 | 410 | 52 | 816 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 182 | 71 | 317 |
+| fixed-untested | 0 | 5 | 59 | 184 | 71 | 319 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 689 | 185 | 1340 |
+| **all** | 16 | 105 | 345 | 692 | 185 | 1343 |
 
 ## Baseline: open high and critical findings
 
@@ -99,6 +99,8 @@ Patch 0015 (the agent-host gate), the agentic spikes and test variants, the secu
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R1-CF4** | low | accepted-residual | agent-host gate channel calls | The gate forwards \`connect\` options unfiltered; they are empty only because of the seclab resolver's current shape | accepted by an agent: Re-rated in round 2 and left below threshold. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R15-1** | low | fixed-untested | patch 0018 unit tests | The new 0018 unit test's ordering clause could never fail, since the materialisation call is upstream code outside every hunk and so not in the patch text | A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R15-2** | low | fixed-untested | chat-dispatch probe | The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run | A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-2** | low | fixed-untested | patch 0018 chat session gate | The migration check threw synchronously out of migrateRequests, aborting its caller's commit halfway | migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-3** | low | fixed-untested | chat-dispatch probe and 0018 unit tests | The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment | A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R9-NOTE** | low | accepted-residual | increment 2 proof verdict | F's ephemeral scope is also satisfiable by upstream's workspace-trust downgrade, and the verdict does not record trust state | accepted by an agent: Trust is disabled host-side and the U control shows \`global\`, which rules it out empirically for this harness; the reviewer left it as a known limit and recorded it so a later profile change cannot turn the check green unnoticed. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-1** | low | fixed-untested | agentic-browser test build variant (browserView-hook.patch) | The browser-drive hook could not apply on \`main\`: its context was generated against a tree including 0017, whose hunk touches the same import block | The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 — but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched \`build-macos\` run of each baseline would catch a regression. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-3** | low | fixed-untested | agentic-browser hook arming | The hook's expiry check failed open: \`Date.now() &gt; Number(until)\` is false for a non-numeric \`until\`, so a malformed arming file counted as unexpired | Inverted to \`Number(fields.until) &gt; Date.now()\` (fails closed), but there is no arming test for the browser-drive hook, unlike \`test/builds/rogue-reh-arming.ts\` for the rogue-REH hook. |
@@ -1435,6 +1437,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR43-3 | info | fixed-untested | window-proof did not run teardown on SIGINT or SIGTERM | Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build. |
 | CR43-4 | info | fixed-untested | window-proof's ordinary arm had no positive evidence that the real classes were built, since creation marks name the wrapper and the gate log exists only in tab windows | The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test. |
 | CR43-5 | low | fixed | A refusal on a bypass path came after upstream had removed the turn, dequeued the message, emptied the source queue or reordered and removed it, so refusing in a tab window cost the user that history or queue | patch:fffb77212d7e6fef6552ca6524ad535e1e88f239 · `test/agentic/gate/chat-sessions.test.ts` "a refusal on a bypass path comes before the transcript or the queue is changed" |
+| R17-1 | low | fixed | migrateRequests checked only the target, so a session the window may not dispatch could have its queued text drained into one it may | patch:9a072f2ec275436526be006a612cc3964faa859d · `test/agentic/gate/chat-sessions.test.ts` "a refusal on a bypass path comes before the transcript or the queue is changed" |
+| R17-2 | low | fixed-untested | The migration check threw synchronously out of migrateRequests, aborting its caller's commit halfway | migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it. |
+| R17-3 | low | fixed-untested | The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment | A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves. |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 
