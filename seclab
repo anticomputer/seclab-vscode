@@ -1491,6 +1491,14 @@ landing_self_test() {
 	git -C "$src" add -f .work/landing-overlay.txt
 	git -C "$src" "${id[@]}" commit -qm 'landing self-test: tracked .work'
 	tracked="$(git -C "$src" rev-parse HEAD)"
+	# 6. The same with .Work, a symlink to a host directory (RJG-15): macOS resolves .work to it.
+	local casefold
+	mkdir -p "$ROOT/.work/landing-victim-dir" && printf 'seclabcanary_victim\n' > "$ROOT/.work/landing-victim-dir/findings-base.json"
+	git -C "$src" checkout -q --detach "$old"
+	ln -s "$ROOT/.work/landing-victim-dir" "$src/.Work"
+	git -C "$src" add .Work
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: .Work symlink'
+	casefold="$(git -C "$src" rev-parse HEAD)"
 	# 3. A clean merge.
 	git -C "$src" checkout -q --detach "$old"
 	echo '' >> "$src/raw-idea.md"
@@ -1503,9 +1511,12 @@ landing_self_test() {
 	[[ "$(cat "$canary")" == seclabcanary_landing ]] || { echo "landing self-test: the overlay wrote through a merged symlink (RJG-11)" >&2; exit 1; }
 	if landing_revalidate "$old" "$tracked" required-checks; then echo "landing self-test: a merged tree tracking .work passed (RJG-12)" >&2; exit 1; fi
 	[[ -f "$victim" ]] || { echo "landing self-test: a merged overlay list removed a file outside the worktree (RJG-12)" >&2; exit 1; }
+	if landing_revalidate "$old" "$casefold" required-checks liveness findings; then echo "landing self-test: a merged .Work symlink passed (RJG-15)" >&2; exit 1; fi
+	[[ "$(cat "$ROOT/.work/landing-victim-dir/findings-base.json")" == seclabcanary_victim ]] || { echo "landing self-test: a step wrote through a merged .Work symlink (RJG-15)" >&2; exit 1; }
+	rm -rf "$ROOT/.work/landing-victim-dir"
 	rm -f "$canary" "$victim"
 	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
-	echo "landing self-test: ok (gutted lint, gutted pin check, symlinked validator and tracked .work refused; nothing outside the worktree touched; clean merge passes)"
+	echo "landing self-test: ok (gutted lint, gutted pin check, symlinked validator, tracked .work and a .Work symlink refused; nothing outside the worktree touched; clean merge passes)"
 }
 LANDING_STEPS="required-checks workflow-echo workflow-tools pins deps source liveness secrets docs findings obs-docs"
 # A relative path with no empty, `.` or `..` component, none of whose components under DIR is a
@@ -1591,12 +1602,23 @@ landing_revalidate() { # OLD SHA [STEP...]
 	git -C "$ROOT" merge-base --is-ancestor "$old" "$sha" || { echo "landing verify: $sha doesn't descend from $old" >&2; return 2; }
 	# The steps write their scratch under the worktree's .work/ (gitignored): a merged tree that
 	# tracks anything there could point those writes elsewhere (RJG-11).
-	[[ -z "$(git -C "$ROOT" ls-tree "$sha" -- .work)" ]] || { echo "landing verify: REFUSED: $sha tracks .work" >&2; return 1; }
+	# Case-insensitively: macOS resolves .Work to .work (RJG-15).
+	# Listed first, then matched: grep -q in a pipeline can fail open under pipefail (RJG-17).
+	local names
+	names="$(git -C "$ROOT" ls-tree --name-only "$sha")" || { echo "landing verify: can't list $sha" >&2; return 2; }
+	if grep -qix '\.work' <<<"$names"; then echo "landing verify: REFUSED: $sha tracks .work" >&2; return 1; fi
 	rm -f "$ROOT/.work/landing-overlay.txt"
 	wt="$ROOT/.work/landing-verify"
 	git -C "$ROOT" worktree remove --force "$wt" 2>/dev/null || true
 	rm -rf "$wt"
 	git -C "$ROOT" worktree add -q --detach "$wt" "$sha" || { echo "landing verify: can't check out $sha" >&2; return 2; }
+	# The steps' scratch directory is ours: nothing the checkout put there, in any case (RJG-15).
+	if [[ -e "$wt/.work" || -L "$wt/.work" ]]; then
+		echo "landing verify: REFUSED: $sha puts something at .work" >&2
+		git -C "$ROOT" worktree remove --force "$wt" || true
+		return 1
+	fi
+	mkdir "$wt/.work"
 	for step in $LANDING_STEPS; do
 		if (( $# )) && [[ " $* " != *" $step "* ]]; then continue; fi
 		# A fresh process per step: its own set -e holds even when this runs in a condition.
