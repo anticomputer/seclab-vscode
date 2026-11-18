@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in seven rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in eight rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -101,3 +101,9 @@ Two threads, both real.
 - Functional: email autolinks (`<first!last@example.test>`) lost their `<`. Without GFM the link
   disappeared; with it, only part of the address was linked. They are kept like URI autolinks,
   and the test checks the whole `mailto:` destination under both settings.
+
+## Eighth round
+Two threads, both real and functional, about reference definitions: a bare destination
+(`[r]: command:…`) was cut at a `)` in its arguments, and an angle-bracket destination after
+`]:` lost its `<`. A bare reference destination now ends only at whitespace, and the
+angle-bracket rule covers `]:` as well as `](`.
