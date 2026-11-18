@@ -191,12 +191,14 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
   module). That covers the `getEnvironmentData` reply, the profiles, logger and extension management
   channels' replies and events, file change events and scanned extensions. Install events from the
-  tab lose any gallery entry, and the host never installs a package from the tab's file system
-  ("Install Locally" and friends; `host-install`). A foreign location refuses the environment or reply,
+  tab lose any gallery entry; the host never installs a package from the tab's file system or from
+  the tab's workspace folders ("Install Locally" and friends), nor the packs and dependencies a tab
+  extension's manifest names, and the window doesn't retry installs the tab's server reports failed
+  (`host-install`). A foreign location refuses the environment or reply,
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-14;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-18;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
