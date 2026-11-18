@@ -62,28 +62,63 @@ export function perBuildLive(name: string, createdMs: number, leaseMs: number | 
 /** sbx's template store is separate from Docker's: its per-build tab templates (seclab-tab:b-NAME)
  *  with whether each is live under the same week-from-lease rule; every other template is ignored
  *  (Copilot review on PR 25). */
-export function sbxPerBuildTemplates(json: string, lease: (name: string) => number | undefined, nowMs: number): Array<{ name: string; live: boolean }> {
+export function sbxPerBuildTemplates(json: string, lease: (name: string) => number | undefined, nowMs: number): Array<{ name: string; created: number; live: boolean }> {
 	let list: unknown;
 	try {
 		list = JSON.parse(json);
 	} catch {
 		return [];
 	}
-	const out: Array<{ name: string; live: boolean }> = [];
+	const out: Array<{ name: string; created: number; live: boolean }> = [];
 	for (const t of Array.isArray(list) ? list as Array<{ repository?: unknown; tag?: unknown; created_at?: unknown }> : []) {
 		const name = `${String(t.repository ?? '').replace(/^docker\.io\/library\//, '')}:${String(t.tag ?? '')}`;
 		if (/^seclab-tab:b-[A-Za-z0-9._-]+$/.test(name)) {
-			out.push({ name, live: perBuildLive(name, Date.parse(String(t.created_at ?? '')), lease(name), nowMs) });
+			const created = Date.parse(String(t.created_at ?? ''));
+			out.push({ name, created, live: perBuildLive(name, created, lease(name), nowMs) });
 		}
 	}
 	return out;
 }
 
+/** The clone's shared lease directory (its git common dir; every worktree's builds write there). */
+function leaseDir(): string {
+	const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+	return path.join(r.stdout.trim(), 'seclab-image-leases');
+}
+
+/** Run `fn` holding a tag's lease lock, the one the builders hold from writing its lease until
+ *  the tag is published. Undefined when another holder has it (a build in progress): the caller
+ *  leaves the tag alone. A lock older than 15 minutes is a crashed build's, and is broken
+ *  (Copilot review on PR 25). */
+export function withTagLock<T>(dir: string, name: string, fn: () => T): T | undefined {
+	const lock = path.join(dir, `${name}.lock`);
+	fs.mkdirSync(dir, { recursive: true });
+	try {
+		fs.mkdirSync(lock);
+	} catch {
+		try {
+			if (Date.now() - fs.statSync(lock).mtimeMs <= 15 * 60_000) {
+				return undefined;
+			}
+			fs.rmdirSync(lock);
+			fs.mkdirSync(lock);
+		} catch {
+			return undefined;
+		}
+	}
+	try {
+		return fn();
+	} finally {
+		try {
+			fs.rmdirSync(lock);
+		} catch { /* already gone */ }
+	}
+}
+
 /** The lease the build scripts wrote for a tag, in the clone's shared git dir (all worktrees). */
 function imageLease(name: string): number | undefined {
-	const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
 	try {
-		const t = Number(fs.readFileSync(path.join(r.stdout.trim(), 'seclab-image-leases', name), 'utf8').trim());
+		const t = Number(fs.readFileSync(path.join(leaseDir(), name), 'utf8').trim());
 		return Number.isFinite(t) && t > 0 ? t * 1000 : undefined;
 	} catch {
 		return undefined;
@@ -162,9 +197,33 @@ if (args.has('--self-test')) {
 		if (leaseAt < 0 || publishAt < 0 || leaseAt > publishAt) {
 			bad.push(`${file}: the per-build lease isn't written before the tag is published`);
 		}
+		// The tag's lease lock is taken before the lease and released only after publishing.
+		const lockAt = text.indexOf('mkdir "$lock"'), releaseAt = text.indexOf('{ rmdir "$lock";');
+		if (lockAt < 0 || releaseAt < 0 || !(lockAt < leaseAt && publishAt < releaseAt)) {
+			bad.push(`${file}: the lease lock isn't held from the lease until the tag is published`);
+		}
 		// Not inside an && list, whose failure set -e wouldn't stop on.
 		if (/&&[^\n]*\$lease|\$lease[^\n]*&&/.test(text)) {
 			bad.push(`${file}: a lease step is in an && list, which set -e doesn't stop on`);
+		}
+	}
+	// The lease lock: held by a build, a deletion waits for nothing and leaves the tag; a crashed
+	// build's stale lock is broken; the lock is released after use.
+	{
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-host-lock-')); // the self-test's container, never the host
+		try {
+			fs.mkdirSync(path.join(dir, 'seclab-tab:b-x.lock'));
+			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined) {
+				bad.push('lease lock: a deletion ran while a build held the lock');
+			}
+			fs.mkdirSync(path.join(dir, 'seclab-tab:b-x.lock'), { recursive: true });
+			const old = new Date(Date.now() - 20 * 60_000);
+			fs.utimesSync(path.join(dir, 'seclab-tab:b-x.lock'), old, old);
+			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== 'ran' || fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
+				bad.push('lease lock: a stale lock was not broken, or the lock was kept after use');
+			}
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
 		}
 	}
 	// sbx templates: only seclab-tab:b-* is ours to expire, by the same rule.
@@ -177,7 +236,7 @@ if (args.has('--self-test')) {
 			{ repository: 'docker.io/library/seclab-tab', tag: 'local', created_at: '2026-01-01T00:00:00Z' },
 			{ repository: 'docker.io/docker/sandbox-templates', tag: 'b-x', created_at: '2026-01-01T00:00:00Z' },
 		]);
-		const got = JSON.stringify(sbxPerBuildTemplates(json, n => n === 'seclab-tab:b-leased' ? t0 - d : undefined, t0));
+		const got = JSON.stringify(sbxPerBuildTemplates(json, n => n === 'seclab-tab:b-leased' ? t0 - d : undefined, t0).map(({ name, live }) => ({ name, live })));
 		const want = JSON.stringify([{ name: 'seclab-tab:b-old', live: false }, { name: 'seclab-tab:b-leased', live: true }, { name: 'seclab-tab:b-new', live: true }]);
 		if (got !== want) {
 			bad.push(`sbx per-build templates: got ${got}`);
@@ -212,6 +271,22 @@ const run = (cmd: string, a: string[]) => spawnSync(cmd, a, { encoding: 'utf8' }
 const ok = (cmd: string, a: string[]) => {
 	const r = run(cmd, a);
 	return !r.error && r.status === 0;
+};
+// A per-build tag is deleted only under its lease lock, and only if, re-read under the lock, it
+// is still expired (or --caches asks for live ones too): the decision made when listing may be
+// stale by now, if a build renewed the tag meanwhile (Copilot review on PR 25).
+const perBuildDelete = (name: string, createdMs: number, rm: () => boolean): boolean => {
+	const r = withTagLock(leaseDir(), name, () => {
+		if (!args.has('--caches') && perBuildLive(name, createdMs, imageLease(name), Date.now())) {
+			return 'renewed';
+		}
+		return rm() ? 'removed' : 'failed';
+	});
+	if (r === undefined || r === 'renewed') {
+		console.error(`kept ${name}: ${r === undefined ? 'a build holds its lease lock' : 'a build renewed it'}`);
+		return true;
+	}
+	return r === 'removed';
 };
 const lines = (cmd: string, a: string[]) => {
 	const r = run(cmd, a);
@@ -516,7 +591,7 @@ for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 	const remove = isLive ? args.has('--caches') : true;
 	items.push({
 		kind: 'image', name: `${n}${isLive ? '' : ' (superseded)'}`, state: '', remove, why: remove ? '' : 'in use by a current build (use --caches)',
-		del: () => ok('docker', ['image', 'rm', n]),
+		del: () => /^seclab-tab(-oci)?:b-/.test(n) ? perBuildDelete(n, img.created, () => ok('docker', ['image', 'rm', n])) : ok('docker', ['image', 'rm', n]),
 	});
 }
 // sbx templates, a store of their own: a proof build's per-build template expires like its OCI
@@ -527,7 +602,7 @@ if (!tpl.error && tpl.status === 0) {
 		const remove = t.live ? args.has('--caches') : true;
 		items.push({
 			kind: 'sbx template', name: `${t.name}${t.live ? '' : ' (superseded)'}`, state: '', remove, why: remove ? '' : 'a proof build from the last week (use --caches)',
-			del: () => ok(SBX, ['template', 'rm', t.name]),
+			del: () => perBuildDelete(t.name, t.created, () => ok(SBX, ['template', 'rm', t.name])),
 		});
 	}
 }

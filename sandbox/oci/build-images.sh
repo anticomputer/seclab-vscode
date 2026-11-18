@@ -43,9 +43,21 @@ if [[ -n "$PERBUILD" ]]; then
 	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
 	# Separate commands: under set -e a failing `mkdir` in an && list wouldn't stop the build.
 	mkdir -p "$lease"
+	# One lock per tag, shared with clean-host: held from the lease until the tag is published, so a
+	# cleanup that decided earlier can't delete the tag this build renews (Copilot review on PR 25).
+	# A lock older than 15 minutes is a crashed build's.
+	lock="$lease/$TAG.lock" got=0
+	for _ in $(seq 1 600); do
+		if mkdir "$lock" 2>/dev/null; then got=1; break; fi
+		[[ -n "$(find "$lock" -maxdepth 0 -mmin +15 2>/dev/null)" ]] && rmdir "$lock" 2>/dev/null
+		sleep 1
+	done
+	[[ $got = 1 ]] || { echo "$TAG: its lease lock $lock is held (another build or clean-host); retry" >&2; exit 1; }
+	trap 'rmdir "$lock" 2>/dev/null || true' EXIT
 	date +%s > "$lease/$TAG"
 fi
 docker build -q -t "$TAG" -f "$ROOT/sandbox/oci/Dockerfile.tab" "$CTX"
+[[ -z "$PERBUILD" ]] || { rmdir "$lock"; trap - EXIT; }
 if [[ -n "$VARIANT" ]]; then
 	echo "images: $TAG (UNSAFE test build; tabd --image $TAG)"
 	exit 0
