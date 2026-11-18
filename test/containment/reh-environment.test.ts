@@ -47,6 +47,8 @@ const FILES = {
 	workbench: 'contrib/extensions/browser/extensionsWorkbenchService.ts',
 	actions: 'contrib/extensions/browser/extensionsActions.ts',
 	management: 'services/extensionManagement/common/extensionManagementService.ts',
+	enablement: 'services/extensionManagement/browser/extensionEnablementService.ts',
+	migration: 'contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -110,8 +112,8 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	// versions of the patch, which had fewer or other ones), and the module-level seclab functions
 	// of the patched files.
 	const named = (src: string, re: RegExp) => [...src.matchAll(re)].map(m => m[1]);
-	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|UnrevivedManifest|TabExtensionsChannel|TabMcpChannel))\b/g);
-	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
+	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|UnrevivedManifest|TabExtensionsChannel|TabMcpChannel|HostExtensionsChannel))\b/g);
+	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS', 'SECLAB_HOST_EXTENSION_READS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
 	const stubs: Record<string, unknown> = {
 		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
 		seclabRefuseServerLocation: (_a: string, site: string) => { refusals.push(site); },
@@ -398,6 +400,59 @@ async function languagePackFanOut(b: Build, authority: string): Promise<{ update
 	return { updated: updated.sort(), uninstalled: uninstalled.sort() };
 }
 
+/** Every command a window can send the host's extension management that changes it. */
+const HOST_CHANGES = ['install', 'installFromLocation', 'installExtensionsFromProfile', 'installFromGallery', 'installGalleryExtensions', 'uninstall', 'uninstallExtensions',
+	'toggleApplicationScope', 'copyExtensions', 'updateMetadata', 'resetPinnedStateForAllUserExtensions', 'download', 'cleanUp'];
+const HOST_READS = ['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip'];
+
+/** The commands that reach the host's extension management from a window on `authority`. */
+async function hostManagement(b: Build, authority: string): Promise<string[]> {
+	const reached: string[] = [];
+	const raw = { call: async (command: string) => { reached.push(command); return undefined; }, listen: () => () => ({ dispose() { } }) };
+	const name = /createInstance\(NativeExtensionManagementService, (seclab\w+)\(sharedProcessService\.getChannel\('extensions'\)/.exec(b.sources.extensions)?.[1];
+	const channel = name ? (b.deps[name] as (c: unknown, a: string) => typeof raw)(raw, authority) : raw;
+	for (const command of [...HOST_CHANGES, ...HOST_READS]) {
+		try {
+			await channel.call(command);
+		} catch (e) {
+			assert.match((e as Error).message, /does not change the host/);
+		}
+	}
+	return reached;
+}
+
+/** The extensions whose enablement changes when a tab window enables a tab extension whose pack names a host one. */
+async function enablement(b: Build, authority: string): Promise<string[]> {
+	const changed: string[] = [];
+	const own = { identifier: { id: 'tab.pack' }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
+	const host = { identifier: { id: 'host.ext' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
+	await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
+		...b.deps, EnablementState: { EnabledGlobally: 1, EnabledWorkspace: 2, DisabledGlobally: 3, DisabledWorkspace: 4, DisabledByTrustRequirement: 5, DisabledByExtensionDependency: 6 },
+	}).call({
+		extensionsManager: { whenInitialized: async () => { }, extensions: [own, host] },
+		getExtensionsToEnableRecursively: () => [host],
+		throwErrorIfCannotChangeEnablement: () => { },
+		throwErrorIfCannotChangeWorkspaceEnablement: () => { },
+		getEnablementState: () => 3,
+		isEnabledEnablementState: () => false,
+		getDependenciesEnablementStates: () => [],
+		_setUserEnablementState: async (e: { identifier: { id: string } }) => { changed.push(e.identifier.id); return true; },
+		environmentService: { remoteAuthority: authority },
+		_onEnablementChanged: { fire: () => { } },
+	}, [own], 1);
+	return changed;
+}
+
+/** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
+function migration(b: Build, authority: string): boolean {
+	let ran = false;
+	// Parameter decorators aren't JavaScript: dropped before evaluating.
+	const ctor = slice(b.sources.migration, /\n\tconstructor\(/)!.replace(/^constructor/, 'function migrate').replace(/@I\w+ /g, '');
+	evaluate<(...a: unknown[]) => void>(ctor, 'migrate', { ...b.deps, migrateUnsupportedExtensions: () => { ran = true; } })(
+		{ remoteExtensionManagementServer: { extensionManagementService: {} }, webExtensionManagementServer: null }, {}, {}, {}, {}, { remoteAuthority: authority });
+	return ran;
+}
+
 const ICON = { dark: 'https://198.51.100.7/i.png', light: 'https://198.51.100.7/i.png' };
 
 /** Whether "Install Locally" (installInServer to the host) of a tab server's extension reaches the install. */
@@ -558,6 +613,15 @@ async function leaks(b: Build): Promise<string[]> {
 	if (await installLocally(b, TAB)) {
 		out.push('install locally: the host installs what the tab names');
 	}
+	if ((await hostManagement(b, TAB)).some(c => HOST_CHANGES.includes(c))) {
+		out.push('the host takes an extension change from a tab window');
+	}
+	if ((await enablement(b, TAB)).includes('host.ext')) {
+		out.push('a tab extension\'s pack changes a host extension\'s enablement');
+	}
+	if (migration(b, TAB)) {
+		out.push('the unsupported-extensions migration runs on the tab\'s data');
+	}
 	const fan = await languagePackFanOut(b, TAB);
 	if (fan.updated.includes('local')) {
 		out.push('a tab language-pack manifest updates on the host');
@@ -599,7 +663,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'a tab language-pack manifest updates on the host',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window',
+	'a tab extension\'s pack changes a host extension\'s enablement', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
@@ -650,6 +715,11 @@ const tests: Array<[string, () => Promise<void>]> = [
 		await (wrapper(b, b.sources.mcpDiscovery, /INativeMcpDiscoveryHelperService>\((seclab\w+)\(channel,/)!(genuineDiscovery, TAB, 'mcp-discovery')).call('load');
 		const mm = await mcpManagement(b, TAB, [mcpServer(TAB, remote(TAB, '/srv/README.md'))]);
 		assert.equal(mm.refused, false);
+		// A tab window still reads the host's extensions, and enables the tab's own.
+		const before0 = b.refusals.length;
+		assert.deepEqual(await hostManagement(b, TAB), HOST_READS);
+		assert.deepEqual(await enablement(b, TAB), ['tab.pack']);
+		assert.deepEqual([...new Set(b.refusals.splice(before0))], ['host-install']);
 		// A tab language pack still updates and uninstalls in the tab.
 		const before = b.refusals.length;
 		assert.deepEqual(await languagePackFanOut(b, TAB), { updated: ['remote'], uninstalled: ['remote'] });
@@ -679,6 +749,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(await installLocally(b, other), true);
 		assert.equal(await installRemoteLocally(b, other), true);
 		assert.deepEqual(await languagePackFanOut(b, other), { updated: ['local', 'remote'], uninstalled: ['local', 'remote'] });
+		assert.deepEqual(await hostManagement(b, other), [...HOST_CHANGES, ...HOST_READS]);
+		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
+		assert.equal(migration(b, other), true);
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -720,6 +793,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
+			['the host channel takes changes', { filter: ["			if (!SECLAB_HOST_EXTENSION_READS.has(command)) {", "			if (false) {"] }, 'the host takes an extension change from a tab window'],
+			['the host channel unwrapped', { patch: ["seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), remoteAgentConnection?.remoteAuthority)", "sharedProcessService.getChannel('extensions')"] }, 'the host takes an extension change from a tab window'],
+			['enablement reaches host extensions', { patch: ["+			if (own.length !== extensions.length) {", "+			if (false) {"] }, 'a tab extension\'s pack changes a host extension\'s enablement'],
+			['migration in a tab window', { patch: ["remoteExtensionManagementServer && !seclabIsTabAuthority(environmentService.remoteAuthority)) {", "remoteExtensionManagementServer) {"] }, 'the unsupported-extensions migration runs on the tab\'s data'],
 			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
 			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
