@@ -11,8 +11,10 @@
   job it adds that reports a required context, counts as passing; a token scope it grants can
   post a passing context itself. The validator must read every workflow fail-closed: anything it
   can't read in full fails `lint`. It bounds skipping, not vacuous success: a pull request can
-  equally make a required job's steps do nothing, which no check from its own tree can stop (the
-  required-jobs gate's EDR).
+  equally make a required job's steps do nothing, which no check from its own tree can stop.
+  [EDR pr-landing-review](../edr/20261117-pr-landing-review.md) leaves the control for that,
+  outside the pull request, to a separate decision; a required-jobs gate run from main's copy is
+  the pending follow-up.
 
 ## Round CR
 
@@ -46,6 +48,6 @@
 | CR-21 | Low | permissions | A backslash inside a single-quoted command failed lint. | Fixed | Single-quoted scalars are skipped whole. |
 | CR-22 | Low | job reader | A quote after a bracket inside a plain scalar (`run: echo "["`) read as an open value. | Fixed | Plain scalars are tracked. |
 | CR-24 | Low | permissions | A plain label with a lone double quote, and JSON inside a single-quoted value, failed lint. | Fixed | One line tokenizer for escapes, alias keys and permissions keys. |
-| CR-23 | Info | vacuous success | Workflow-level `defaults:` can make a required job's steps no-ops. | Accepted residual | The validator bounds skipping, not vacuous success; the required-jobs gate's EDR records the limit. |
+| CR-23 | Info | vacuous success | Workflow-level `defaults:` can make a required job's steps no-ops. | Accepted residual | The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 
 No prompt-injection text was found in the diff or the review comments.

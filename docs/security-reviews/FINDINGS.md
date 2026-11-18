@@ -402,7 +402,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-5** | info | fixed-untested | build/check-pins.ts | check-pins' purity probe depended on the supplied file list. | No case removes the parser from the list while it stays on disk. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-19** | info | fixed-untested | Level B check (test/containment) | A dead field pointed inside the pinned directory. | A removed field. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-9** | info | fixed-untested | Level B check (test/containment) | The sbx host-evidence row rested on an unstated premise. | The premise proved false and the row was removed (FXF-20). |
-| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-23** | info | accepted-residual | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit. |
+| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-23** | info | accepted-residual | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 
 ### RPC follow-ups
 
@@ -2293,7 +2293,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR-20 | medium | fixed | The last job reached end-of-file without the open-value check. | e365d825 · `build/check-required-checks.ts` "a decoy name inside a quoted step at the end of the file" |
 | CR-21 | low | fixed | A backslash inside a single-quoted command failed lint. | e365d825 · `build/check-required-checks.ts` "a single-quoted run holding an escape-like backslash" |
 | CR-22 | low | fixed | A quote after a bracket inside a plain scalar read as an open value. | 0c9c31b7 · `build/check-required-checks.ts` "a plain-scalar command holding a quoted bracket" |
-| CR-23 | info | accepted-residual | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit. |
+| CR-23 | info | accepted-residual | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 | CR-24 | low | fixed | A lone-quote plain label and JSON inside a single-quoted value failed lint. | 858bdff7 · `build/check-required-checks.ts` "JSON with a permissions key inside a single-quoted value" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
