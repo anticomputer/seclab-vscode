@@ -85,6 +85,8 @@ Copilot's review of the gate PR.
 | CR63-7 | Low | tests | The early-exit scenario's injection wrote through a removed scratch directory and failed silently (left of `&&`), so the self-test passed a weaker scenario. | Fixed | Every gutting is written beside its target and checked, and each gutted scenario's commit is checked before it is judged. |
 | CR63-8 | Low | liveness | A workflow whose only trigger is `workflow_run` accepted run evidence without the `event: workflow_run` marker, so a dispatch or scheduled run of it could stand as proof. | Fixed | Every evidence for such a workflow must carry the marker. |
 | CR63-9 | Low | register | RJG-2 and RJG-10 were registered `fixed`, but both arose and were fixed inside this change, so they are `fixed-before-landing`; and the RJG-10 scenario linked to a host file, so it exercised RJG-11 instead. | Fixed | Both are `fixed-before-landing` with the evidence below; the RJG-10 scenario links to `/dev/null`. |
+| CR63-10 | Low | owner report | A failed read of a change to `owner-acceptances.md` printed nothing and still returned success, since the caller's `||` suspends `set -e`. | Fixed | The change is read first; a failed read returns 2 and `landing verify` refuses. |
+| CR63-11 | Low | landing verify | The repository was taken from the caller's directory, so run by path from elsewhere it failed or read another repository's runs. | Fixed | It is resolved from the checkout. |
 
 ## Round RJG7
 A review of the Copilot-review fixes (a workflow change).

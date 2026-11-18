@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 263 | 422 | 55 | 845 |
+| fixed | 14 | 91 | 263 | 424 | 55 | 847 |
 | fixed-before-landing | 0 | 7 | 0 | 0 | 0 | 7 |
 | fixed-untested | 0 | 5 | 63 | 185 | 73 | 326 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 16 | 108 | 363 | 706 | 192 | 1385 |
+| **all** | 16 | 108 | 363 | 708 | 192 | 1387 |
 
 ## Baseline: open high and critical findings
 
@@ -2433,6 +2433,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR63-7 | low | fixed | The landing self-test's early-exit injection could fail silently, leaving a weaker scenario. | patch:1a1a933aa893e6c696d0c3026bcb896681a27625 · `seclab` "doesn't carry its gutted" |
 | CR63-8 | low | fixed | A workflow_run-only workflow accepted run evidence without the event marker, so a dispatch run could stand as proof. | patch:db45b479624ff2df8ffe1027442ca445a22d49a3 · `build/liveness/liveness.ts` "CR63-8 unmarked run evidence for a workflow_run-only workflow" |
 | CR63-9 | low | fixed | RJG-2 and RJG-10 were registered fixed rather than fixed-before-landing, and the RJG-10 scenario exercised RJG-11. | patch:6edf167e5d35296c430097a224b105b9d8030654 · `seclab` "the RJG-10 scenario carries no symlink" |
+| CR63-10 | low | fixed | A failed read in the owner-acceptances report printed nothing and returned success. | patch:2954c15d3979f70b93df1eeace38d78de2243e87 · `seclab` "an owner report whose diff failed passed" |
+| CR63-11 | low | fixed | landing verify took the repository from the caller's directory. | patch:2954c15d3979f70b93df1eeace38d78de2243e87 · `seclab` "landing verify took the repository from the caller's directory" |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 

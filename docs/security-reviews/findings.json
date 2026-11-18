@@ -20355,6 +20355,36 @@
 				"file": "seclab",
 				"name": "the RJG-10 scenario carries no symlink"
 			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-10",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "A failed read in the owner-acceptances report printed nothing and returned success.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:2954c15d3979f70b93df1eeace38d78de2243e87",
+			"test": {
+				"file": "seclab",
+				"name": "an owner report whose diff failed passed"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-11",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "landing verify took the repository from the caller's directory.",
+			"component": "landing verify (seclab landing_verify)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:2954c15d3979f70b93df1eeace38d78de2243e87",
+			"test": {
+				"file": "seclab",
+				"name": "landing verify took the repository from the caller's directory"
+			}
 		}
 	]
 }
