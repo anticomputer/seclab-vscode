@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 93 | 263 | 419 | 55 | 844 |
+| fixed | 14 | 93 | 263 | 420 | 55 | 845 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
 | fixed-untested | 0 | 5 | 63 | 185 | 73 | 326 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 16 | 108 | 363 | 703 | 192 | 1382 |
+| **all** | 16 | 108 | 363 | 704 | 192 | 1383 |
 
 ## Baseline: open high and critical findings
 
@@ -2430,6 +2430,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR63-5 | medium | fixed | workflow_run requested does not fire for a re-run, so an earlier gate success stood during a re-run. | patch:a02969369fc96f074971ee540184a9a02a6d5645 · `build/check-required-checks.ts` "gate misses re-runs (no in_progress)" |
 | CR63-6 | medium | fixed | Running the merged tabd/src/obs modules let a merge end the observability-docs re-validation early with success. | patch:a02969369fc96f074971ee540184a9a02a6d5645 · `seclab` "an executed-module change wasn't refused for its reason" |
 | RJG-25 | info | fixed-untested | The required-checks self-test banner hardcoded the gate-edit case count. | A count in the self-test banner; the cases themselves are unchanged and still run. |
+| CR63-7 | low | fixed | The landing self-test's early-exit injection could fail silently, leaving a weaker scenario. | patch:1a1a933aa893e6c696d0c3026bcb896681a27625 · `seclab` "doesn't carry its gutted" |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 

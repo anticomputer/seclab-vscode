@@ -20300,6 +20300,21 @@
 			"status": "fixed-untested",
 			"commit": "patch:32fe8854fd98ec6419c5844b46d241d5f01057d9",
 			"gap": "A count in the self-test banner; the cases themselves are unchanged and still run."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-7",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "The landing self-test's early-exit injection could fail silently, leaving a weaker scenario.",
+			"component": "landing verify self-test (seclab landing_self_test)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:1a1a933aa893e6c696d0c3026bcb896681a27625",
+			"test": {
+				"file": "seclab",
+				"name": "doesn't carry its gutted"
+			}
 		}
 	]
 }
