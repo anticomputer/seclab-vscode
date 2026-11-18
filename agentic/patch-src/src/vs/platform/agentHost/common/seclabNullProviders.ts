@@ -28,7 +28,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /** What a member is, which decides how its safe value is wrapped. */
-export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method' | 'disposable-method';
+export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method' | 'disposable-method' | 'value-method';
 
 export interface SeclabMember {
 	readonly kind: SeclabMemberKind;
@@ -76,6 +76,11 @@ export function seclabNullProvider(shape: SeclabProviderShape, deps: SeclabNullD
 				// mean the right SHAPE of nothing, not merely nothing (review round 13).
 				inert[name] = () => deps.noDisposable;
 				break;
+			case 'value-method':
+				// A synchronous method whose caller uses the result at once, so it returns the
+				// contained value itself rather than a promise of it.
+				inert[name] = () => member.value;
+				break;
 			case 'method':
 				// Async, because every method these interfaces declare either returns void or a
 				// promise, and a caller that awaits a plain `undefined` is fine either way.
@@ -116,6 +121,15 @@ export function seclabNullProviderEvent(name: string): object {
  * The probe caught exactly that mismatch before this shipped, which is why the names are not
  * prettier.
  */
+/**
+ * An `IAgentHostAdvertisedAuthentication` that authenticates nothing. Frozen, and shared by
+ * every caller: it holds no state, so there is nothing for one connection to leak to another.
+ */
+export const SECLAB_NO_AUTHENTICATION: Readonly<{ resolve(agents: readonly unknown[]): Promise<readonly unknown[]>; dispose(): void }> = Object.freeze({
+	resolve: async () => [],
+	dispose: () => undefined,
+});
+
 export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 	{
 		// `IMissionControlSharingService`.
@@ -156,6 +170,20 @@ export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 			available: { kind: 'observable', value: false },
 		},
 	},
+	{
+		// `IAgentHostAdvertisedAuthenticationResolver`. Not reached only from the withheld
+		// contribution, as first recorded: the remote agent-host service, which stays unwrapped,
+		// calls `createResolver(address)` in its connection factory BEFORE it builds the protocol
+		// client. Absent, that call threw a TypeError, so a tab-written remote-host entry failed
+		// before patch 0015's gate could refuse and log it (PR #43 review). The contained value is
+		// an authentication that resolves nothing, so the client is built and the gate refuses its
+		// transport, as 0015 intends.
+		name: 'agentHostAdvertisedAuthenticationResolver',
+		members: {
+			createResolver: { kind: 'value-method', value: SECLAB_NO_AUTHENTICATION },
+			takePendingSessionRemovals: { kind: 'value-method', value: [] },
+		},
+	},
 ];
 
 /**
@@ -173,7 +201,6 @@ export const SECLAB_NO_SHAPE_NEEDED: Readonly<Record<string, string>> = {
 	cloudSandboxModelCatalogService: 'reached only from the withheld cloud-sandbox contributions',
 	cloudSandboxAgentHostService: 'the provider this patch exists to remove; nothing else may reach it',
 	remoteAgentHostConnectionCustomizationService: 'its only tab-window caller is reached through the withheld editor cloud-sandbox contribution',
-	agentHostAdvertisedAuthenticationResolver: 'reached only from the withheld remote agent-host contribution',
 	remoteAgentHostContribution: 'a withheld workbench contribution, not a service anything resolves',
 	editorCloudSandboxContribution: 'a withheld workbench contribution, not a service anything resolves',
 	missionControlContribution: 'a withheld workbench contribution, not a service anything resolves',
@@ -212,7 +239,7 @@ export function assertShapesMatchRealServices(realCtors: ReadonlyMap<string, unk
 		for (const [member, { kind }] of Object.entries(shape.members)) {
 			// Only methods live on the prototype; observables and plain properties are instance
 			// fields and cannot be checked this way, so they are not claimed to be.
-			if ((kind === 'method' || kind === 'disposable-method') && !real.has(member)) {
+			if ((kind === 'method' || kind === 'disposable-method' || kind === 'value-method') && !real.has(member)) {
 				problems.push(`${shape.name}.${member} is not a method of the real ${(ctor as { name?: string }).name}`);
 			}
 		}

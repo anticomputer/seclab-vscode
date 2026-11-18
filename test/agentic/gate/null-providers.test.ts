@@ -138,10 +138,12 @@ test('THE REAL POINT: a shape is checked against the service it claims to stand 
 	class RealEnvironment { initialize() { } refresh() { } connect() { } disconnect() { } delete() { } setDisplayName() { } }
 	class RealAvailability { }
 	class RealSharing { setEnvironmentName() { } setEnabled() { } setProjectFolders() { } }
+	class RealResolver { createResolver() { } takePendingSessionRemovals() { } }
 	const real = new Map<string, unknown>([
 		['missionControlEnvironmentService', RealEnvironment],
 		['missionControlAvailabilityService', RealAvailability],
 		['missionControlSharingService', RealSharing],
+		['agentHostAdvertisedAuthenticationResolver', RealResolver],
 	]);
 	assert.deepEqual(assertShapesMatchRealServices(real), []);
 
@@ -151,6 +153,7 @@ test('THE REAL POINT: a shape is checked against the service it claims to stand 
 		['missionControlEnvironmentService', RealAvailability],
 		['missionControlAvailabilityService', RealEnvironment],
 		['missionControlSharingService', RealSharing],
+		['agentHostAdvertisedAuthenticationResolver', RealResolver],
 	]);
 	const problems = assertShapesMatchRealServices(swapped);
 	assert.ok(problems.length >= 6, `the swap must be caught, got ${problems.length}`);
@@ -195,4 +198,20 @@ test('a disposable-returning member yields a disposable, not a promise', () => {
 	const result = (inert['register'] as () => { dispose?: unknown })();
 	assert.equal(typeof (result as { dispose?: unknown }).dispose, 'function');
 	assert.notEqual(typeof (result as { then?: unknown }).then, 'function');
+});
+
+test('the authentication resolver stand-in supplies createResolver, which the remote agent-host factory calls first', async () => {
+	// PR #43 review. The remote agent-host service stays unwrapped in a tab window, and its
+	// connection factory calls `createResolver(address)` before building the protocol client.
+	// With no shape the call threw a TypeError, so a tab-written remote-host entry failed before
+	// patch 0015's gate could refuse it and log the refusal.
+	const inert = seclabNullProvider(shapeNamed('agentHostAdvertisedAuthenticationResolver'), deps);
+	assert.equal(typeof inert['createResolver'], 'function');
+	const auth = (inert['createResolver'] as (address: string) => { resolve(a: readonly unknown[]): Promise<readonly unknown[]>; dispose(): void })('127.0.0.1:1');
+	// Synchronous: the factory uses the result at once, not a promise of it.
+	assert.notEqual(typeof (auth as { then?: unknown }).then, 'function');
+	assert.deepEqual(await auth.resolve([{ provider: 'p' }]), []);
+	auth.dispose();
+	assert.deepEqual((inert['takePendingSessionRemovals'] as (address: string) => readonly unknown[])('127.0.0.1:1'), []);
+	assert.ok(!('agentHostAdvertisedAuthenticationResolver' in SECLAB_NO_SHAPE_NEEDED), 'it has a consumer outside the withheld contributions, so it cannot be exempt');
 });
