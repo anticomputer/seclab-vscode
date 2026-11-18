@@ -42,6 +42,8 @@
 0050-seclab-no-host-terminal-in-tabs.patch
 # 0051: what a tab's search provider returns, and the query it is sent (reviews SRCH-2, SRCH-3).
 0051-seclab-sanitise-tab-search-responses.patch
+# 0052: one file's text matches go in pieces the RPC filter accepts (PR review on #52).
+0052-seclab-split-large-text-matches.patch
 0035-seclab-document-sync-provenance.patch
 0036-seclab-tab-configuration-snapshot.patch
 # 0038: a tab's host learns only that host-side editors exist, not their URIs or labels (EDR editor-tab-provenance).

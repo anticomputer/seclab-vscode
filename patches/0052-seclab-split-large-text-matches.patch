@@ -1,0 +1,26 @@
+diff -ruN a/src/vs/workbench/services/search/common/textSearchManager.ts b/src/vs/workbench/services/search/common/textSearchManager.ts
+--- a/src/vs/workbench/services/search/common/textSearchManager.ts	2026-11-18 04:03:09
++++ b/src/vs/workbench/services/search/common/textSearchManager.ts	2026-11-18 04:03:09
+@@ -258,6 +258,13 @@
+ 	};
+ }
+ 
++/**
++ * seclab: the most results one file match carries. The RPC filter refuses a text match with more
++ * (seclabArgValidators MAX_TEXT_MATCHES), which would drop its whole batch, so a file with more
++ * matching lines is sent as several matches; the window merges matches for one resource.
++ */
++const SECLAB_MAX_RESULTS_PER_MATCH = 10000;
++
+ export class TextSearchResultsCollector {
+ 	private _batchedCollector: BatchedCollector<IFileMatch>;
+ 
+@@ -273,7 +280,7 @@
+ 		// Collects TextSearchResults into IInternalFileMatches and collates using BatchedCollector.
+ 		// This is efficient for ripgrep which sends results back one file at a time. It wouldn't be efficient for other search
+ 		// providers that send results in random order. We could do this step afterwards instead.
+-		if (this._currentFileMatch && (this._currentFolderIdx !== folderIdx || !resources.isEqual(this._currentUri, data.uri))) {
++		if (this._currentFileMatch && (this._currentFolderIdx !== folderIdx || !resources.isEqual(this._currentUri, data.uri) || this._currentFileMatch.results!.length >= SECLAB_MAX_RESULTS_PER_MATCH)) {
+ 			this.pushToCollector();
+ 			this._currentFileMatch = null;
+ 		}
