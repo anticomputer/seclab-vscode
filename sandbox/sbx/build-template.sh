@@ -102,12 +102,12 @@ sbx exec -u root "$B" sh -euc '
 	python3 -I -c "import ctypes, json, select"
 '
 sbx stop "$B" >/dev/null
-sbx template save "$B" "$TAG"
 if [[ "$TAG" == seclab-tab:b-* ]]; then
-	# The tag's lease for clean-host (see build-images.sh).
+	# The tag's lease for clean-host, before the tag exists (see build-images.sh).
 	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
 	mkdir -p "$lease" && date +%s > "$lease/$TAG"
 fi
+sbx template save "$B" "$TAG"
 # The pre-mount secret scanner tabd runs before any mount (built from pinned gitleaks source).
 "$ROOT/build/tools/tool.sh" gitleaks >/dev/null
 echo "template: $TAG"

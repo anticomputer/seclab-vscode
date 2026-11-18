@@ -36,16 +36,19 @@ if [[ "$got" != "$VARIANT" ]]; then
 	echo "refusing: $REH_TGZ is $what, building $TAG" >&2; exit 1
 fi
 cp -R "$ROOT/sandbox/rootfs/opt/seclab" "$CTX/seclab"
+if [[ -n "$PERBUILD" ]]; then
+	# The tag's lease for clean-host, written before the tag exists so a concurrent clean-host
+	# never sees it unleased (Copilot review on PR 25): a cached build reuses an older image, so its
+	# creation time isn't when this proof tag was made.
+	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
+	mkdir -p "$lease" && date +%s > "$lease/$TAG"
+fi
 docker build -q -t "$TAG" -f "$ROOT/sandbox/oci/Dockerfile.tab" "$CTX"
 if [[ -n "$VARIANT" ]]; then
 	echo "images: $TAG (UNSAFE test build; tabd --image $TAG)"
 	exit 0
 fi
 if [[ -n "$PERBUILD" ]]; then
-	# The tag's lease for clean-host: a cached build reuses an older image, so its creation time
-	# isn't when this proof tag was made (Copilot review on PR 25).
-	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
-	mkdir -p "$lease" && date +%s > "$lease/$TAG"
 	echo "images: $TAG (SECLAB_TAB_IMAGE=$TAG; the broker images are shared and unchanged)"
 	exit 0
 fi
