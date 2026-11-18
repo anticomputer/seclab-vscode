@@ -156,5 +156,6 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-16 | [RPC follow-ups, landing A (push refusals, 0011 retired, regression tests)](20261116-rpc-follow-ups.md) | see record | see record |
 | 2026-11-16 | [telemetry ids stay out of tabs (release check and product invariant)](20261116-tab-telemetry-ids.md) | origin/main..branch head: build/check-release.sh (telemetry check and self-test), | see record |
 | 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
+| 2026-11-17 | [the online docs step's DOCS_BASE (round DBO)](20261117-docs-base-online.md) | round DBO, by an Opus-class model, of the change that passes DOCS_BASE to | see record |
 | 2026-11-17 | [link-check retries (round LCR)](20261117-link-check-retries.md) | round LCR, by an Opus-class model, of the lychee change in | see record |
 <!-- index:end -->

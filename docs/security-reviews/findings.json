@@ -15547,6 +15547,36 @@
 				"file": "docs/security-reviews/20261117-link-check-retries.md",
 				"quote": "None found."
 			}
+		},
+		{
+			"record": "20261117-docs-base-online.md",
+			"anchor": "DBO-1",
+			"round": "Round DBO",
+			"severity": "low",
+			"summary": "The CI guard did not cover a previous head equal to HEAD.",
+			"component": "docs-check online step / findings_main_base",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "CI on main with DOCS_BASE at HEAD compared with HEAD^1 (DBO-1)"
+			},
+			"commit": "patch:30b442da5f5254838e6b1c199b6bfecc5ccbbd48"
+		},
+		{
+			"record": "20261117-docs-base-online.md",
+			"anchor": "DBO-2",
+			"round": "Round DBO",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "docs-check online step / findings_main_base",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-docs-base-online.md",
+				"quote": "None found."
+			}
 		}
 	]
 }

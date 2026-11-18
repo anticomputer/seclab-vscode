@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 202 | 268 | 39 | 606 |
+| fixed | 14 | 83 | 202 | 269 | 39 | 607 |
 | fixed-untested | 0 | 5 | 52 | 154 | 55 | 266 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
-| false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 92 | 293 | 515 | 138 | 1054 |
+| false-positive | 0 | 0 | 0 | 0 | 15 | 15 |
+| **all** | 16 | 92 | 293 | 516 | 139 | 1056 |
 
 ## Baseline: open high and critical findings
 
@@ -1988,6 +1988,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20D-2 | low | fixed | YAML decodes numeric escapes and backslash continuations in a double-quoted value before Actions evaluates it, so an escaped token reference passed the HH-1 check's raw-text scan. | ab175121b6f1 · `broker/tools/token_steps.py` "BRK20D-2: a unicode escape in a double-quoted value fails" |
 | BRK20D-3 | low | fixed | The HH-1 check's continuation rule needed the double quote on the same line, so a quote opened lines earlier let a backslash continuation split a token reference. | c7309fbda2c9 · `broker/tools/token_steps.py` "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails" |
 | BRK20D-4 | low | fixed | The HH-1 check's continuation rule skipped lines starting with #, but inside a multi-line double-quoted value such a line is content, so it could still join into a token reference. | b19a42452e0f · `broker/tools/token_steps.py` "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails" |
+
+### [20261117-docs-base-online](20261117-docs-base-online.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| DBO-1 | low | fixed | The CI guard did not cover a previous head equal to HEAD. | patch:30b442da5f5254838e6b1c199b6bfecc5ccbbd48 · `seclab` "CI on main with DOCS_BASE at HEAD compared with HEAD^1 (DBO-1)" |
+| DBO-2 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### [20261117-link-check-retries](20261117-link-check-retries.md)
 
