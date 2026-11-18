@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
-index 0842031c..a1296dd8 100644
+index 0842031c..4da49808 100644
 --- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 +++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 @@ -37,6 +37,8 @@ import { isVirtualWorkspace } from '../../../../../platform/workspace/common/vir
@@ -98,17 +98,26 @@ index 0842031c..a1296dd8 100644
  
  		// Dequeue consecutive steering requests from the same initiator and combine them into one
  		const steeringRequests = model.dequeueSteeringBatch();
-@@ -2698,6 +2751,9 @@ export class ChatService extends Disposable implements IChatService {
+@@ -2698,6 +2751,18 @@ export class ChatService extends Disposable implements IChatService {
  		if (pendingRequests.length === 0) {
  			return;
  		}
 +		// seclab patch 0018: also checked before the source queue is emptied, so a refused
-+		// migration keeps it (PR #43 review).
-+		this.seclabCheckSession(targetResource);
++		// migration keeps it (PR #43 review). Both ends: the text is the SOURCE session's, sent
++		// into the target, so a session this window may not dispatch cannot be drained into one
++		// it may (review round 17). Refused by returning, after the gate has thrown and logged:
++		// this method is synchronous and `void`, and a throw out of it would abort its caller's
++		// commit halfway, with nothing sent either way.
++		try {
++			this.seclabCheckSession(originalResource);
++			this.seclabCheckSession(targetResource);
++		} catch {
++			return;
++		}
  
  		// Remove each remaining pending request from the original session
  		for (const pending of pendingRequests) {
-@@ -2833,6 +2889,9 @@ export class ChatService extends Disposable implements IChatService {
+@@ -2833,6 +2898,9 @@ export class ChatService extends Disposable implements IChatService {
  		if (!target) {
  			return;
  		}

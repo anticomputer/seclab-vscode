@@ -240,7 +240,7 @@ async function recordHistory(): Promise<ISerializableChatData> {
 	}
 }
 
-type Path = 'sendRequest' | 'resendRequest' | 'queue-drain' | 'migrateRequests';
+type Path = 'sendRequest' | 'resendRequest' | 'queue-drain' | 'send-now' | 'migrateRequests';
 interface Observation {
 	readonly path: Path; readonly window: 'tab' | 'ordinary'; readonly session: Foreign;
 	readonly invocations: number; readonly controllerPrompts: number; readonly threw: string | undefined; readonly gateReasons: string[];
@@ -281,6 +281,9 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 				await svc.resendRequest(model.getRequests()[0]);
 			} else if (path === 'queue-drain') {
 				svc.processPendingRequests(model.sessionResource);
+			} else if (path === 'send-now') {
+				// "Run this queued message now": reorders the queue, cancels, then drains.
+				await svc.sendPendingRequestImmediately(model.sessionResource, model.getPendingRequests()[0].request.id);
 			} else {
 				// The restored queue moves to an untitled session of a contributed type, as when a
 				// session is committed; the first send there materialises it.
@@ -305,7 +308,7 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 	return { path, window, session, invocations: invocations - before, controllerPrompts: controllerPrompts - promptsBefore, threw, gateReasons, kept };
 }
 
-const PATHS = ['sendRequest', 'resendRequest', 'queue-drain', 'migrateRequests'] as const;
+const PATHS = ['sendRequest', 'resendRequest', 'queue-drain', 'send-now', 'migrateRequests'] as const;
 const history = await recordHistory();
 const observations: Observation[] = [];
 for (const path of PATHS) {
@@ -336,6 +339,7 @@ for (const path of PATHS) {
 const CONTAINED_SEND = 'CONTAINED: sendRequest in a tab window is refused by patch 0009 before any session check';
 const BYPASS = [['resendRequest', 'local', 'deny:unresolved'], ['resendRequest', 'other-connection', 'deny:other-connection'],
 	['queue-drain', 'local', 'deny:unresolved'], ['queue-drain', 'other-connection', 'deny:other-connection'],
+	['send-now', 'local', 'deny:unresolved'], ['send-now', 'other-connection', 'deny:other-connection'],
 	['migrateRequests', 'local', 'deny:unresolved'], ['migrateRequests', 'other-connection', 'deny:other-connection']] as const;
 const containedBypass = ([path, session, reason]: typeof BYPASS[number]) =>
 	`CONTAINED: ${path} in a tab window does not dispatch the ${session} session, and the gate log records ${reason}`;
@@ -370,7 +374,7 @@ if (EXPECT === 'gated') {
 } else {
 	// The control for 0018: 0009 still refuses sendRequest, and the bypass paths dispatch.
 	expect(!dispatched(find('sendRequest', 'tab')), 'CONTROL (no 0018): sendRequest is still refused, by 0009');
-	for (const path of ['resendRequest', 'queue-drain', 'migrateRequests'] as const) {
+	for (const path of ['resendRequest', 'queue-drain', 'send-now', 'migrateRequests'] as const) {
 		for (const session of ['local', 'other-connection'] as const) {
 			expect(dispatched(find(path, 'tab', session)), `CONTROL (no 0018): ${path} in a tab window dispatches a ${session} session`);
 		}
