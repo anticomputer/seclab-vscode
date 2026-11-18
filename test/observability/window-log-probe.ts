@@ -87,6 +87,14 @@ function variantApp(v: Variant, base: string): string {
 	const app = path.join(base, 'app', path.basename(sourceApp));
 	fs.mkdirSync(path.dirname(app), { recursive: true });
 	execFileSync('ditto', [sourceApp, app]);
+	// The copy is the source build minus one thing: it keeps that build's info, so a launch still
+	// checks which commit it is (review FAB-3).
+	for (const f of ['build-info.json', 'build-info-app.json']) {
+		const src = path.join(path.dirname(sourceApp), f);
+		if (fs.existsSync(src)) {
+			fs.copyFileSync(src, path.join(path.dirname(app), f));
+		}
+	}
 	if (v === 'no-stamp') {
 		const pj = path.join(resources(app), 'product.json');
 		const product = JSON.parse(fs.readFileSync(pj, 'utf8'));

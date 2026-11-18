@@ -11,7 +11,8 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DrivenEditor, editorEnv, executable } from './editor.ts';
-import { checkUserDataDir, preparePortable } from '../harness.ts';
+import { checkUserDataDir, preparePortable, repoRoot } from '../harness.ts';
+import { requireAppBuild } from '../app-build.ts';
 import { liveMark } from '../liveness.ts';
 
 const argv = process.argv.slice(2);
@@ -25,6 +26,8 @@ if (!app || !profile || !vsixDir) {
 	console.error('usage: local-window.ts --app APP --profile DIR --vsix-dir DIR [-- EXTRA_EDITOR_ARGS]');
 	process.exit(2);
 }
+// Before the installs below run the app's own CLI (review FAB-2).
+requireAppBuild(path.resolve(app), repoRoot);
 // installRefused: the install itself must fail with this reason (the attack stops there).
 const FIXTURES: Array<{ name: string; why: string; installRefused?: RegExp }> = [
 	{ name: 'workspace-ext', why: 'a workspace extension does not run in a local window (m0#3-1, patch 0003)' },

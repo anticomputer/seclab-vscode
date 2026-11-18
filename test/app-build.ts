@@ -6,7 +6,8 @@
 // The commit a run is asked to test:
 //   SECLAB_APP_SHA=<40 hex>   that commit, whatever the app's location;
 //   otherwise, a branch or test-variant build (anything but the release location) must be this
-//   checkout's HEAD, and the release app (.work/app) a main build in HEAD's history.
+//   checkout's HEAD, and the release app (.work/app) a build of a commit on origin/main.
+// A test build (build info with `testBuild`) runs only from .work/test-builds/ (review FAB-4, FAB-8).
 // A Linux editor without a fetched build-info.json is one this checkout built (./seclab build
 // linux editor) and is not checked here.
 
@@ -39,7 +40,7 @@ function readInfo(file: string): { repoSha?: unknown } | string {
 
 /** Why `app` must not be launched by this run, or undefined when it may. */
 export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: string; platform?: string }): string | undefined {
-	const dir = path.dirname(path.resolve(app));
+	const dir = real(path.dirname(path.resolve(app)));
 	// A test variant's app keeps its info as build-info-app.json (its REH's is beside it).
 	const file = ['build-info-app.json', 'build-info.json'].map(f => path.join(dir, f)).find(f => fs.existsSync(f) || isLink(f));
 	if (!file) {
@@ -55,7 +56,12 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 	if (typeof sha !== 'string' || !HEX40.test(sha)) {
 		return `${file} records no commit (repoSha)`;
 	}
-	const git = (...args: string[]) => execFileSync('git', ['-C', opts.repoRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+	// No inherited GIT_DIR and the like: HEAD is this checkout's (review FAB-7).
+	const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/.test(k)));
+	const git = (...args: string[]) => execFileSync('git', ['-C', opts.repoRoot, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+	if ('testBuild' in info && !isUnder(dir, real(path.join(opts.repoRoot, '.work', 'test-builds')))) {
+		return `${app} is a test build (its build info has testBuild): it runs only from .work/test-builds/`;
+	}
 	if (opts.expect !== undefined) {
 		if (!HEX40.test(opts.expect)) {
 			return 'SECLAB_APP_SHA must be a full 40-hex commit';
@@ -68,17 +74,32 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 	} catch {
 		return `can't read this checkout's HEAD to check ${app}; set SECLAB_APP_SHA`;
 	}
-	const release = path.join(opts.repoRoot, '.work', 'app');
-	if (dir === release) {
+	// The release rule is for the release location itself, not wherever a symlink there points.
+	const releasePath = path.join(opts.repoRoot, '.work', 'app');
+	if (!isLink(releasePath) && dir === real(releasePath)) {
 		try {
-			git('merge-base', '--is-ancestor', sha, head);
+			git('merge-base', '--is-ancestor', sha, 'refs/remotes/origin/main');
 			return undefined;
 		} catch {
-			return `${app} was built from ${sha}, which isn't in this checkout's history; set SECLAB_APP_SHA to test it`;
+			return `${app} was built from ${sha}, which isn't on origin/main (fetch it, or set SECLAB_APP_SHA to test that commit)`;
 		}
 	}
 	return sha === head ? undefined
 		: `${app} was built from ${sha}, not this checkout's HEAD ${head}: a stale or different build. Fetch the build of HEAD, or set SECLAB_APP_SHA to the commit this run tests`;
+}
+
+/** The canonical path (case and symlinks resolved), or the path itself when it doesn't exist (review FAB-6). */
+function real(p: string): string {
+	try {
+		return fs.realpathSync.native(p);
+	} catch {
+		return p;
+	}
+}
+
+function isUnder(p: string, root: string): boolean {
+	const r = path.relative(root, p);
+	return r !== '' && !r.startsWith('..') && !path.isAbsolute(r);
 }
 
 function isLink(f: string): boolean {
