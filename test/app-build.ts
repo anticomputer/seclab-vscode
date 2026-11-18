@@ -82,10 +82,12 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 	} catch {
 		return `can't read the HEAD of ${checkout} to check ${app}; set SECLAB_APP_SHA`;
 	}
-	// The release rule is for the release location itself, not wherever a symlink there points.
-	const releasePath = path.join(checkout, '.work', 'app');
+	// The release rule is for this checkout's release location itself, not wherever a symlink there
+	// points, and not a nested checkout's (review FAB3-2).
+	const root = real(opts.repoRoot);
+	const releasePath = path.join(root, '.work', 'app');
 	if (!isLink(releasePath) && dir === real(releasePath)) {
-		if (fs.existsSync(path.join(checkout, '.work', 'app-fetch-pending')) || isLink(path.join(checkout, '.work', 'app-fetch-pending'))) {
+		if (fs.existsSync(path.join(root, '.work', 'app-fetch-pending')) || isLink(path.join(root, '.work', 'app-fetch-pending'))) {
 			return `${app}: the last ./seclab fetch macos didn't complete (.work/app-fetch-pending), so this may not be the build asked for; fetch again, or set SECLAB_APP_SHA`;
 		}
 		try {
@@ -99,16 +101,16 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 		: `${app} was built from ${sha}, not the HEAD ${head} of ${checkout}: a stale or different build. Fetch the build of HEAD, or set SECLAB_APP_SHA to the commit this run tests`;
 }
 
-/** The nearest directory at or above `dir` holding a .git entry, if it is `root` or inside it; else `root`. */
+/** `root`, or a checkout nested directly in its .work (`root/.work/<name>`) when the app sits in
+ *  that checkout's own .work. Never a .git at or below the app's own location: an app's tree
+ *  can't choose the HEAD it is compared with (review FAB3-2). */
 function owningCheckout(dir: string, root: string): string {
-	for (let d = dir; ; d = path.dirname(d)) {
-		if (fs.existsSync(path.join(d, '.git'))) {
-			return d === root || isUnder(d, root) ? d : root;
-		}
-		if (path.dirname(d) === d) {
-			return root;
-		}
+	const work = path.join(root, '.work');
+	if (!isUnder(dir, work)) {
+		return root;
 	}
+	const nested = path.join(work, path.relative(work, dir).split(path.sep)[0]);
+	return fs.existsSync(path.join(nested, '.git')) && isUnder(dir, path.join(nested, '.work')) ? nested : root;
 }
 
 /** The canonical path (case and symlinks resolved), or the path itself when it doesn't exist (review FAB-6). */

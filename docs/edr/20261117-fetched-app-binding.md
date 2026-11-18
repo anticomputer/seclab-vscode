@@ -20,8 +20,9 @@ at launch compared the app's recorded commit with the commit under test.
   (`.work/app-branch`, `.work/test-builds/<variant>`) before checking anything, usage errors
   included, so a refusal or failure leaves no app there. `fetch macos` keeps the release app
   (`.work/app`) until a new one verifies: it may be the editor in use, and a failed fetch of a
-  newer build shouldn't remove it. Instead it writes `.work/app-fetch-pending` first and removes
-  it only when the new app is in place; while it exists, runs refuse the release app.
+  newer build shouldn't remove it. Instead it writes `.work/app-fetch-pending` (a fresh
+  file) first and removes it only once the earlier app is gone and the new one moved in, each
+  step checked; while it exists, runs refuse the release app.
   `./seclab fetch --self-test` (CI) checks every refusal that needs no network.
 - **Launch.** `test/app-build.ts` checks every launch: `launchEditorInBackground`
   (`test/harness.ts`, behind `test/window.ts launch` and the probes that print its line), the
@@ -37,8 +38,11 @@ at launch compared the app's recorded commit with the commit under test.
   A test build (build info with `testBuild`) runs only from `.work/test-builds/`, whatever
   `SECLAB_APP_SHA` says. Paths are compared canonically, and git runs with no inherited
   `GIT_*` variables. A macOS app with no build info is refused.
-  "This checkout" is the one the app was fetched into: the checkout running the harness, or one
-  nested in its `.work` (an A/B run's baseline worktree, whose HEAD is the baseline commit).
+  "This checkout" is the one the app was fetched into: the checkout running the harness, or a
+  checkout nested directly in its `.work` (`.work/<name>`, an A/B run's baseline worktree, whose
+  HEAD is the baseline commit) when the app sits in that checkout's own `.work`. A `.git` at or
+  below the app's location never chooses the HEAD; the release rule and its marker are always
+  this checkout's.
 - **Agentic runs.** `test/agentic/runner/runner.ts` and `test/agentic/browser/run.ts` refuse a
   wrong build at prepare, and the runner's "ran the requested build" check passes only if the
   window was launched from that build's app and its build info still names the prepared commit. A Linux editor this checkout built
@@ -48,7 +52,8 @@ at launch compared the app's recorded commit with the commit under test.
   `build-info-test-V.json` records the commit under test (the same rule). A local Linux build
   records the host checkout's HEAD as `repoSha` (no `runId`), since git inside the build
   container can't read a worktree's HEAD. Only a clean tree's build records a commit (the build
-  reads the working tree); `runId` is recorded only for CI builds.
+  reads the working tree; a `git status` that fails counts as not clean); `runId` is recorded only
+  for CI builds.
 - **Linux driver.** `./seclab test driver|cli-open|local-window` put the build info beside the
   tarball next to the extracted editor and pass this checkout's HEAD as `SECLAB_APP_SHA`, so a
   stale tarball is refused. A build info whose targets lack the editor (a later REH-only build)
