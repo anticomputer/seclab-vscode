@@ -16852,6 +16852,36 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_number_member_is_not_a_spread"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-23",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes split lines at U+2028/U+2029, which end no line inside a JavaScript string, so a /* after one read as a block comment and hid an executable call.",
+			"component": "rpc-filter/tools/lint_probes.py main",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_literal_line_separator_fails_closed"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-24",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes applied JavaScript comment syntax to .sh payloads, so a # ... /* line hid the next shell line from the content rules.",
+			"component": "rpc-filter/tools/lint_probes.py main",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_shell_payload_is_not_scanned_as_javascript"
+			}
 		}
 	]
 }

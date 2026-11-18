@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All nineteen threads point at real gaps, and fixing them turned up three more (PRR-13, PRR-14, PRR-17). Two are as stated. One wasn't as stated but hid a wider gap.
+All twenty-one threads point at real gaps, and fixing them turned up three more (PRR-13, PRR-14, PRR-17). Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -36,6 +36,8 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-20 | low | `lint_probes.py` tokeniser (#27) | The last dot of a spread (`...`) read as member access, so `[...typeof /[//]/]` took `typeof` for a property, the slash for division, and the regex's `//` for a comment that hid a write | fixed |
 | PRR-21 | low | `lint_probes.py` line splitting (#27) | `str.splitlines()` also breaks at U+000B and U+0085, which end no `//` comment in JavaScript, so a `/*` after one read as a block comment and hid executable lines from the content rules | fixed |
 | PRR-22 | low | `lint_probes.py` tokeniser (#27) | The PRR-20 fix merged two dots into a spread too early, so in `1..return` the `return` read as a keyword and a following slash moved a string boundary | fixed |
+| PRR-23 | low | `lint_probes.py` line splitting (#27) | The PRR-21 split also broke lines at U+2028/U+2029, which end no line inside a JavaScript string, so a `/*` after one read as a block comment and hid an executable call | fixed |
+| PRR-24 | low | `lint_probes.py` content rules (#27) | The PRR-14 code-line filter applied JavaScript comment syntax to `.sh` payloads, so a `# … /*` line hid the next shell line from the content rules | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -92,4 +94,7 @@ could pass, or leave things behind, for the wrong reason.
 - PRR-20: consecutive dots form one token that expects an operand.
 - PRR-21: lines split at JavaScript's line terminators only (LF, CRLF, CR, U+2028, U+2029).
 - PRR-22: only a complete `...` is merged.
+- PRR-23: lines split at LF, CRLF and CR, and a literal U+2028/U+2029 in a `.js` payload is
+  `line-separator`.
+- PRR-24: a shell payload keeps every line as code; only `.js` payloads go through the scanner.
 - Each has a `test_lint_probes.py` case that fails on the previous lint.
