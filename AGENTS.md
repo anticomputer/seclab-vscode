@@ -384,6 +384,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)
 ./seclab test probes            # AHP probes driven into the real upstream client (no window, no network): each must land where it claims, or the check fails
 ./seclab test agent-registration # patch 0019, both arms against the real upstream registries: pristine upstream must report vulnerable, pinned-upstream+series contained (the baseline is the control; without it the gated arm proves nothing)
+./seclab test chat-dispatch     # chat requests in a tab window through the real ChatService: sendRequest refused by 0009, resend and the queue drain refuse foreign sessions by 0018; pristine upstream and the series without 0018 are the controls, and the gated assertions must fail on each exactly as predicted
 ./seclab test window-proof ordinary ~/.seclab-test/wp   # patch 0019 in the shipped build: an ordinary window restores and nothing is nulled
 ./seclab test window-proof tab ~/.seclab-test/wpt       # ...and a real tab window withholds the providers, with the gate log as the evidence (each run is the other's control)
 ./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)

@@ -28,6 +28,7 @@ usage: ./seclab <command>
   test obs [sbx|oci]            Tab observability: inert loader -> expected events and labels; sensor tampering -> gap
   test probes                   AHP probes against the real upstream client (no window, no network): each must land where it claims
   test agent-registration       Patch 0019 both arms vs the real upstream registries: baseline must be vulnerable, gated contained
+  test chat-dispatch            Chat requests in a tab window via sendRequest (0009), resend and the queue drain (0018), real ChatService; each control must fail
   test builds                   Test build variants: the harness's hook check (require-hooks) self-test
   test driver [TARBALL]         Headless driver self-test: the Linux editor under Xvfb, driven over its CDP pipe
   test local-window [TARBALL]   Local windows run no workspace extension, and a spoofed built-in stays one (headless)
@@ -1888,6 +1889,9 @@ case "${1:-help}" in
 			# every run: the baseline control must report vulnerable, or the gated arm proves
 			# nothing (finding R12-2).
 			agent-registration) shift; "$ROOT/test/agentic/ahp/agent-registration.sh" "$@" ;;
+			# Chat dispatch through the real ChatService in three trees: the series, pristine
+			# upstream (the control for 0009) and the series without 0018 (its control).
+			chat-dispatch) shift; "$ROOT/test/agentic/ahp/chat-dispatch.sh" "$@" ;;
 			# Patch 0019 in the shipped build: an ordinary window and a tab window, each the
 			# other's control. Needs a fetched, attested app (./seclab fetch macos-branch).
 			window-proof) shift; mode="${1:-}"; shift || true; node "$ROOT/test/agentic/window-proof.ts" "$mode" "$@" ;;
