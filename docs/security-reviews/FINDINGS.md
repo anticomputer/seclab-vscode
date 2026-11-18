@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 216 | 354 | 45 | 713 |
+| fixed | 14 | 84 | 216 | 355 | 45 | 714 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 170 | 60 | 287 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 617 | 157 | 1189 |
+| **all** | 16 | 93 | 306 | 618 | 157 | 1190 |
 
 ## Baseline: open high and critical findings
 
@@ -2098,6 +2098,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR25-13 | low | fixed | The obs and e2e-broker suites ignored SECLAB_TAB_IMAGE and tested the shared image. | patch:3a42cde40f45a91f88586c27f630478402170bec · `test/driver/driver.test.ts` "every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)" |
 | CR25-14 | low | fixed | clean-host deleted a per-build tag on a stale decision while a build renewed it. | patch:95b17d6e25fb7640145d3754b4cefe20a8d844a7 · `test/clean-host.ts` "lease lock: a deletion ran while a build held the lock" |
 | CR25-15 | low | fixed | Breaking a stale lease lock let a second contender remove a fresh lock. | patch:0e54f42a848437084876c37796f695d9357937c8 · `test/clean-host.ts` "lease lock: an old lock was broken or removed by a non-holder" |
+| CR25-16 | low | fixed | A lease of a tag ending in .lock sat at another tag lock path. | patch:f8b1174486f5daf26e4b25d675ded5064d429fc1 · `test/clean-host.ts` "lease lock: the lease of seclab-tab-oci:b-proof.lock held the lock of seclab-tab-oci:b-proof" |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 

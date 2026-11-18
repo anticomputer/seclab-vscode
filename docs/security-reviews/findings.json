@@ -17524,6 +17524,21 @@
 				"file": "test/clean-host.ts",
 				"name": "lease lock: an old lock was broken or removed by a non-holder"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-16",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A lease of a tag ending in .lock sat at another tag lock path.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:f8b1174486f5daf26e4b25d675ded5064d429fc1",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "lease lock: the lease of seclab-tab-oci:b-proof.lock held the lock of seclab-tab-oci:b-proof"
+			}
 		}
 	]
 }
