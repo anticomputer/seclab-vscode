@@ -1139,14 +1139,17 @@ function seclabCommandLinks(value: string, rewrite: (rawId: string, query: strin
 		// In an angle-bracket destination (`[x](<command:…>)`) the query runs to the `>`: a `)` in
 		// it is no terminator, balanced or not (PR review on #48).
 		const angle = m.index > 0 && value[m.index - 1] === '<';
+		// A bare reference definition's destination (`[r]: command:…`) ends only at whitespace:
+		// no parenthesis encloses it (PR review on #48).
+		const bareRef = !angle && /\]:\s*$/.test(value.slice(Math.max(0, m.index - 64), m.index));
 		if (value[end] === '?') {
 			let j = end + 1;
 			for (let depth = 0; j < value.length; j++) {
 				const c = value[j];
-				if (angle ? /[<>\n]/.test(c) : /[\s"<>\]`]/.test(c)) {
+				if (angle ? /[<>\n]/.test(c) : bareRef ? /\s/.test(c) : /[\s"<>\]`]/.test(c)) {
 					break;
 				}
-				if (angle) {
+				if (angle || bareRef) {
 					continue;
 				}
 				if (c === '(') {
@@ -1175,7 +1178,7 @@ function seclabCommandLinks(value: string, rewrite: (rawId: string, query: strin
  */
 const SECLAB_IMAGE_OPEN = /!\[/g;
 const SECLAB_HTML_OPEN = /<(?=[A-Za-z/!?])/g;
-/** A link destination in angle brackets, right after `](`: `<` then no `<`, `>` or newline, then `>`. */
+/** A link destination in angle brackets, after `](` or a reference's `]:`: `<`, no `<`, `>` or newline, `>`. */
 const SECLAB_ANGLE_DESTINATION = /^<[^<>\n\\]*>/;
 /**
  * A URI autolink as CommonMark has it (`<`, a scheme, `:`, no space, `<` or `>`, then `>`), or an
@@ -1190,7 +1193,7 @@ const SECLAB_AUTOLINK = /^<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*|[A-Za-z0-9.!
  */
 function seclabEscapeTags(text: string, keepLinks: boolean): string {
 	return text.replace(SECLAB_HTML_OPEN, (lt, i: number) =>
-		keepLinks && ((/\]\(\s*$/.test(text.slice(Math.max(0, i - 64), i)) && SECLAB_ANGLE_DESTINATION.test(text.slice(i))) || SECLAB_AUTOLINK.test(text.slice(i))) ? lt : '&lt;');
+		keepLinks && ((/\](?:\(|:)\s*$/.test(text.slice(Math.max(0, i - 64), i)) && SECLAB_ANGLE_DESTINATION.test(text.slice(i))) || SECLAB_AUTOLINK.test(text.slice(i))) ? lt : '&lt;');
 }
 /** A snippet that reads the clipboard (upstream SnippetParser.guessNeedsClipboard, widened). */
 const SECLAB_SNIPPET_CLIPBOARD = /\$\{?\s*CLIPBOARD/;
