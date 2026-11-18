@@ -508,8 +508,13 @@ export function lineOpen(line: string): boolean {
 	let depth = 0;
 	let q: '"' | "'" | undefined;
 	let prev = '';
+	// A plain scalar's quotes and brackets are text (`run: echo "["`, Copilot review on PR 32). It
+	// runs to `: ` or a comment in block context, and also to `,`, `]` or `}` inside a flow one.
+	let plain = false;
+	const starter = () => prev === '' || /[:\-[{,?]/.test(prev);
 	for (let k = 0; k < line.length; k++) {
 		const c = line[k];
+		const next = line[k + 1];
 		if (q === '"') {
 			if (c === '\\') {
 				k++;
@@ -517,26 +522,47 @@ export function lineOpen(line: string): boolean {
 				q = undefined;
 			}
 		} else if (q === "'") {
-			if (c === "'" && line[k + 1] === "'") {
+			if (c === "'" && next === "'") {
 				k++;
 			} else if (c === "'") {
 				q = undefined;
 			}
+		} else if (plain) {
+			if (c === '#' && /\s/.test(line[k - 1] ?? '')) {
+				break;
+			}
+			if (c === ':' && (next === undefined || /\s/.test(next) || (depth > 0 && /[,\]}]/.test(next)))) {
+				plain = false;
+				prev = ':';
+			} else if (depth > 0 && c === ',') {
+				plain = false;
+				prev = ',';
+			} else if (depth > 0 && (c === ']' || c === '}')) {
+				plain = false;
+				depth--;
+				prev = c;
+			}
+			continue;
 		} else if (c === '#' && (k === 0 || /\s/.test(line[k - 1]))) {
 			break;
-		} else if ((c === '"' || c === "'") && (prev === '' || /[:\-[{,]/.test(prev))) {
+		} else if ((c === '"' || c === "'") && starter()) {
 			q = c;
-		} else if ((c === '&' || c === '!') && (prev === '' || /[:\-[{,]/.test(prev))) {
+		} else if ((c === '&' || c === '!') && starter()) {
 			// An anchor or tag sits before the node it names (`&b [foo,`): skip it, so the
 			// collection after it still counts as starting where a node can start (LSR-12).
 			while (k + 1 < line.length && !/\s/.test(line[k + 1])) {
 				k++;
 			}
 			continue;
-		} else if ((c === '[' || c === '{') && (depth > 0 || prev === '' || /[:\-[{,]/.test(prev))) {
+		} else if ((c === '[' || c === '{') && (depth > 0 || starter())) {
 			depth++;
 		} else if ((c === ']' || c === '}') && depth > 0) {
 			depth--;
+		} else if (c === '-' && starter() && (next === undefined || /\s/.test(next))) {
+			// a sequence indicator
+		} else if (!/\s/.test(c) && starter()) {
+			plain = true;
+			continue;
 		}
 		if (!/\s/.test(c)) {
 			prev = c;
