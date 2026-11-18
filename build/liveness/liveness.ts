@@ -580,6 +580,10 @@ export function jobBody(lines: string[], start: number): { body: string[]; bad?:
 		}
 		body.push(l);
 	}
+	// The same at the end of the file: text inside a value left open isn't the job's (Copilot review on PR 32).
+	if (anyOpen(body, false)) {
+		return { body, bad: 'an unfinished quoted or flow value' };
+	}
 	return { body };
 }
 
