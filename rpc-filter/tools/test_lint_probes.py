@@ -394,6 +394,35 @@ class CommentScopeTest(unittest.TestCase):
         L._strip_comments("s = '<!-- -->';\nt = `<!--`;\nx = a-- > b;\n", None, found)
         self.assertEqual(found, [])
 
+    def test_identifier_escapes_and_non_ascii_code_fail_closed(self):
+        # `x\u{61}return` is one identifier, and so is `x\u200creturn`; split at the escape, the
+        # trailing `return` would read as a keyword and the slash as a regex.
+        for code in ("const q = x\\u{61}return / 2; const s = '/'; const seclabLintX = { [K]: 1 };",
+                     "const q = x\u200creturn / 2; const s = '/'; const seclabLintX = { [K]: 1 };"):
+            with self.subTest(code=code):
+                root = tree_copy(self)
+                path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\n" + code + "\n")
+                status, out = lint(root)
+                self.assertEqual(status, 1, out)
+                self.assertRegex(out, r"identifier-escape|computed-record-key")
+        found = []
+        L._strip_comments("s = '\\u00e9 \u00e9';\nr = /\\d\u00e9/;\n// \u00e9 \\\n", None, found)
+        self.assertEqual(found, [])
+
+    def test_a_hashbang_line_is_a_comment(self):
+        # Node ignores the first line; scanning it as code read `/*` as a block comment.
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("#!/usr/bin/env node /*\nfs.rmSync(seclabLintP);\n// */\n" + body)
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertIn("destructive-fs", out)
+
     def test_nested_templates_keep_their_boundaries(self):
         found = []
         text = "t = `a ${f(`b/${c}`)} d`; // e\nw(`x//y`);\n"
