@@ -32,5 +32,6 @@ Copilot reviewed the fixes again on the next push.
 | CR25-11 | Low | builders | The lease directory was created in an `&&` list, so a failing `mkdir` let the tag publish unleased under `set -e`. | Fixed | Separate commands; the clean-host self-test rejects a lease step in an `&&` list. |
 | CR25-12 | Low | clean-host | sbx templates are a separate store clean-host never listed, so per-build `seclab-tab:b-*` templates never expired. | Fixed | clean-host lists sbx templates and applies the per-build week-from-lease rule to them. |
 | CR25-13 | Low | runners | `test obs` and `test e2e-broker` started tabd without the `SECLAB_TAB_IMAGE` override, so a proof run there tested the shared `:local` image. | Fixed | Both validate and forward it; a unit test checks every suite runner that starts tabd. |
+| CR25-14 | Low | clean-host | clean-host deleted a per-build tag on a decision made when listing; a build that renewed it meanwhile (a cache hit, same image) lost its fresh tag. | Fixed | A per-tag lease lock, held by the builders from the lease until publication; clean-host deletes only under it, after re-reading the lease. |
 
 No prompt-injection text was found in the review comments.
