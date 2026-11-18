@@ -795,3 +795,26 @@ fails on the reviewed commit, which carries patch 0019 with the shape table as f
 Restoring that table — the environment service's members filed under the availability service's
 name — makes the probe fail with six shape problems, each naming the real class, and makes the
 unit test fail on the swapped pair. With the corrected table both pass.
+
+## Automated PR review on #43
+
+Nine threads, all checked against the code and all real.
+
+- **Patch 0018's allow verdict is unreachable** through `sendRequest`, because patch 0009 throws
+  at its top in every tab window. Resolved by the project owner's decision of 2026-11-17 to keep
+  chat refused in tab windows: 0009 is unchanged, and increment 3's claim is narrowed to a second
+  layer behind it, on the resend and queue-drain paths that bypass `sendRequest`. Shown by
+  `./seclab test chat-dispatch`, which issues requests down each path in the real `ChatService`,
+  with pristine upstream and the series without 0018 as controls that each fail as predicted
+  ([EDR](../edr/20261116-agent-registration-inventory.md)).
+- **Seven defects in the evidence** for increments 3 and 4 (the registration probe's duplicated
+  provider and its baseline accepting a failed lookup, the gated worktree reset to its own HEAD,
+  and four in `window-proof`: profile writes before validation, stale logs, a pre-restoration
+  phase signal with zero events accepted, and incomplete teardown). Each is fixed; the two probe
+  defects were shown by injection to pass the old probe and fail the fixed one. Details in the
+  same EDR.
+- **The new EDR was missing from the generated index.** Regenerated with `./seclab docs write`.
+
+None of these is a finding against the shipped patches, so none is registered: one is a claim
+the patches did not deliver, now withdrawn, and the rest are defects in test tooling that would
+have let the evidence pass without the property holding.

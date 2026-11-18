@@ -280,3 +280,80 @@ withheld provider's event would have been dropped in silence rather than recorde
 
 Worth stating plainly: had the reader been written to ignore unreadable lines and the patch been
 broken, this run would have reported the same thing, and the result would have been believed.
+
+## Increment 3's claim, narrowed (2026-11-17)
+
+Automated review on PR #43 found that the allow verdict this record describes for patch 0018 is
+unreachable. `seclabAiDisabled(authority)` is true for every `seclab+` window, and patch 0009
+throws at the top of `ChatService.sendRequest`, before 0018's check is consulted. Every chat
+submission from the UI goes through `sendRequest`.
+
+**Decision (project owner, 2026-11-17): keep chat refused in tab windows.** 0009's blanket
+refusal stays exactly as it is. Opening chat in tab windows is a separate future increment, with
+its own design and review.
+
+So increment 3 claims less than the opening of this record says. Its claim is now **a second
+layer behind 0009**: two public entry points reach the dispatch function without passing through
+`sendRequest`, namely `resendRequest` and the queue drain behind `processPendingRequests` (which
+`sendPendingRequestImmediately` also reaches for a local session). On those paths, in a tab window,
+no session other than this window's own agent-host session is dispatched. 0018 does not claim
+that the window's own session can be used for chat, and nothing here tests that.
+
+R12-2 is unaffected: it concerns which agent a dispatched request reaches, and 0019 removes the
+only registration of another connection's agents whether or not anything is dispatched.
+
+## The dispatch probe, run against the real paths
+
+This branch's recurring defect is a check that cannot fire, so the narrowed claim is shown by
+issuing requests, not by reading the code. `./seclab test chat-dispatch` bundles upstream's real
+`ChatService`, chat model, parser, agent service and queue from the tree under test, wires them
+with the test services upstream's own `chatService.test.ts` uses, and counts how often a
+registered agent actually runs. A tab window is what the patches read: a `seclab+` remote
+authority, with agents switched on, so a refusal on a bypass path is the foreign-session rule
+and not the agents-off one. The history a tab window resends or drains is recorded in an
+ordinary window and restored through the session store's own format, as real history is.
+
+Three trees, at the pinned 1.145.3 upstream, each with its own expectation:
+
+| tree | `sendRequest` in a tab | resend in a tab (local / other connection) | drain in a tab (local / other connection) |
+|---|---|---|---|
+| upstream (no 0009, no 0018) | **dispatched** (2) | dispatched (2 / 2) | dispatched (1 / 1) |
+| series without 0018 | refused by 0009 | **dispatched** (2 / 2) | **dispatched** (1 / 1) |
+| series | refused by 0009, no 0018 event | refused, `deny:unresolved` / `deny:other-connection` | refused, `deny:unresolved` / `deny:other-connection` |
+
+Numbers are agent invocations. Every tree also dispatches all three paths in an ordinary window,
+so a refusal cannot be a harness that never runs an agent.
+
+**The controls fail.** The gated assertions are applied to each baseline as well, and the run
+passes only if they fail there exactly as the missing patch predicts: all six on pristine
+upstream (the `sendRequest` refusal, the four bypass refusals and the gate-log module), and
+exactly the four bypass refusals on the series without 0018. Both did, on the first run that
+reached a verdict.
+
+What this does not cover: `migrateRequests`, which re-enters `sendRequestInternal` with the queue
+option and so meets 0018's check in the queued branch (pinned by the R12-1 unit test against the
+patch text, not issued here), and the server-managed queue of an agent-host session, which a tab
+window cannot have without the allow path this increment no longer claims.
+
+## Review fixes to the evidence (PR #43)
+
+The automated review found seven defects in the evidence for increments 3 and 4, all real, each
+fixed and, where it was a check that could not fail, shown failing by injection:
+
+- the registration probe listed one service twice and omitted another, so it checked nine
+  providers while counting ten; with the omitted service's guard removed from the derived tree,
+  the old probe reported contained and the fixed one reports it unguarded;
+- the baseline arm accepted a failed contribution lookup as its control; with one id misspelt the
+  old baseline passed and the fixed one fails both arms with a measurement problem;
+- a reused gated worktree was reset to its own HEAD, not the verified pin, so after a pin update
+  it could probe the old upstream; trees are now derived by one helper that resets to
+  `UPSTREAM_SHA` and checks the result is pristine;
+- `window-proof` wrote settings into the profile before validating it, read every historical
+  log under it, accepted the workbench element (which renders before restoration) plus a delay
+  as the phase signal, accepted zero events in the ordinary window, and ran teardown only for the
+  tab arm with an incomplete manifest. It now refuses a profile that exists (it creates its own, so
+  every log is this launch's), waits for the lifecycle's own `Restored` mark and each guarded
+  contribution's creation mark, fails on any "Unable to create workbench contribution" for them in
+  the renderer log, and keeps its run records in a run dir outside the profile, with the profile,
+  the tabd state, the workspace and the driver recorded before anything starts and teardown run in
+  both modes.

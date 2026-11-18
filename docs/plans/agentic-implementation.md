@@ -149,7 +149,7 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
 | 1 | **0015** `seclab-ahp-gate` | `workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts` (transport construction), `platform/agentHost/browser/agentHostProtocolClient.ts` (constructor invariant), 0010's selection line | The AHP gate on the only transport, the enablement setting, gate events |
 | 1 | **0016** `seclab-ahp-reverse-requests` | `agentHostProtocolClient.ts` `_handleReverseRequest` | Inner layer: reverse requests refused in `seclab+` windows, shown on F |
 | 2 | **0017** `seclab-tab-window-agent-settings` | the reading sites | Values fixed in `seclab+` windows for the confirmed tab-writable agent settings |
-| 3 | **0018** `seclab-agent-host-sessions-only` | 0009's `chatServiceImpl.ts` guard | Chat requests in `seclab+` reach only this window's own gated agent-host sessions |
+| 3 | **0018** `seclab-agent-host-sessions-only` | `chatServiceImpl.ts` dispatch and queue (0009's guard stays) | Behind 0009: resend and the queue drain dispatch no session but this window's own (narrowed 2026-11-17; chat stays refused in `seclab+`) |
 | 4 | **0019** `seclab-no-other-agent-host-providers` | cloud sandbox, Mission Control and connection-customization registrations | Null providers in `seclab+` windows |
 | 5 | **0020** `seclab-ahp-authenticate` | the `authenticate` path only, as a module separate from the gate, plus the Tab Manager and tabd | The rewrite: trusted provider table, consent, broker import, sentinel |
 | 6 | **0021** `seclab-ahp-rendering` (only if needed) | `stateToProgressAdapter.ts` | Inert rendering of tab content where the gate cannot strip it |
@@ -262,6 +262,13 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
   stay out until a probe shows an editor-window read.
 
 ### Increment 3: 0018, agent-host sessions only
+- **Narrowed, 2026-11-17 (project owner decision).** Chat stays refused in `seclab+` windows:
+  0009's refusal at the top of `sendRequest` is kept unchanged, so 0018's allow verdict is
+  unreachable through the public entry point. 0018 is a second layer behind 0009 on the paths
+  that bypass `sendRequest` (resend and the queue drain): no session but this window's own is
+  dispatched there. The allow-path probe and the positive control below move to the future
+  increment that opens chat in tabs, with its own design and review. The evidence for the
+  narrowed claim is `./seclab test chat-dispatch` ([EDR](../edr/20261116-agent-registration-inventory.md)).
 - **What.**
   - 0009 refuses `chatService.sendRequest` in every `seclab+` window. Every chat
     submission goes through that call
