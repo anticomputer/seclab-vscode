@@ -79,7 +79,8 @@ usage: ./seclab <command>
   landing verify SHA            After a merge, from main's code: refuse unless every required job ran and
                                 concluded success for SHA, and the required-jobs-ran gate posted success
                                 (EDR required-jobs-gate; AGENTS.md landing step 8); then re-runs this main's
-                                validators (lint job, docs check, findings) over the merged tree
+                                validators (lint job, docs check, findings) over the merged tree, and lists
+                                every merged change to owner-acceptances.md with its rows
   landing --self-test           A merged gutted lint and a gutted pin check are refused; a clean merge passes
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
@@ -1428,6 +1429,7 @@ landing_verify() {
 	# A job that ran to success may still have been gutted by the change it gated (RJG-1): re-run
 	# this checkout's validators over the merged tree (owner decision 2026-11-17).
 	landing_revalidate "$(git -C "$ROOT" rev-parse HEAD)" "$sha" || bad=1
+	landing_owner_rows "$(git -C "$ROOT" rev-parse HEAD)" "$sha" || bad=1
 	[[ $bad == 0 ]] && echo "landing verify: ok ($sha)" || echo "landing verify: REFUSED ($sha): a required job didn't run to success, or this main's validators refuse the merged tree" >&2
 	return $bad
 }
@@ -1499,6 +1501,37 @@ landing_self_test() {
 	git -C "$src" add .Work
 	git -C "$src" "${id[@]}" commit -qm 'landing self-test: .Work symlink'
 	casefold="$(git -C "$src" rev-parse HEAD)"
+	# 7. An unannounced owner-acceptance row (HHHH-4): the report names the commit and the row.
+	local owner owner_tip
+	git -C "$src" checkout -q --detach "$old"
+	printf '| 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope | none | accepted by the project owner |\n' >> "$src/docs/security-reviews/owner-acceptances.md"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: an unannounced owner row'
+	owner="$(git -C "$src" rev-parse HEAD)"
+	echo '' >> "$src/raw-idea.md"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: a later commit'
+	owner_tip="$(git -C "$src" rev-parse HEAD)"
+	# 8. A changed row with control, C1 and bidi bytes, and a removed bullet (RJG-20, RJG-21).
+	local owner2 owner_case
+	git -C "$src" checkout -q --detach "$owner_tip"
+	printf -- '- seclabcanary_bullet\n' >> "$src/docs/security-reviews/owner-acceptances.md"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: a bullet'
+	LC_ALL=C sed -i.bak "s/seclabcanary_scope/seclabcanary_scope2$(printf '\033\233\342\200\256')/" "$src/docs/security-reviews/owner-acceptances.md"
+	LC_ALL=C sed -i.bak '/seclabcanary_bullet/d' "$src/docs/security-reviews/owner-acceptances.md" && rm -f "$src/docs/security-reviews/owner-acceptances.md.bak"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: a changed row, a removed bullet'
+	owner2="$(git -C "$src" rev-parse HEAD)"
+	# 9. The file renamed by case (RJG-22).
+	git -C "$src" mv docs/security-reviews/owner-acceptances.md docs/security-reviews/x.md
+	git -C "$src" mv docs/security-reviews/x.md docs/security-reviews/Owner-Acceptances.md
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: owner file renamed by case'
+	owner_case="$(git -C "$src" rev-parse HEAD)"
+	# 9b. The file kept, and rows added under a case variant beside it (plumbing: the host folds case).
+	local owner_twin blob
+	git -C "$src" checkout -q --detach "$owner2"
+	blob="$(printf '| 20261101-x.md#X-2 | 2026-11-18 | seclabcanary_twin | none | accepted by the project owner |\n' | git -C "$src" hash-object -w --stdin)"
+	git -C "$src" update-index --add --cacheinfo "100644,$blob,docs/security-reviews/OWNER-ACCEPTANCES.md"
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: owner rows under a case variant'
+	owner_twin="$(git -C "$src" rev-parse HEAD)"
+	git -C "$src" checkout -q -f --detach "$owner2"
 	# 3. A clean merge.
 	git -C "$src" checkout -q --detach "$old"
 	echo '' >> "$src/raw-idea.md"
@@ -1516,8 +1549,53 @@ landing_self_test() {
 	rm -rf "$ROOT/.work/landing-victim-dir"
 	rm -f "$canary" "$victim"
 	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
-	echo "landing self-test: ok (gutted lint, gutted pin check, symlinked validator, tracked .work and a .Work symlink refused; nothing outside the worktree touched; clean merge passes)"
+	local report
+	report="$(landing_owner_rows "$old" "$owner_tip")"
+	[[ "$report" == *"OWNER ACCEPTANCES changed in $owner"* && "$report" == *"added or changed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope |"* ]] \
+		|| { echo "landing self-test: an unannounced owner-acceptance row wasn't reported with its commit (HHHH-4)" >&2; exit 1; }
+	[[ "$(grep -c 'OWNER ACCEPTANCES changed' <<<"$report")" == 1 ]] || { echo "landing self-test: the owner report named a commit that didn't change the file" >&2; exit 1; }
+	[[ "$(landing_owner_rows "$old" "$clean")" == "landing verify: owner acceptances: unchanged" ]] || { echo "landing self-test: a clean merge reported owner-acceptance changes" >&2; exit 1; }
+	report="$(landing_owner_rows "$owner_tip" "$owner2")"
+	[[ "$report" == *"  removed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope |"* && "$report" == *"  added or changed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope2????? |"* && "$report" == *"  removed: - seclabcanary_bullet"* ]] \
+		|| { echo "landing self-test: a changed row or a removed line wasn't reported, or its bytes weren't escaped (RJG-20, RJG-21)" >&2; exit 1; }
+	! LC_ALL=C grep -q "$(printf '[\033\233\342]')" <<<"$report" || { echo "landing self-test: control or non-ASCII bytes reached the owner report (RJG-21)" >&2; exit 1; }
+	if landing_owner_rows "$owner2" "$owner_case" >/dev/null 2>&1; then echo "landing self-test: a case-renamed owner file passed (RJG-22)" >&2; exit 1; fi
+	if landing_owner_rows "$owner2" "$owner_twin" >/dev/null 2>&1; then echo "landing self-test: owner rows under a case variant passed (RJG-22)" >&2; exit 1; fi
+	# RJG-19: a -diff attribute in the checkout running the report can't blank the rows.
+	local attr="$ROOT/.work/landing-attr"
+	git -C "$ROOT" worktree remove --force "$attr" 2>/dev/null || true
+	rm -rf "$attr"
+	git -C "$ROOT" worktree add -q --detach "$attr" "$old"
+	echo 'docs/security-reviews/owner-acceptances.md -diff' > "$attr/.gitattributes"
+	report="$(ROOT="$attr" landing_owner_rows "$old" "$owner_tip")"
+	git -C "$ROOT" worktree remove --force "$attr"
+	[[ "$report" == *"added or changed: | 20261101-x.md#X-1 |"* ]] || { echo "landing self-test: a -diff attribute blanked the owner rows (RJG-19)" >&2; exit 1; }
+	echo "landing self-test: ok (gutted lint, gutted pin check, symlinked validator, tracked .work and a .Work symlink refused; nothing outside the worktree touched; an unannounced owner row reported; clean merge passes)"
 }
+# Owner acceptances a merge changed (HHHH-4 compensating control, owner decision 2026-11-18): every
+# commit in OLD..SHA that changes docs/security-reviews/owner-acceptances.md, with the table rows it
+# added or changed and those it removed, for the coordinator to check against an owner decision.
+# Rows are the merged tree's text: printed as data with control characters removed, never run.
+landing_owner_rows() { # OLD SHA
+	local old="$1" sha="$2" file=docs/security-reviews/owner-acceptances.md commits c n=0 names
+	# A rename or case variant would move the rows out of view: refuse it (RJG-22).
+	names="$(git -C "$ROOT" log -m --format= --name-only --no-renames "$old..$sha")" || { echo "landing verify: can't list the merged paths" >&2; return 2; }
+	if grep -ix "$file" <<<"$names" | grep -qvxF "$file"; then echo "landing verify: REFUSED: a merged commit writes $file under another case" >&2; return 1; fi
+	git -C "$ROOT" cat-file -e "$sha:$file" 2>/dev/null || { echo "landing verify: REFUSED: $sha has no $file" >&2; return 1; }
+	commits="$(git -C "$ROOT" rev-list --reverse "$old..$sha" -- "$file")" || { echo "landing verify: can't list the commits changing $file" >&2; return 2; }
+	for c in $commits; do
+		n=$((n + 1))
+		echo "landing verify: OWNER ACCEPTANCES changed in $c: check each row against an owner decision (bytes outside printable ASCII shown as ?)"
+		# --text, and no attributes file: a -diff or binary attribute can't blank the rows (RJG-19).
+		# Every added and removed line after the hunk header, whatever it starts with (RJG-20);
+		# escaped to printable ASCII, so no control, C1 or bidi character reaches the reader (RJG-21).
+		git -C "$ROOT" -c core.attributesfile=/dev/null diff --text --no-ext-diff --no-textconv --no-color -U0 "$c^" "$c" -- "$file" \
+			| LC_ALL=C awk '/^@@/ { h = 1; next } h && /^\+/ { print "  added or changed: " substr($0, 2) } h && /^-/ { print "  removed: " substr($0, 2) }' \
+			| LC_ALL=C sed 's/[^ -~]/?/g'
+	done
+	(( n )) || echo "landing verify: owner acceptances: unchanged"
+}
+
 LANDING_STEPS="required-checks workflow-echo workflow-tools pins deps source liveness secrets docs findings obs-docs"
 # A relative path with no empty, `.` or `..` component, none of whose components under DIR is a
 # symlink (RJG-10, RJG-11, RJG-14): a write or removal through it stays inside DIR.
