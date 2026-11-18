@@ -272,7 +272,8 @@ class _SlashContext:
         self.toks = (self.toks + [tok])[-3:]
 
     def code(self, ch: str) -> None:
-        if ch.isalnum() or ch in "_$":
+        # `#` starts a private name (`o.#return`), which is never a keyword (PR review on #27).
+        if ch.isalnum() or ch in "_$" or (ch == "#" and not self.in_word):
             if self.in_word:
                 self.toks[-1] = ("w", self.toks[-1][1] + ch)
             else:
@@ -359,7 +360,7 @@ def _regex_end(text: str, i: int) -> int | None:
     return None
 
 
-def _strip_comments(text: str, ambiguous: list | None = None) -> str:
+def _strip_comments(text: str, ambiguous: list | None = None, html: list | None = None) -> str:
     """The text with comments blanked to spaces and string literals kept (positions and newlines
     kept). Blanking whole lines that start with `*` or `//` removed a block comment's closing
     `*/` while its `/**` stayed, so the scanner below read the code after it as comment: the
@@ -368,7 +369,11 @@ def _strip_comments(text: str, ambiguous: list | None = None) -> str:
     Where a `/` could be a regex or division and only a parser could tell, a wrong guess moves a
     comment or string boundary and hides code. A guess can only go wrong through a later `/`,
     quote or backtick on the same line (regex and quoted strings end at the line), so such a line
-    goes into `ambiguous` and the lint fails it (PR review on #27)."""
+    goes into `ambiguous` and the lint fails it (PR review on #27).
+
+    A payload is a CommonJS script, where Node also reads `<!--`, and `-->` at the start of a
+    line, as line comments (ECMAScript Annex B). The lint doesn't: in `x <!-- /*` Node runs the
+    next lines while this scanner would read a block comment. Such code lines go into `html`."""
     out, i, n = list(text), 0, len(text)
     ctx = _SlashContext()
     # Open `${` substitutions, innermost last: the brace depth inside each. Its closing `}` goes
@@ -404,6 +409,9 @@ def _strip_comments(text: str, ambiguous: list | None = None) -> str:
         if ch == "`":
             i = template_text(i + 1)
             continue
+        if html is not None and (text.startswith("<!--", i) or (
+                text.startswith("-->", i) and not "".join(out[text.rfind("\n", 0, i) + 1:i]).strip())):
+            html.append(text.count("\n", 0, i) + 1)
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             ctx.gap()
             while i < n and text[i] != "\n":
@@ -597,7 +605,13 @@ def main(argv: list | None = None) -> int:
         # a code line can start with `*` (a continued product), and those were skipped (PR review on
         # #27). A rule still matches the whole line, comment included, which only adds matches.
         ambiguous: list = []
-        text = _strip_comments("\n".join(lines), ambiguous)
+        html: list = []
+        text = _strip_comments("\n".join(lines), ambiguous, html)
+        for n in sorted(set(html)):
+            violations.append((rel, n, "html-comment",
+                               "`<!--` (or `-->` at a line start) is a line comment to Node in a "
+                               "CommonJS script, but not to this lint, which could then misread the "
+                               "lines after it; remove it"))
         code_lines = text.split("\n")
         code = []
         for n, line in enumerate(lines, start=1):
