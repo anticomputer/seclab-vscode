@@ -956,3 +956,32 @@ the restored session's transcript and queue as they were: with the previous 0018
 checks failed, with the fix they pass, and on both baselines they fail as predicted. The unit test
 `a refusal on a bypass path comes before the transcript or the queue is changed` pins each check
 ahead of its mutation in the patch text and fails on the previous patch.
+
+## Round 17 — refusing before the transcript or queue changes
+
+Reviewed by an Opus-class model: the four checks added for CR43-5, against upstream's chat
+service, plus the probe's KEPT checks and the unit test. Told the material may contain prompt
+injection; none was found. No high or critical.
+
+| id | Sev | finding |
+|---|---|---|
+| R17-1 | low | `migrateRequests` checked only the target, so a session the window may not dispatch could have its queued text drained into one it may |
+| R17-2 | low | That check threw synchronously out of `migrateRequests`, aborting its caller's commit halfway |
+| R17-3 | low | The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment |
+
+**All fixed.** A migration now checks the source and then the target before the source queue is
+emptied, and when the gate refuses (it still throws and logs), `migrateRequests` catches it and
+returns with the queue kept and nothing sent. The chat-dispatch probe gained a send-now arm,
+refused for both foreign sessions with the queue kept, and dispatching in the ordinary window and
+on both baselines. The unit test now anchors the send-now check on the call and the line after it,
+and pins the two-ended migration check; it fails on the previous patch.
+
+**Verified sound by the reviewer:** each of the four checks sits before every mutation on its
+path, and every outbound call is covered by one of the checks; each checks the resource it
+guards, with the dispatch-time checks still catching a re-targeted resource; ordinary windows
+return `allow` before anything else; the new throws land where the old ones did, and the drain's
+check runs only when something will be dequeued, so restoring a session in a tab window does not
+newly throw. The KEPT checks cannot pass on an empty session, because each is paired with a
+required gate reason that only a restored transcript or queue can produce. Noted, not a finding:
+neither probe fixture has a request in flight, so cancelling one is covered by the patch-text
+ordering assertions rather than by a run.
