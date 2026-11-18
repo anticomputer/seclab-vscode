@@ -170,8 +170,9 @@ const captured = [];
 /**
  * The terminal-profile probe (review RFU-1, RFU1R-1). This REH offers the window a profile,
  * `seclab-probe`, whose path and `env` name `${config:seclab.test.canary}`, a host user setting
- * the harness seeds; the harness then makes it the host's default profile, as a user's
- * `terminal.integrated.defaultProfile.linux` would. It also answers getDefaultSystemShell with
+ * the harness seeds; the harness then makes it the default profile in the tab's own workspace
+ * settings (`terminal.integrated.defaultProfile.linux`; since patch 0053 no host value picks among
+ * a REH's profiles). It also answers getDefaultSystemShell with
  * that path. The window resolves the profile and sends it back in `$createProcess`; a canary
  * there is the host's setting reaching the tab. The probe reads the request as the window sent
  * it, before the server resolves anything, then starts plain /bin/sh without the probe's
@@ -191,6 +192,7 @@ function armProfileProbe(channel) {
 	svc.getDefaultSystemShell = async () => PROFILE_PATH;
 	const call = channel.call.bind(channel);
 	channel.call = async (ctx, command, args, ...rest) => {
+		observeHostSettings(command, args);
 		if (command === '$createProcess' && args && args.shellLaunchConfig) {
 			observeProfileLaunch(args);
 		}
@@ -198,7 +200,7 @@ function armProfileProbe(channel) {
 		if (command === '$getProfiles' && Array.isArray(result)) {
 			profileProbe.offered = true;
 			return [...result.filter(p => !p || p.profileName !== PROFILE_NAME),
-				{ profileName: PROFILE_NAME, path: PROFILE_PATH, isDefault: false, isAutoDetected: false, env: { SECLAB_PROBE_PROFILE_ENV: PROFILE_VALUE } }];
+				{ profileName: PROFILE_NAME, path: PROFILE_PATH, args: [EXTHOST_CONTROL], isDefault: false, isAutoDetected: false, env: { SECLAB_PROBE_PROFILE_ENV: PROFILE_VALUE } }];
 		}
 		return result;
 	};
@@ -223,6 +225,9 @@ function observeProfileLaunch(args) {
 		};
 	}
 	launch.executable = '/bin/sh';
+	// The control canary is an argument only so the window sends it to the extension host with the
+	// default profile; the shell itself starts without it.
+	launch.args = [];
 	if (launch.env) {
 		delete launch.env[PROFILE_ENV_KEY];
 	}
@@ -276,6 +281,114 @@ function armEnvironmentLie(socketServer, ctx, hostSettings) {
 		return termCall(c, command, args, ...rest);
 	};
 	envProbe.armed = true;
+}
+
+/**
+ * Host terminal settings (review DOCSYNC-R5, RFU1R-2; patch 0053). The harness seeds the host
+ * user's terminal.integrated.env.linux and terminal.integrated.profiles.linux with canaries tagged
+ * TERMINALENV and TERMINALPROFILES. This notes whether the window sends either to this REH, in
+ * $getProfiles (its profiles argument) or in $createProcess (its terminal configuration). Facts
+ * only; the arguments are read before the server acts on them.
+ */
+const SETTINGS_REF = 'data:remoteterminal-host-settings';
+const settingsProbe = { getProfiles: false, createProcess: false, tokens: new Set() };
+function observeHostSettings(command, args) {
+	if (command === '$getProfiles' && Array.isArray(args)) {
+		settingsProbe.getProfiles = true;
+		safety.canaryTokens(args[1]).forEach(t => settingsProbe.tokens.add(t));
+		safety.canaryTokens(args[2]).forEach(t => settingsProbe.tokens.add(t));
+	} else if (command === '$createProcess' && args && args.configuration) {
+		settingsProbe.createProcess = true;
+		// The settings, and what else the window says about the host with a terminal (0054, 0055).
+		const options = args.options || {};
+		for (const v of [args.configuration, args.envVariableCollections, options.environmentVariableCollections, options.workspaceFolder,
+			args.activeFileResource, args.workspaceFolders, args.activeWorkspaceFolder, args.workspaceName, args.workspaceId,
+			args.shellLaunchConfig, args.resolvedVariables]) {
+			// This REH's own control canary rides in the profile it offered; it isn't the host's.
+			safety.canaryTokens(v === undefined ? null : v).filter(t => t !== EXTHOST_CONTROL).forEach(t => settingsProbe.tokens.add(t));
+		}
+	}
+}
+
+/**
+ * What the window pushed into this tab's extension host (review DOCSYNC-R5, RFU1R2-1; patch
+ * 0053): $acceptDefaultProfile carries the automation profile, which the harness seeds in the
+ * host user's terminal.integrated.automationProfile.linux with a TERMINALAUTOMATI canary. No
+ * extension API returns it whole, so this reads the extension host's memory, the liberty a
+ * compromised REH has over the process it forked (same user, its parent). The positive control
+ * travels the same message: this REH offers the `seclab-probe` profile with a TERMINALTABOWN
+ * canary it mints as an argument, the tab's own settings name it, so the default
+ * profile in $acceptDefaultProfile carries it on any build (review R5-4). Without it a scan that
+ * found nothing would read as containment. Only whole TERMINAL-tagged canary tokens are kept.
+ */
+const EXTHOST_REF = 'data:exthost-terminal-default-profile';
+const EXTHOST_NEEDLE = 'seclabcanary_TERMINAL';
+const EXTHOST_CONTROL = `seclabcanary_TERMINALTABOWN_${require('crypto').randomBytes(16).toString('hex')}`;
+/** A whole minted canary (test/canary/canary.ts): tag, then 32 hex digits. Fragments never count. */
+const EXTHOST_TOKEN = /^seclabcanary_TERMINAL[A-Z0-9]{0,8}_[0-9a-f]{32}$/;
+function extensionHostPids() {
+	const out = [];
+	for (const d of fs.readdirSync('/proc')) {
+		if (!/^[0-9]+$/.test(d)) {
+			continue;
+		}
+		try {
+			const stat = fs.readFileSync(`/proc/${d}/stat`, 'utf8');
+			const ppid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+			if (ppid === process.pid && fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').split('\0').includes('--type=extensionHost')) {
+				out.push(Number(d));
+			}
+		} catch { /* gone, or not ours */ }
+	}
+	return out;
+}
+function scanMemory(pid, tokens) {
+	const maps = fs.readFileSync(`/proc/${pid}/maps`, 'utf8');
+	const fd = fs.openSync(`/proc/${pid}/mem`, 'r');
+	const forms = [[Buffer.from(EXTHOST_NEEDLE, 'latin1'), 'latin1'], [Buffer.from(EXTHOST_NEEDLE, 'utf16le'), 'utf16le']];
+	const CHUNK = 8 << 20;
+	const TAIL = 512;
+	let bytes = 0;
+	try {
+		for (const line of maps.split('\n')) {
+			const m = line.match(/^([0-9a-f]+)-([0-9a-f]+) rw/);
+			if (!m) {
+				continue;
+			}
+			const end = parseInt(m[2], 16);
+			for (let at = parseInt(m[1], 16); at < end; at += CHUNK) {
+				const buf = Buffer.alloc(Math.min(CHUNK + TAIL, end - at));
+				let n = 0;
+				try {
+					n = fs.readSync(fd, buf, 0, buf.length, at);
+				} catch {
+					break;
+				}
+				bytes += Math.min(n, CHUNK);
+				const view = buf.subarray(0, n);
+				for (const [needle, enc] of forms) {
+					for (let i = view.indexOf(needle); i >= 0; i = view.indexOf(needle, i + needle.length)) {
+						safety.canaryTokens(view.subarray(i, i + 2 * 160).toString(enc)).filter(t => EXTHOST_TOKEN.test(t)).forEach(t => tokens.add(t));
+					}
+				}
+			}
+		}
+	} finally {
+		fs.closeSync(fd);
+	}
+	return bytes;
+}
+async function extensionHostMemoryFacts() {
+	const pids = extensionHostPids();
+	const tokens = new Set();
+	let bytes = 0;
+	for (const pid of pids) {
+		bytes += scanMemory(pid, tokens);
+	}
+	return {
+		extensionHosts: pids.length, scannedMb: Math.floor(bytes / (1 << 20)), sawControl: tokens.has(EXTHOST_CONTROL),
+		canaryTokens: [...tokens].filter(t => t !== EXTHOST_CONTROL).sort().slice(0, 16),
+	};
 }
 
 function captureCreatedPtys(channel) {
@@ -439,6 +552,15 @@ async function runRehProbes(socketServer, router) {
 		} else {
 			await probe(results, 'reh-profile-config-host-setting', PROFILE_REF, async () => profileProbe.seen);
 		}
+		if (!profileProbe.armed) {
+			inconclusive(results, 'reh-terminal-host-settings', SETTINGS_REF, KIND.noEmitter);
+		} else {
+			await probe(results, 'reh-terminal-host-settings', SETTINGS_REF, async () => ({
+				sawGetProfiles: settingsProbe.getProfiles, sawCreateProcess: settingsProbe.createProcess,
+				canaryTokens: [...settingsProbe.tokens].sort().slice(0, 16),
+			}));
+		}
+		await probe(results, 'reh-exthost-terminal-profile', EXTHOST_REF, extensionHostMemoryFacts);
 		return results;
 	}
 

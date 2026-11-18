@@ -145,11 +145,13 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `harness` | rogue REH | `rpc:raw` | denied |
 | `reh-environment-host-settings` | rogue REH | `data:server-locations` | succeeded |
+| `reh-exthost-terminal-profile` | rogue REH | `data:exthost-terminal-default-profile` | succeeded |
 | `reh-onexecutecommand-getsystemstatus` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-profile-config-host-setting` | rogue REH | `data:remoteterminal-profile-path` | succeeded |
 | `reh-resolve-variables-host-env` | rogue REH | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
+| `reh-terminal-host-settings` | rogue REH | `data:remoteterminal-host-settings` | succeeded |
 | `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
 | `rpc-secret-identity-spoof` | rogue REH | `rpc:MainThreadSecretState.$getKeys` | denied |
 <!-- seclab:end probes -->

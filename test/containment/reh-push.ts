@@ -15,8 +15,13 @@
 //      host one, so exactly one side records it, or neither does;
 //   2. the window opens a terminal through the command palette and runs one command in it;
 //   3. the rogue-REH payload is staged in the tab with `only=push`, and fires the three
-//      onExecuteCommand pushes and the variable-resolution request against that window;
+//      onExecuteCommand pushes and the variable-resolution request against that window. It
+//      also notes whether the host user's terminal settings (canaries in env, profiles and the
+//      automation profile) reached it or its extension host's memory, against a control canary
+//      it offers in its own default profile (patches 0053-0055, DOCSYNC-R5);
 //   4. the same terminal runs a second command, so a refusal that broke the terminal fails;
+//      then "Terminal: Select Default Profile" picks the REH's profile: on main it lands in the
+//      host user's settings, with patch 0057 in the tab's own (review R5-14);
 //   5. the editor quits, then an EMPTY window with the same kind of entry in user settings dials
 //      the host listener: the positive control that the dial works where nothing gates it;
 //   6. check-probes.ts judges the REH evidence against the window's decision log; the dial and
@@ -43,7 +48,8 @@ import { readHits } from './beacon.ts';
 import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
-const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting'];
+const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting',
+	'reh-terminal-host-settings', 'reh-exthost-terminal-profile'];
 
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
@@ -80,6 +86,11 @@ const port = await beaconPort();
 const canary = mintCanary('editor-env');
 // A host user setting the REH's profile path names (review RFU-1, patch 0034).
 const settingCanary = mintCanary('user-settings');
+// The host user's terminal settings (review DOCSYNC-R5, patch 0053). Their tags (TERMINALENV,
+// TERMINALPROFILES, TERMINALAUTOMATI) are what check-probes.ts tells them apart by.
+const terminalEnvCanary = mintCanary('terminal-env');
+const terminalProfilesCanary = mintCanary('terminal-profiles');
+const terminalAutomationCanary = mintCanary('terminal-automation');
 const dialPath = `/seclab-dial-${arm}`;
 fs.writeFileSync(path.join(ws, 'README.md'), 'reh-push proof workspace\n');
 fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({
@@ -111,6 +122,9 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'seclab.tabs.image': IMAGE,
 	'seclab.tabs.allowedRoots': [base],
 	'seclab.test.canary': settingCanary.value,
+	'terminal.integrated.env.linux': { SECLAB_HOST_TERMINAL_ENV: terminalEnvCanary.value },
+	'terminal.integrated.profiles.linux': { 'seclab-host-profile': { path: '/bin/sh', args: [terminalProfilesCanary.value] } },
+	'terminal.integrated.automationProfile.linux': { path: '/bin/sh', args: [terminalAutomationCanary.value] },
 	'workbench.welcomePage.experimentalOnboarding': false,
 	'workbench.startupEditor': 'none',
 	'workbench.tips.enabled': false,
@@ -177,11 +191,13 @@ try {
 	// The hook polls for targets every 2 s and starts the payload 5 s later; it must be in place
 	// before the window creates its terminal, as a hostile REH always is.
 	await sleep(12_000);
-	// RFU1R-1: make the REH's offered profile the host user's default, as a user's own
-	// defaultProfile setting would. The change makes the window ask the (now armed) REH for
-	// its profiles again, so the new terminal launches that profile, `env` included.
-	const userSettings = path.join(userData, 'User', 'settings.json');
-	fs.writeFileSync(userSettings, JSON.stringify({ ...JSON.parse(fs.readFileSync(userSettings, 'utf8')), 'terminal.integrated.defaultProfile.linux': 'seclab-probe' }, null, '\t'));
+	// RFU1R-1: make the REH's offered profile the default, in the tab's own workspace settings.
+	// (Patch 0053 lets only the tab's settings choose a tab's default profile, review R5-10; on
+	// main the workspace value wins over the user's too.) The change makes the window ask the
+	// (now armed) REH for its profiles again, so the new terminal launches that profile, `env`
+	// included.
+	const wsSettings = path.join(ws, '.vscode', 'settings.json');
+	fs.writeFileSync(wsSettings, JSON.stringify({ ...JSON.parse(fs.readFileSync(wsSettings, 'utf8')), 'terminal.integrated.defaultProfile.linux': 'seclab-probe' }, null, '\t'));
 	await sleep(5000);
 
 	// A terminal the window owns, so the REH has a pty to name, and one command run through it,
@@ -224,6 +240,34 @@ try {
 	}
 
 	c('terminal', await runInTerminal('after'), 'the tab\'s terminal still runs a command, inside the tab, after the pushes');
+
+	// R5-14: "Terminal: Select Default Profile", choosing the REH's own profile, as a user would.
+	// On main the window wrote it (path, args, env) into the host user's settings, where a normal
+	// window's next terminal runs it; with patch 0057 it goes to the tab's own remote settings.
+	// The host settings here are this run's isolated profile, removed at teardown.
+	const hostSettings = path.join(userData, 'User', 'settings.json');
+	const hostHasProbeProfile = () => {
+		const s = JSON.parse(fs.readFileSync(hostSettings, 'utf8')) as Record<string, unknown>;
+		const profiles = s['terminal.integrated.profiles.linux'];
+		return s['terminal.integrated.defaultProfile.linux'] === 'seclab-probe' || (!!profiles && typeof profiles === 'object' && 'seclab-probe' in profiles);
+	};
+	const tabHasProbeProfile = () => inTab(`for f in $(find "$HOME" -path '*Machine/settings.json' 2>/dev/null); do grep -l '"seclab-probe"' "$f"; done`).stdout.trim().length > 0;
+	c('r5-14', !hostHasProbeProfile(), 'setup: the host settings name no REH profile before the choice');
+	await ed.command('Terminal: Select Default Profile');
+	const offered = await ed.waitFor(`[...document.querySelectorAll('.quick-input-list .monaco-list-row')].some(r => r.textContent.includes('seclab-probe'))`, 20_000).then(() => true, () => false);
+	c('r5-14', offered, 'the default-profile picker offered the REH\'s profile');
+	if (offered) {
+		await ed.type('seclab-probe');
+		await sleep(1000);
+		await ed.key('Enter');
+	}
+	const hostWritten = await waitFor('a profile write', () => hostHasProbeProfile() || tabHasProbeProfile(), 20_000) && hostHasProbeProfile();
+	const tabWritten = tabHasProbeProfile();
+	if (mode === 'baseline') {
+		c('r5-14', hostWritten, 'baseline: choosing the REH\'s profile wrote it into the host user\'s settings');
+	} else {
+		c('r5-14', !hostWritten && tabWritten, 'patched: the choice went to the tab\'s own settings, none to the host\'s', `host=${hostWritten} tab=${tabWritten}`);
+	}
 	// Dial attempts start at AfterRestored and retry; give a late one time to land.
 	await sleep(10_000);
 } catch (err) {

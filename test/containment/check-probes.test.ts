@@ -212,6 +212,28 @@ const tests: Array<[string, () => void]> = [
 		}
 		assert.ok(failed(run({ expectations: exp, reh: reh({}) }).out, /reh-environment-host-settings patched predicate holds/));
 	}],
+	['the terminal settings and extension-host scan probes need their canaries on a baseline and a control after the patches', () => {
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: {
+			'reh-terminal-host-settings': { required: true, policyRef: 'data:remoteterminal-host-settings', patchedOutcome: 'succeeded', why: 'synthetic' },
+			'reh-exthost-terminal-profile': { required: true, policyRef: 'data:exthost-terminal-default-profile', patchedOutcome: 'succeeded', why: 'synthetic' },
+		} };
+		const reh = (settings: Record<string, unknown>, scan: Record<string, unknown>) => ({ results: [
+			{ id: 'reh-terminal-host-settings', policyRef: 'data:remoteterminal-host-settings', outcome: 'succeeded', facts: { sawGetProfiles: true, sawCreateProcess: true, canaryTokens: [], ...settings } },
+			{ id: 'reh-exthost-terminal-profile', policyRef: 'data:exthost-terminal-default-profile', outcome: 'succeeded', facts: { extensionHosts: 1, scannedMb: 300, sawControl: true, canaryTokens: [], ...scan } },
+		] });
+		const hostSettings = { canaryTokens: ['seclabcanary_TERMINALENV_1', 'seclabcanary_TERMINALPROFILES_1'] };
+		const hostAutomation = { canaryTokens: ['seclabcanary_TERMINALAUTOMATI_1'] };
+		assert.ok(!failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(hostSettings, hostAutomation) }).out, /reh-(terminal-host-settings|exthost-terminal-profile)/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({}, hostAutomation) }).out, /reh-terminal-host-settings shows the escape itself/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(hostSettings, {}) }).out, /reh-exthost-terminal-profile shows the escape itself/));
+		assert.equal(run({ expectations: exp, reh: reh({}, {}) }).status, 0);
+		assert.ok(failed(run({ expectations: exp, reh: reh(hostSettings, {}) }).out, /reh-terminal-host-settings patched predicate holds/));
+		assert.ok(failed(run({ expectations: exp, reh: reh({ sawGetProfiles: false }, {}) }).out, /reh-terminal-host-settings patched predicate holds/));
+		assert.ok(failed(run({ expectations: exp, reh: reh({}, hostAutomation) }).out, /reh-exthost-terminal-profile patched predicate holds/));
+		// A scan that never found the default profile's control canary proves nothing on either build (R5-4).
+		assert.ok(failed(run({ expectations: exp, reh: reh({}, { sawControl: false }) }).out, /reh-exthost-terminal-profile patched predicate holds/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(hostSettings, { ...hostAutomation, sawControl: false }) }).out, /reh-exthost-terminal-profile shows the escape itself/));
+	}],
 	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {
 		const spec = { required: true, runner: 'reh-push', policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-profile-config-host-setting': spec } };
