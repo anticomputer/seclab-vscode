@@ -985,3 +985,21 @@ newly throw. The KEPT checks cannot pass on an empty session, because each is pa
 required gate reason that only a restored transcript or queue can produce. Noted, not a finding:
 neither probe fixture has a request in flight, so cancelling one is covered by the patch-text
 ordering assertions rather than by a run.
+
+**Round 17 follow-up.** The same reviewer checked the fixes and confirmed them, with nothing able
+to proceed past a refused migration and the refusal still logged, and raised three more lows.
+
+| id | Sev | finding |
+|---|---|---|
+| R17-4 | low | The try/catch around the two migration checks swallowed any error, so an error other than the gate's refusal became a silent, unlogged no-op |
+| R17-5 | low | No assertion pinned the catch body, so a best-effort carry-on would have passed the unit tests |
+| R17-6 | low | Cancelling an in-flight request (resend, send-now) has no behavioural coverage: the probe's restored session has none in flight |
+
+R17-4 and R17-5 are fixed: the migration reads the gate's verdict for the source and then the
+target, logs a refusal and returns, and catches nothing; the unit test pins the whole construct
+and that it holds no catch. R17-6 is deferred. In a tab window a request can be in flight only
+in a session the gate has already let through, since every other dispatch is refused, so the
+cancel mutations protect only a session the gate allows, which this increment does not open.
+The checks sit before those cancels in the patch text, pinned by the ordering assertions; a
+behavioural arm needs an allowed in-flight session, which comes with the increment that opens chat
+in tab windows.
