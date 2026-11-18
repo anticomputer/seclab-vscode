@@ -529,7 +529,7 @@
             "completionProvider.register(this._seclabSelector(selector)",
             "suggestions: result[ISuggestResultDtoField.completions].map(d => this._seclabSnippet(this._seclabCompletion(",
             "const newSuggestion = this._seclabCompletion(",
-            "return this._seclabSnippet(mixin(suggestion, newSuggestion, true));",
+            "return this._seclabSnippet(this._seclabFromTab ? this._seclabFromTab.resolved(suggestion, newSuggestion) : mixin(suggestion, newSuggestion, true));",
             "command: seclab.command(item.command)",
             "seclab.markdown(item.documentation)",
             "!this._seclabFromTab.snippetAllowed(item.insertText)",

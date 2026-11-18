@@ -41,7 +41,7 @@ if (!MARKED) {
 registerHooks({
 	resolve(specifier, context, next) {
 		if (specifier.endsWith('base/common/marked/marked.js')) {
-			return { url: pathToFileURL(MARKED).href, shortCircuit: true };
+			return { url: pathToFileURL(join(HERE, 'filter-stubs', 'marked-counting.mjs')).href, shortCircuit: true };
 		}
 		for (const [suffix, stub] of Object.entries(STUBS)) {
 			if (specifier.endsWith(suffix)) {
@@ -228,6 +228,75 @@ test('response: a provider selector keeps only documents the tab owns (review on
 	assert.deepEqual(s.selector([{ scheme: 'vscode-userdata' }, { scheme: 'output' }]), []);
 });
 
+test('response: a resolved tab completion cannot write through __proto__ (review on #48)', () => {
+	// Upstream's mixin (vs/base/common/objects.ts at the pin) as the control: it pollutes.
+	const isObject = (o: unknown) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof RegExp) && !(o instanceof Date);
+	const mixin = (d: any, src: any): any => {
+		if (!isObject(d)) {
+			return src;
+		}
+		if (isObject(src)) {
+			Object.keys(src).forEach(key => {
+				if (key in d) {
+					if (isObject(d[key]) && isObject(src[key])) {
+						mixin(d[key], src[key]);
+					} else {
+						d[key] = src[key];
+					}
+				} else {
+					d[key] = src[key];
+				}
+			});
+		}
+		return d;
+	};
+	const raw = () => JSON.parse('{"label":"x","__proto__":{"seclabResponseProbePolluted":true}}');
+	try {
+		mixin({ label: { label: 'x' } }, { label: raw() });
+		assert.equal(({} as any).seclabResponseProbePolluted, true, 'control: upstream mixin no longer pollutes; revisit this test');
+	} finally {
+		delete (Object.prototype as any).seclabResponseProbePolluted;
+	}
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const item: any = { label: { label: 'x' }, insertText: 'x' };
+	const out = s.resolved(item, { label: raw(), insertText: 'y', detail: 'd' });
+	assert.equal(({} as any).seclabResponseProbePolluted, undefined);
+	assert.ok(out === item && out.insertText === 'y' && out.detail === 'd');
+	const top = s.resolved({ a: 1 }, JSON.parse('{"__proto__":{"seclabResponseProbePolluted":true},"b":2}'));
+	assert.equal(Object.getPrototypeOf(top), Object.prototype);
+	assert.equal((top as any).seclabResponseProbePolluted, undefined);
+	// 0033: a tab window's resolve path merges with resolved(), never with mixin.
+	const patch = readFileSync(join(REPO, 'patches', '0033-seclab-sanitise-tab-provider-results.patch'), 'utf8');
+	const added = patch.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++')).join('\n');
+	assert.ok(added.includes('this._seclabFromTab ? this._seclabFromTab.resolved(suggestion, newSuggestion) : mixin(suggestion, newSuggestion, true)'), '0033 merges tab results with mixin');
+});
+
+test('response: oversized tab markdown never reaches the lexer (review on #48)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	(globalThis as any).seclabLexerRuns = 0;
+	s.markdown({ value: 'a <b> c' });
+	assert.ok((globalThis as any).seclabLexerRuns > 0, 'control: the lexer runs on ordinary markdown');
+	(globalThis as any).seclabLexerRuns = 0;
+	const out = s.markdown({ value: 'a'.repeat(100_001) + ' <img src="https://example.test/x.png">' }).value;
+	assert.equal((globalThis as any).seclabLexerRuns, 0);
+	assert.doesNotMatch(out, OPENS_IMAGE_OR_TAG);
+});
+
+test('response: angle-bracket link destinations keep working (review on #48)', async () => {
+	const ran: unknown[] = [];
+	const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ran.push([id, args]); return 'ok'; });
+	assert.equal(s.markdown({ value: '[docs](<https://example.test/a b>)' }).value, '[docs](<https://example.test/a b>)');
+	const out = s.markdown({ value: '[run](<command:pub.ext.own?%5B1%5D>)' }).value;
+	const m = out.match(/^\[run\]\(<(command:_seclab\.tabCommand\?[^>\s]+)>\)$/);
+	assert.ok(m, out);
+	await run(tokenOf(m[1]));
+	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
+	// A `<` that only looks like a link destination, outside a link, is still escaped.
+	for (const v of ['x](<span a>)\n<img src="https://example.test/s.png">\n', 'a ](<img src="https://example.test/t.png">)']) {
+		assert.doesNotMatch(s.markdown({ value: v }).value, OPENS_IMAGE_OR_TAG, v);
+	}
+});
+
 test('response: code in tab markdown is shown as written; everything else is still escaped (review on #48)', () => {
 	const s = F.seclabFromTab(AUTH, async () => undefined);
 	const fence = '```typescript\nfunction f(): Promise<Result> { return ![x](https://example.test/c.png); }\n```\n';
@@ -243,8 +312,9 @@ test('response: escaping that re-pairs a backtick falls back to escaping the cod
 	// so the image in it would render. The lexed result shows an image, so nothing is kept.
 	const out = s.markdown({ value: '<a b="`"> `![x](https://example.test/r.png)`' }).value;
 	assert.doesNotMatch(out, OPENS_IMAGE_OR_TAG, out);
-	// Longer than the renderer keeps: its cut could split a code span, so nothing is kept.
-	const long = s.markdown({ value: 'a'.repeat(100_000) + ' `<b>`' }).value;
+	// Escaped, it would be longer than the renderer keeps: its cut could split a code span, so
+	// nothing is kept.
+	const long = s.markdown({ value: '<a'.repeat(40_000) + ' `<b>`' }).value;
 	assert.ok(long.endsWith('`&lt;b>`'), long.slice(-12));
 });
 
@@ -395,15 +465,18 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['a denied data command runs on the trusted side', "if (entry.filter.commandVerdict(entry.id) === 'allow') {", 'if (true) {'],
 		['markdown keeps full trust', 'isTrusted: { enabledCommands: [SECLAB_TAB_COMMAND] },', 'isTrusted: true,'],
 		['images are kept', ".replace(SECLAB_IMAGE_OPEN, '!\\\\[')", ".replace(SECLAB_IMAGE_OPEN, '![')"],
-		['HTML is kept', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '<')"],
-		['HTML is escaped with a backslash', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '\\\\<')"],
+		['HTML is kept', "? lt : '&lt;');", '? lt : lt);'],
+		['HTML is escaped with a backslash', "? lt : '&lt;');", "? lt : '\\\\<');"],
 		['the clipboard snippet is allowed', 'return typeof insertText === \'string\' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);', 'return typeof insertText === \'string\';'],
 		['command links are kept', 'out += value.slice(last, m.index) + rewrite(m[1], query);', 'out += value.slice(last, end);'],
 		['the query stops at an apostrophe', 'if (/[\\s"<>\\]`]/.test(c)) {', 'if (/[\\s"\'<>\\]`]/.test(c)) {'],
 		['the query stops at the first parenthesis', 'if (depth === 0) {\n\t\t\t\t\t\tbreak;', 'if (true) {\n\t\t\t\t\t\tbreak;'],
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 		['a host scheme stays in the selector', ".filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')", ".filter(() => true)"],
-		['code is escaped like text', 'if (!code.length) {\n\t\t\treturn all;', 'if (true) {\n\t\t\treturn all;'],
+		['code is escaped like text', 'kept += rewrite(src.slice(at, start), true) + src.slice(start, end);', 'kept += rewrite(src.slice(at, end), true);'],
+		['oversized markdown is lexed', 'if (value.length > SECLAB_MARKDOWN_MAX) {\n\t\treturn all;', 'if (false) {\n\t\treturn all;'],
+		['angle link destinations are escaped', 'keepLinks && /', 'false && /'],
+		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],
 	];
