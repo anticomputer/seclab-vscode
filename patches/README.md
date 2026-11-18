@@ -190,7 +190,8 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   `mcpCopilotGlobalConfigurationService.ts`, `mcpWorkbenchManagementService.ts`, `extensionsWorkbenchService.ts`,
   `extensionsActions.ts`, `extensionManagementService.ts`, `extensionEnablementService.ts`,
   `unsupportedExtensionsMigrationContribution.ts`, `localization.contribution.ts`,
-  `extensionGalleryManifestService.ts` and `workbench.common.main.ts`. A tab's server names where the window keeps that tab's settings,
+  `extensionGalleryManifestService.ts`, `extensionsResource.ts`, `extensions.contribution.ts` and
+  `workbench.common.main.ts`. A tab's server names where the window keeps that tab's settings,
   storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
   module). That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
@@ -209,7 +210,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-38;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-43;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
