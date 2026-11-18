@@ -78,7 +78,9 @@ usage: ./seclab <command>
                                 shrinking baseline; `baseline` prints the open highs (markdown)
   landing verify SHA            After a merge, from main's code: refuse unless every required job ran and
                                 concluded success for SHA, and the required-jobs-ran gate posted success
-                                (EDR required-jobs-gate; AGENTS.md landing step 8)
+                                (EDR required-jobs-gate; AGENTS.md landing step 8); then re-runs this main's
+                                validators (lint job, docs check, findings) over the merged tree
+  landing --self-test           A merged gutted lint and a gutted pin check are refused; a clean merge passes
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
                                 branch) -> .work/app-branch/ (never the release location)
@@ -116,16 +118,22 @@ mount_files() { local f; [[ $# -gt 0 ]] || { echo "mount_files: empty list" >&2;
 # zizmor's online audits (impostor commits, ref confusion) are covered by the repo's
 # sha_pinning_required setting and the GitHub-owned-actions allowlist.
 lint_workflows() {
-	local actionlint
-	actionlint="$(tool_image actionlint)"
-	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$actionlint" -no-color
-	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
-	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
+	lint_workflow_tools "$ROOT"
 	# Actions logs here are public: no workflow or CI script echoes env, secrets or host data.
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-workflow-echo.ts --self-test; node build/check-workflow-echo.ts'
 	# Required checks can't be skipped by the change they gate (EDR pr-landing): no job-level
 	# if: on a required job, no trigger filter on its workflow.
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-required-checks.ts --self-test; node build/check-required-checks.ts'
+}
+
+# actionlint and zizmor over DIR's workflows, with this checkout's tool pins (landing verify points
+# them at a merged tree).
+lint_workflow_tools() { # DIR
+	local dir="$1" actionlint
+	actionlint="$(tool_image actionlint)"
+	docker run --rm --network none -v "$dir:/repo:ro" -w /repo "$actionlint" -no-color
+	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
+	docker run --rm --network none -v "$dir:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 }
 
 # Publisher-signature check before use (ADR supply-chain provenance), for images whose
@@ -1417,7 +1425,142 @@ landing_verify() {
 	got="$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[] | select(.context == "required-jobs-ran")] | first | .state // "missing"')" || return 2
 	echo "landing verify: required-jobs-ran: $got"
 	[[ "$got" == success ]] || bad=1
-	[[ $bad == 0 ]] && echo "landing verify: ok ($sha)" || echo "landing verify: REFUSED ($sha): a required job didn't run to success" >&2
+	# A job that ran to success may still have been gutted by the change it gated (RJG-1): re-run
+	# this checkout's validators over the merged tree (owner decision 2026-11-17).
+	landing_revalidate "$(git -C "$ROOT" rev-parse HEAD)" "$sha" || bad=1
+	[[ $bad == 0 ]] && echo "landing verify: ok ($sha)" || echo "landing verify: REFUSED ($sha): a required job didn't run to success, or this main's validators refuse the merged tree" >&2
+	return $bad
+}
+
+# Re-running the old main's validators over a merged tree (RJG-1 compensating control, EDR
+# required-jobs-gate). Every required job runs code the merged change controls, so a change can gut
+# a validator and the job still concludes success. Here each validator runs from this checkout (a
+# main older than the change) against a worktree of the merged commit: the step resets the
+# worktree to the commit, copies this checkout's copy of the validator's own import closure over
+# it, and runs this checkout's shell logic with the worktree as its root. Only the validator's
+# code is the old main's; everything it judges (workflows, registers, the code it scans as data,
+# the files a finding cites) is the merged tree's. Residual: a finding the change registers
+# against a self-test case it adds to a validator's own code is judged against the old copy.
+# Proof of the RJG-1 control: merges that gut a validator (and use the gutting) are refused by
+# this main's validators even though the gutted code passes its own tree; a clean merge passes.
+# The scenario commits are made in a scratch worktree and reachable from no ref.
+landing_self_test() {
+	local old src gutted pins clean id=(-c user.name=seclab-self-test -c user.email=self-test@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null)
+	old="$(git -C "$ROOT" rev-parse HEAD)"
+	src="$ROOT/.work/landing-self-test"
+	git -C "$ROOT" worktree remove --force "$src" 2>/dev/null || true
+	rm -rf "$src"
+	git -C "$ROOT" worktree add -q --detach "$src" "$old"
+	mkdir -p "$src/.work"
+	# 1. A gutted lint: the required-checks validator exits before it checks, and the change sets
+	#    `if: false` on the lint job, which that validator exists to refuse.
+	{ echo 'process.exit(0);'; cat "$src/build/check-required-checks.ts"; } > "$src/.work/gut.ts" && mv "$src/.work/gut.ts" "$src/build/check-required-checks.ts"
+	awk '{print} /^  lint:$/ && !d {print "    if: false"; d=1}' "$src/.github/workflows/workflow-lint.yml" > "$src/.work/wl.yml" && mv "$src/.work/wl.yml" "$src/.github/workflows/workflow-lint.yml"
+	grep -q '^    if: false$' "$src/.github/workflows/workflow-lint.yml" || { echo "landing self-test: couldn't inject if: false on lint" >&2; exit 1; }
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted lint'
+	gutted="$(git -C "$src" rev-parse HEAD)"
+	# Control: the gutted validator passes its own tree, so the merged lint job would be green.
+	docker run --rm --network none -v "$src:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts >/dev/null || { echo "landing self-test: the gutted validator refused its own tree (the scenario proves nothing)" >&2; exit 1; }
+	# 2. A gutted pin check hiding an unpinned image.
+	git -C "$src" checkout -q --detach "$old"
+	{ echo 'process.exit(0);'; cat "$src/build/check-pins.ts"; } > "$src/.work/gut.ts" && mv "$src/.work/gut.ts" "$src/build/check-pins.ts"
+	mkdir -p "$src/test/landing-self-test" && printf 'FROM %s:%s\n' debian trixie-slim > "$src/test/landing-self-test/Dockerfile"
+	git -C "$src" add test/landing-self-test/Dockerfile
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted pin check'
+	pins="$(git -C "$src" rev-parse HEAD)"
+	git -C "$src" ls-files -z | docker run -i --rm --network none -v "$src:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts - >/dev/null || { echo "landing self-test: the gutted pin check refused its own tree (the scenario proves nothing)" >&2; exit 1; }
+	# 3. A clean merge.
+	git -C "$src" checkout -q --detach "$old"
+	echo '' >> "$src/raw-idea.md"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: clean'
+	clean="$(git -C "$src" rev-parse HEAD)"
+	git -C "$ROOT" worktree remove --force "$src"
+	if landing_revalidate "$old" "$gutted" required-checks; then echo "landing self-test: a merged gutted lint passed this main's validators (RJG-1)" >&2; exit 1; fi
+	if landing_revalidate "$old" "$pins" pins; then echo "landing self-test: a merged gutted pin check passed this main's validators (RJG-1)" >&2; exit 1; fi
+	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
+	echo "landing self-test: ok (gutted lint and gutted pin check refused by the old main's validators; clean merge passes)"
+}
+LANDING_STEPS="required-checks workflow-echo workflow-tools pins deps source liveness secrets docs findings obs-docs"
+landing_overlay() { # WT OLD ENTRY...: WT back to its commit, then OLD's copy of each entry's import closure
+	local wt="$1" old="$2" e f files
+	shift 2
+	# Undo the previous step's overlay, writing in place (a replaced inode can read as missing
+	# through Docker Desktop's bind mount for a moment).
+	if [[ -f "$wt/.work/landing-overlay.txt" ]]; then
+		while read -r f; do
+			if git -C "$wt" cat-file -e "HEAD:$f" 2>/dev/null; then git -C "$wt" show "HEAD:$f" > "$wt/$f" || return 1; else rm -f "$wt/$f"; fi
+		done < "$wt/.work/landing-overlay.txt"
+	fi
+	mkdir -p "$wt/.work" && : > "$wt/.work/landing-overlay.txt"
+	[[ -z "$(git -C "$wt" status --porcelain --untracked-files=all)" ]] || { echo "landing verify: the merged worktree isn't its commit after the reset" >&2; return 1; }
+	for e in "$@"; do
+		[[ "$e" =~ ^[A-Za-z0-9._/-]+\.ts$ && "$e" != *..* ]] || { echo "landing verify: bad validator entry $e" >&2; return 1; }
+		files="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --input-type=module -e \
+			'const m = await import("/repo/build/import-closure.ts"); console.log(m.closure("/repo", process.argv[1]).join("\n"));' "$e")" || return 1
+		[[ -n "$files" ]] || { echo "landing verify: no closure for $e" >&2; return 1; }
+		for f in $files; do
+			[[ "$f" =~ ^[A-Za-z0-9._/-]+$ && "$f" != *..* ]] || { echo "landing verify: bad closure path" >&2; return 1; }
+			mkdir -p "$wt/$(dirname "$f")"
+			echo "$f" >> "$wt/.work/landing-overlay.txt"
+			git -C "$ROOT" show "$old:$f" > "$wt/$f" || return 1
+		done
+	done
+}
+landing_step() { # STEP WT OLD SHA (its own seclab process, set -e)
+	local step="$1" wt="$2" old="$3" sha="$4" n
+	n="$(node_image)"
+	case "$step" in
+		required-checks) landing_overlay "$wt" "$old" build/check-required-checks.ts
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/check-required-checks.ts ;;
+		workflow-echo) landing_overlay "$wt" "$old" build/check-workflow-echo.ts
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/check-workflow-echo.ts ;;
+		workflow-tools) landing_overlay "$wt" "$old"; lint_workflow_tools "$wt" ;;
+		pins) landing_overlay "$wt" "$old" build/check-pins.ts
+			git -C "$wt" ls-files -z | docker run -i --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/check-pins.ts - ;;
+		deps) landing_overlay "$wt" "$old" build/deps.ts
+			git -C "$wt" ls-files -z | docker run -i --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/deps.ts check - ;;
+		source) landing_overlay "$wt" "$old" build/check-source.ts
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/check-source.ts ;;
+		liveness) landing_overlay "$wt" "$old" build/liveness/liveness.ts
+			ROOT="$wt" DOCS_BASE="$old" liveness_base "$wt/.work/liveness-base.json"
+			git -C "$wt" ls-files -z | docker run -i --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/liveness/liveness.ts check - --base .work/liveness-base.json ;;
+		secrets) lint_secrets "$old" "$sha" ;;
+		docs) landing_overlay "$wt" "$old" build/docs/docs-check.ts
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/docs/docs-check.ts check
+			mkdir -p "$wt/.work"
+			{ git -C "$wt" diff --name-only "$old" "$sha"; echo '--'; git -C "$wt" log --format='%(trailers:key=docs-not-needed,valueonly)' "$old..$sha"; } > "$wt/.work/docs-paired.txt"
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node build/docs/docs-check.ts paired .work/docs-paired.txt ;;
+		findings) landing_overlay "$wt" "$old" build/docs/findings.ts
+			ROOT="$wt" DOCS_BASE="$old" GITHUB_ACTIONS='' findings_check ;;
+		obs-docs) landing_overlay "$wt" "$old" tabd/tools/gen-obs-docs.ts
+			docker run --rm --network none -v "$wt:/repo:ro" -w /repo "$n" node tabd/tools/gen-obs-docs.ts check ;;
+		*) echo "landing verify: unknown step $step" >&2; return 2 ;;
+	esac
+}
+landing_revalidate() { # OLD SHA [STEP...]
+	local old="$1" sha="$2" wt step bad=0
+	shift 2
+	[[ "$old" =~ ^[0-9a-f]{40}$ && "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "landing verify: bad commits" >&2; return 2; }
+	[[ "$(git -C "$ROOT" rev-parse HEAD)" == "$old" ]] || { echo "landing verify: the validators must be this checkout's HEAD" >&2; return 2; }
+	# The validators that run are this checkout's files: they must be exactly its HEAD's.
+	git -C "$ROOT" diff --quiet HEAD -- seclab build tabd/tools || { echo "landing verify: this checkout's seclab, build/ or tabd/tools differ from its HEAD; run it from a clean main checkout" >&2; return 2; }
+	git -C "$ROOT" merge-base --is-ancestor "$old" "$sha" || { echo "landing verify: $sha doesn't descend from $old" >&2; return 2; }
+	wt="$ROOT/.work/landing-verify"
+	git -C "$ROOT" worktree remove --force "$wt" 2>/dev/null || true
+	rm -rf "$wt"
+	git -C "$ROOT" worktree add -q --detach "$wt" "$sha" || { echo "landing verify: can't check out $sha" >&2; return 2; }
+	for step in $LANDING_STEPS; do
+		if (( $# )) && [[ " $* " != *" $step "* ]]; then continue; fi
+		# A fresh process per step: its own set -e holds even when this runs in a condition.
+		if "$ROOT/seclab" landing _step "$step" "$wt" "$old" "$sha" > "$ROOT/.work/landing-verify.$step.log" 2>&1; then
+			echo "landing verify: $step (this main's validator, merged tree): ok"
+		else
+			echo "landing verify: $step (this main's validator, merged tree): REFUSED (log: .work/landing-verify.$step.log)" >&2
+			tail -n 15 "$ROOT/.work/landing-verify.$step.log" >&2
+			bad=1
+		fi
+	done
+	git -C "$ROOT" worktree remove --force "$wt" || true
 	return $bad
 }
 
@@ -2091,6 +2234,12 @@ case "${1:-help}" in
 			*) usage; exit 2 ;;
 		esac ;;
 	landing)
+		if [[ "${2:-}" == _step && $# -eq 6 ]]; then
+			[[ "$4" == "$ROOT/.work/landing-verify" && "$5" =~ ^[0-9a-f]{40}$ && "$6" =~ ^[0-9a-f]{40}$ ]] || { usage; exit 2; }
+			landing_step "$3" "$4" "$5" "$6"
+			exit 0
+		fi
+		[[ "${2:-}" == --self-test && $# -eq 2 ]] && { landing_self_test; exit 0; }
 		[[ "${2:-}" == verify && $# -eq 3 ]] || { usage; exit 2; }
 		landing_verify "$3" ;;
 	findings)

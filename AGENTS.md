@@ -180,8 +180,11 @@ RPC-lockdown session adds. Keep them consistent with this file.
      Replies are public: run them through `./seclab scan-text` first, with no internal detail.
      A push gets a new review, so repeat this step. A review that arrives after the merge is
      handled in a follow-up PR.
-  6. `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks pass and
-     every thread is resolved.
+  6. If the PR touches `.github/workflows/**`, `seclab` or anything under `build/`, message the
+     coordinator and wait for its go-ahead before arming. The required jobs run that code, so a
+     change to it can make them pass vacuously ([EDR](docs/edr/20261117-required-jobs-gate.md),
+     RJG-1). Then `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks
+     pass and every thread is resolved.
   7. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
      <number> --rebase`, and the checks re-run (`patch:` citations survive it). If that fails on a
      conflict in the register, rebase locally and run `./seclab findings rebase-resolve` at each
@@ -193,7 +196,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
   8. After the merge, from a checkout of `main` as it was before the merge (a detached
      worktree of the old `main` SHA, so the PR can't change the check), run `./seclab landing
      verify <new main SHA>`. It refuses unless `unit`, `lint`, `docs` and `patch-build` each ran
-     and concluded success, and the `required-jobs-ran` gate posted success
+     and concluded success, and the `required-jobs-ran` gate posted success. It then re-runs that
+     old `main`'s own validators (the lint job's, the docs check and the findings register) over
+     the merged tree in containers, so a validator the change gutted is caught here
      ([EDR](docs/edr/20261117-required-jobs-gate.md)). Also confirm that workflow-lint's
      `denylist` job ran on that push. Tell the coordinator before the next PR is armed.
 
@@ -372,6 +377,7 @@ test/safety/fixture-lint.sh --self-test
 ./seclab lint workflows
 ./seclab findings --self-test
 ./seclab fetch --self-test
+./seclab landing --self-test
 ```
 
 Verified commands (one entry point: `./seclab help`):
@@ -411,7 +417,8 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab findings growth [DAYS] # the baseline isn't larger than the register's last change DAYS (7) days old
 ./seclab findings rebase-resolve  # in a conflicted rebase: merge findings.json by entry, regenerate the views, stage; refuses real clashes
 ./seclab findings clashes [--ref REF]...   # this change's new finding IDs against every open PR head (gh); same-owner clash exits 1
-./seclab landing verify <sha>   # after a merge, from the old main: every required job ran to success, and the required-jobs-ran gate is green
+./seclab landing verify <sha>   # after a merge, from the old main: every required job ran to success, the required-jobs-ran gate is green, and the old main's validators pass the merged tree
+./seclab landing --self-test    # merges that gut a validator are refused by the old main's validators; a clean merge passes
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
 ./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources (superseded images too); test tabs only unless --all-tabs; never copilot-* or other projects
