@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 85 | 227 | 367 | 48 | 741 |
+| fixed | 14 | 85 | 229 | 368 | 48 | 744 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 58 | 173 | 62 | 298 |
+| fixed-untested | 0 | 5 | 58 | 174 | 62 | 299 |
 | accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
 | deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 23 | 23 |
-| **all** | 16 | 94 | 323 | 636 | 165 | 1234 |
+| false-positive | 0 | 0 | 0 | 0 | 24 | 24 |
+| **all** | 16 | 94 | 325 | 638 | 166 | 1239 |
 
 ## Baseline: open high and critical findings
 
@@ -359,6 +359,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-5** | low | deferred | fetched-app binding (fetch, test/app-build.ts) | Build info is bound to the directory, not to the bundle bytes. | follow-up: Record a digest of the extracted bundle at fetch time and verify it at launch. |
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB2-4** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Probe copies were judged by their location, not their source. | Probe wiring that needs a real macOS build. |
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB2-5** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Shell git sites kept inherited GIT_ variables. | Shell helper; the TypeScript equivalent is unit-tested. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB3-4** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | A failed git status read as a clean tree. | Build-script plumbing; needs a full Linux build to exercise. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-26** | low | accepted-residual | Level B check (test/containment) | A tab that tampers with a non-held arming file and restores it before the check is not caught. | accepted by an agent: The ungated checkout race the write-back ADR records; a host run descended from the editor is marked regardless. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-4** | low | accepted-residual | Level B check (test/containment) | The excusing denial is matched profile-wide, with no window, tab or time binding. | accepted by an agent: With host facts hard, the denial only explains an in-tab non-run, which a tab could equally cause by breaking its own probe. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-8** | low | fixed-untested | Level B check (test/containment) | The vector list was written out three times. | A refactor to one list; FXF-6 covers its effect. |
@@ -2152,6 +2153,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | FAB2-6 | low | fixed | The Linux driver tarball was never bound to a commit. | patch:affc83a624aeeaf36764a11efd155cae5b0b01ba · `test/app-build.test.ts` "fetched-app binding: missing, unreadable or commitless build info" |
 | FAB2-7 | low | fixed | Hardcoded branch location; no automated FAB-1 test. | patch:affc83a624aeeaf36764a11efd155cae5b0b01ba · `seclab` "a refused branch fetch ($args) left an earlier build" |
 | FAB2-8 | info | false-positive | Prompt injection. | The review recorded no issue. |
+| FAB3-1 | medium | fixed | A failed removal skipped the install, yet cleared the marker. | patch:d074d4d7f03e98ba2e554773daa53deee4945c96 · `seclab` "an earlier app that couldn't be removed still cleared the marker (FAB3-1)" |
+| FAB3-2 | medium | fixed | A planted .git could choose the HEAD an app is compared with. | patch:d074d4d7f03e98ba2e554773daa53deee4945c96 · `test/app-build.test.ts` "fetched-app binding: a .git planted beside an app does not choose its HEAD (FAB3-2)" |
+| FAB3-3 | low | fixed | The marker write followed a symlink. | patch:d074d4d7f03e98ba2e554773daa53deee4945c96 · `seclab` "the marker was written through a symlink (FAB3-3)" |
+| FAB3-4 | low | fixed-untested | A failed git status read as a clean tree. | Build-script plumbing; needs a full Linux build to exercise. |
+| FAB3-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md)
 
