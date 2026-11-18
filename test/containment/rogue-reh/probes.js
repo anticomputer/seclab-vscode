@@ -239,8 +239,11 @@ function observeProfileLaunch(args) {
  * the window asks again. Facts only: how many replies carried the lie, and the canary tokens seen.
  */
 const ENV_REF = 'data:server-locations';
-const envProbe = { armed: false, served: 0, createProcess: 0, tokens: new Set() };
+const envProbe = { armed: false, served: 0, calls: 0, createProcess: 0, tokens: new Set() };
 function armEnvironmentLie(socketServer, ctx, hostSettings) {
+	if (envProbe.armed) {
+		return;
+	}
 	const channels = socketServer && socketServer.channels;
 	const get = channels && (channels.get ? (n) => channels.get(n) : (n) => channels[n]);
 	const env = get && get('remoteextensionsenvironment');
@@ -251,6 +254,7 @@ function armEnvironmentLie(socketServer, ctx, hostSettings) {
 	const target = safety.safePath(ctx, hostSettings, 'host settings file');
 	const envCall = env.call.bind(env);
 	env.call = async (c, command, arg, ...rest) => {
+		envProbe.calls++;
 		const result = await envCall(c, command, arg, ...rest);
 		if (command === 'getEnvironmentData' && result && typeof result === 'object') {
 			// Marked $mid 2: the window's URI.revive ignores the marker (review ENV-8).
@@ -404,15 +408,19 @@ async function runRehProbes(socketServer, router) {
 		// The environment proof (patch 0059) runs this alone. `ready` is written once the lie is in
 		// place, so the harness knows to reload; `done` once it has opened a terminal after that.
 		armEnvironmentLie(socketServer, ctx, targets.hostsettings);
-		if (envProbe.armed && typeof targets.ready === 'string' && /^\/[A-Za-z0-9._\/-]+$/.test(targets.ready)) {
-			fs.writeFileSync(safety.safeWrite(ctx, targets.ready, 'armed marker'), '');
+		// Inside the tab no host path may be written (an advisory context refuses every write), so
+		// the armed marker goes beside this payload's own evidence, where the harness reads it.
+		const out = process.env.SECLAB_ROGUE_REH_OUT;
+		if (envProbe.armed && out) {
+			fs.mkdirSync(out, { recursive: true });
+			fs.writeFileSync(path.join(out, 'env-armed'), '');
 		}
 		await waitForReady(targets.done);
 		if (!envProbe.armed) {
 			inconclusive(results, 'reh-environment-host-settings', ENV_REF, KIND.noEmitter);
 		} else {
 			await probe(results, 'reh-environment-host-settings', ENV_REF, async () => ({
-				served: envProbe.served, createProcess: envProbe.createProcess, canaryTokens: [...envProbe.tokens].sort().slice(0, 16),
+				served: envProbe.served, calls: envProbe.calls, createProcess: envProbe.createProcess, canaryTokens: [...envProbe.tokens].sort().slice(0, 16),
 			}));
 		}
 		return results;
@@ -607,4 +615,25 @@ async function main(socketServer, router) {
 	} catch { /* evidence is best effort; an unrecordable value writes nothing */ }
 }
 
-module.exports = { runRehProbes, main };
+/**
+ * Called by the hook as this server starts, before any window connects, when a run was staged
+ * before it started: each window load starts a new server, and a window asks for its environment
+ * as soon as it connects, so the environment lie must be in place by then. It arms once both
+ * channels it wraps are registered. Nothing else runs early.
+ */
+function early(socketServer) {
+	const targets = stagedTargets();
+	const ctx = safety.context(targets);
+	if (!ctx.armed || targets.only !== 'environment' || !socketServer || typeof socketServer.registerChannel !== 'function') {
+		return;
+	}
+	const register = socketServer.registerChannel.bind(socketServer);
+	socketServer.registerChannel = (name, channel) => {
+		register(name, channel);
+		if (!envProbe.armed) {
+			armEnvironmentLie(socketServer, ctx, targets.hostsettings);
+		}
+	};
+}
+
+module.exports = { runRehProbes, main, early };
