@@ -205,6 +205,11 @@ const tests: Array<[string, () => void]> = [
 		assert.ok(failed(run({ expectations: exp, reh: reh(leaked), ...denied }).out, /reh-environment-host-settings patched predicate holds/));
 		// A lie never served, or a refusal never logged, proves nothing.
 		assert.ok(failed(run({ expectations: exp, reh: reh({ served: 0 }), ...denied }).out, /reh-environment-host-settings patched predicate holds/));
+		// A malformed count isn't a count (PR review on #66).
+		for (const bad of [{}, 'not-a-number', '1', 1.5, -1, Number.MAX_SAFE_INTEGER + 2]) {
+			assert.ok(failed(run({ expectations: exp, reh: reh({ served: bad }), ...denied }).out, /reh-environment-host-settings patched predicate holds/), `served ${JSON.stringify(bad)}`);
+			assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({ ...leaked, served: bad }) }).out, /reh-environment-host-settings shows the escape itself/), `baseline served ${JSON.stringify(bad)}`);
+		}
 		assert.ok(failed(run({ expectations: exp, reh: reh({}) }).out, /reh-environment-host-settings patched predicate holds/));
 	}],
 	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {

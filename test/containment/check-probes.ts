@@ -276,10 +276,16 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	// Patch 0059: the server served its lie, and the window refused the environment (logged) rather
 	// than reading the host file as the tab's settings.
 	'reh-environment-host-settings': r =>
-		Number(fact(r, 'served') ?? 0) < 1 ? 'the server never answered getEnvironmentData with the lie, so this proves nothing'
+		served(r) < 1 ? 'the server never answered getEnvironmentData with the lie, so this proves nothing'
 			: tokens(r).length > 0 ? 'the host file\'s canary reached the tab\'s REH'
 				: !deniedRefs.has('data:server-locations') ? 'no refusal of the environment in the decision log' : null,
 };
+
+/** How many times the rogue REH served its lie: a positive safe integer, else 0 (PR review on #66). */
+function served(r: Result): number {
+	const n = fact(r, 'served');
+	return typeof n === 'number' && Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
 
 /**
  * The partition checks read the profile's state database (test/containment/state-db.ts), so they
@@ -325,7 +331,7 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	'reh-profile-config-host-setting': r =>
 		fact(r, 'pathCanary') === true && fact(r, 'envCanary') === true ? null : 'the host setting canary did not come back in both the profile path and its env',
 	'reh-environment-host-settings': r =>
-		Number(fact(r, 'served') ?? 0) > 0 && tokens(r).some(t => t.startsWith('seclabcanary_HOSTREMOTE_')) ? null : 'the host file named as the tab\'s settings did not reach the REH',
+		served(r) > 0 && tokens(r).some(t => t.startsWith('seclabcanary_HOSTREMOTE_')) ? null : 'the host file named as the tab\'s settings did not reach the REH',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {
