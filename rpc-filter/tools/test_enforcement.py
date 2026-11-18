@@ -630,3 +630,37 @@ class CallerGateSelfTest(unittest.TestCase):
         added = fresh._code_only(fresh._patch_added_text())
         self.assertRegex(added, r"\bseclabResolveTabId\b",
                          "seclabResolveTabId has no caller in the patch queue's upstream hunks")
+
+
+class InventoryPinTest(unittest.TestCase):
+    """The drift check judges the inventory of the pinned upstream, or nothing (review UB-1)."""
+
+    A, B = "a" * 40, "b" * 40
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="seclab-pin-test-")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def lock(self, body):
+        with open(os.path.join(self.root, "upstream.lock"), "w", encoding="utf-8") as fh:
+            fh.write(body)
+
+    def test_control_an_inventory_of_the_pinned_upstream_passes(self):
+        self.lock("UPSTREAM_TAG=1.0.0\nUPSTREAM_SHA=%s\n" % self.A)
+        self.assertIsNone(CD.inventory_pin_problem({"upstream_sha": self.A}, self.root))
+
+    def test_a_stale_inventory_fails_even_when_the_policy_agrees_with_it(self):
+        self.lock("UPSTREAM_TAG=1.0.1\nUPSTREAM_SHA=%s\n" % self.A)
+        inv, policy = {"upstream_sha": self.B}, {"upstream_sha": self.B}
+        self.assertEqual(inv["upstream_sha"], policy["upstream_sha"])
+        self.assertIn("upstream.lock pins", CD.inventory_pin_problem(inv, self.root) or "")
+
+    def test_a_missing_pin_fails(self):
+        self.assertIn("pins nothing", CD.inventory_pin_problem({"upstream_sha": self.A}, self.root) or "")
+
+    def test_a_lock_without_a_sha_fails(self):
+        self.lock("UPSTREAM_TAG=1.0.0\n")
+        self.assertIsNotNone(CD.inventory_pin_problem({"upstream_sha": self.A}, self.root))
+

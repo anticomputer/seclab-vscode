@@ -753,6 +753,22 @@ def check_validators(policy: dict, source: str, uri_positions: dict | None = Non
     return errors
 
 
+def inventory_pin_problem(inv: dict, repo_root: str) -> "str | None":
+    """Why the inventory isn't of the upstream the build pins, or None.
+
+    Without this, an upstream bump that skipped regeneration compared the old inventory with the
+    old policy and passed (review UB-1 of the 1.145.3 bump): a vacuous check that looks like a
+    real one.
+    """
+    from seclab_inventory.sources import read_pinned_sha  # noqa: E402
+    pinned, origin = read_pinned_sha(repo_root, None)
+    have = str(inv.get("upstream_sha") or "")
+    if origin != "upstream.lock" or have != pinned:
+        return ("inventory is at %s but upstream.lock pins %s; run rpc-filter/tools/fetch-upstream.sh"
+                " and run.sh, then re-pin the policy (repin_policy.py)" % (have[:12] or "nothing", (pinned or "nothing")[:12]))
+    return None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accept", action="store_true",
@@ -767,15 +783,9 @@ def main(argv=None) -> int:
     inv = _load(INVENTORY)
     policy = _load(POLICY)
 
-    # The inventory must be of the upstream the build pins. Without this, an upstream bump that
-    # skipped regeneration compared the old inventory with the old policy and passed (review of
-    # the 1.145.3 bump): a vacuous check that looks like a real one.
-    from seclab_inventory.sources import read_pinned_sha  # noqa: E402
-    pinned, origin = read_pinned_sha(REPO_ROOT, None)
-    if origin != "upstream.lock" or inv["upstream_sha"] != pinned:
-        print("error: inventory is at %s but upstream.lock pins %s; run rpc-filter/tools/fetch-upstream.sh"
-              " and run.sh, then re-pin the policy (repin_policy.py)"
-              % (inv["upstream_sha"][:12], (pinned or "nothing")[:12]), file=sys.stderr)
+    problem = inventory_pin_problem(inv, REPO_ROOT)
+    if problem:
+        print("error: %s" % problem, file=sys.stderr)
         return 2
 
     if inv["upstream_sha"] != policy["upstream_sha"]:
