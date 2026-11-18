@@ -17539,6 +17539,398 @@
 				"file": "test/clean-host.ts",
 				"name": "lease lock: the lease of seclab-tab-oci:b-proof.lock held the lock of seclab-tab-oci:b-proof"
 			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-1",
+			"round": "Round 1",
+			"severity": "high",
+			"summary": "The expected [task]/[fsmonitor] failure rested on two tab-reachable facts, so a host run could read as expected.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a5ef65b994e4",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "with no evidence, a host marker still fails (a tab cannot withhold a host run)"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-2",
+			"round": "Round 1",
+			"severity": "medium",
+			"summary": "With no evidence file the host-marker check vanished while the sweep exempted the marker.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a5ef65b994e4",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "a missing evidence file is one honest failing check, and the host-marker check stands"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-3",
+			"round": "Round 1",
+			"severity": "medium",
+			"summary": "The gap text claimed Level A covers a host run of fsmonitor.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "a5ef65b994e4",
+			"gap": "Wording only."
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-4",
+			"round": "Round 1",
+			"severity": "low",
+			"summary": "The excusing denial is matched profile-wide, with no window, tab or time binding.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "With host facts hard, the denial only explains an in-tab non-run, which a tab could equally cause by breaking its own probe.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-level-b-filtered-losses.md",
+				"quote": "which a tab could equally cause by breaking its own probe"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-5",
+			"round": "Round 1",
+			"severity": "info",
+			"summary": "Removing the unconditional [task] expected failure was reviewed for regressions.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "No issue: strictly narrower.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-level-b-filtered-losses.md",
+				"quote": "is strictly narrower."
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-6",
+			"round": "Round 2",
+			"severity": "medium",
+			"summary": "On OCI the fsmonitor marker was exempt from the sweep with no fsmonitor row behind it.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "bdfb38af7b54",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-6: on OCI a host fsmonitor marker is unattributed (no fsmonitor row covers it)"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-7",
+			"round": "Round 2",
+			"severity": "medium",
+			"summary": "A tab could blank the probe's marker line, so a host run wrote no marker.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "bdfb38af7b54",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-7: a host run (trusted env) writes its marker though the tab blanked and expired the targets"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-8",
+			"round": "Round 2",
+			"severity": "low",
+			"summary": "The vector list was written out three times.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "7f9a97962728",
+			"gap": "A refactor to one list; FXF-6 covers its effect."
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-9",
+			"round": "Round 2",
+			"severity": "info",
+			"summary": "The sbx host-evidence row rested on an unstated premise.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "7d2b3af39881",
+			"gap": "The premise proved false and the row was removed (FXF-20)."
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-10",
+			"round": "Round 3",
+			"severity": "medium",
+			"summary": "On the trusted route an out-of-run canary line made the probe exit before its marker.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7b1fda18c1c8",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-10: on the trusted route a canary path outside the run is skipped, not a reason to stay silent"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-11",
+			"round": "Round 3",
+			"severity": "medium",
+			"summary": "The marker-line check accepted any matching line while the probe reads the first.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7b1fda18c1c8",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-7, 10-12: any edit to what a host run reads fails, however small"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-12",
+			"round": "Round 3",
+			"severity": "medium",
+			"summary": "On OCI the probe, its task or the fsmonitor config could be rewritten in the host checkout unseen.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7b1fda18c1c8",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-7, 10-12: any edit to what a host run reads fails, however small"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-13",
+			"round": "Round 3",
+			"severity": "low",
+			"summary": "The trusted route had no arming window.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7b1fda18c1c8",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "the trusted route stays inert without the matching nonce file or past its window (FXF-13)"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-14",
+			"round": "Round 4",
+			"severity": "medium",
+			"summary": "Digesting every fixture file failed every OCI run (the rogue extension rewrites its settings).",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "9aaaebc40a46",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-14: on OCI the run output (rogue settings payload, its instructions, evidence) stays green"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-15",
+			"round": "Round 4",
+			"severity": "low",
+			"summary": "Files a tab adds to the checkout were invisible.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "9aaaebc40a46",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-15: a file a tab adds to the checkout fails on both drivers"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-16",
+			"round": "Round 4",
+			"severity": "info",
+			"summary": "Keys from the arming record weren't path-checked.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "9aaaebc40a46",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-16: an arming record naming a path outside the workspace is no record"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-17",
+			"round": "Round 5",
+			"severity": "low",
+			"summary": "An unreadable directory read as nothing added.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7d2b3af39881",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-17/18: an unreadable directory fails the added-files row and the record; OS artifacts are ignored"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-18",
+			"round": "Round 5",
+			"severity": "low",
+			"summary": "Host OS artifacts would fail a clean run.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7d2b3af39881",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-17/18: an unreadable directory fails the added-files row and the record; OS artifacts are ignored"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-19",
+			"round": "Round 5",
+			"severity": "info",
+			"summary": "A dead field pointed inside the pinned directory.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "7d2b3af39881",
+			"gap": "A removed field."
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-20",
+			"round": "Round 6",
+			"severity": "medium",
+			"summary": "Evidence syncs from an sbx tab to the host checkout, so the host-evidence row proved nothing and would fail any build where the task runs.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "7d2b3af39881",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-20: evidence synced to the host checkout is run output on both drivers, not a host run"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-21",
+			"round": "Round 6",
+			"severity": "medium",
+			"summary": "The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "550577ef36ad",
+			"gap": "Wording; the digest test covers detection on both drivers."
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-22",
+			"round": "Round 6",
+			"severity": "low",
+			"summary": "Evidence present on the host but hidden in the tab read as no evidence.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "550577ef36ad",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-22: evidence on the host but not in the tab is a failure, not a missing file"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-23",
+			"round": "Round 6",
+			"severity": "low",
+			"summary": "The OS-artifact filter matched at any depth.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "550577ef36ad",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-23: a tab-added file cannot hide behind an OS artifact name"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-24",
+			"round": "Copilot review on PR 26",
+			"severity": "low",
+			"summary": "A directory named like an OS artifact was skipped with its subtree.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "d8f9db697231",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "PR 26 review: a directory named like an OS artifact is walked; only the real ones are skipped"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-25",
+			"round": "Copilot review on PR 26",
+			"severity": "medium",
+			"summary": "On OCI a FIFO in place of an arming file blocked the check before report and teardown.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "d8f9db697231",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "PR 26 review: a FIFO, symlink or oversized file in place of an arming file fails, never blocks"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-27",
+			"round": "Copilot review on PR 26",
+			"severity": "low",
+			"summary": "A symlinked parent directory let the check read and hash a host file.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a12ac178bb0a",
+			"test": {
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "a symlinked parent is hashed"
+			}
+		},
+		{
+			"record": "20261117-level-b-filtered-losses.md",
+			"anchor": "FXF-26",
+			"round": "Round 7",
+			"severity": "low",
+			"summary": "A tab that tampers with a non-held arming file and restores it before the check is not caught.",
+			"component": "Level B check (test/containment)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "The ungated checkout race the write-back ADR records; a host run descended from the editor is marked regardless.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-level-b-filtered-losses.md",
+				"quote": "The ungated checkout"
+			}
 		}
 	]
 }

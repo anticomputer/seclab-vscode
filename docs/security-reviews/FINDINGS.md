@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 216 | 355 | 45 | 714 |
+| fixed | 14 | 85 | 225 | 363 | 46 | 733 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 170 | 60 | 287 |
-| accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
+| fixed-untested | 0 | 5 | 54 | 171 | 62 | 292 |
+| accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 618 | 157 | 1190 |
+| false-positive | 0 | 0 | 0 | 0 | 21 | 21 |
+| **all** | 16 | 94 | 317 | 629 | 161 | 1217 |
 
 ## Baseline: open high and critical findings
 
@@ -212,6 +212,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-liveness-gate](20261109-liveness-gate.md) **—** | medium | accepted-residual | liveness gate (mark log) | \`$RUNNER_TEMP/liveness.log\` has no integrity: host-side code in the job could forge every liveness mark. | accepted by an agent: Tabs cannot reach the log and SECLAB_LIVENESS_LOG is not in the tab environment; integrity is out of reach while marks are host-side text appended in the job. |
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-8** | medium | fixed-untested | seclab verify_signed_image | Locally, an existing .work/deps-verified marker skips cosign and attestation verification | The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-2** | medium | fixed-untested | build/tools/tool.sh | Tool images were reused by content tag, which any local process could point at another image, replacing the verifier. | The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-21** | medium | fixed-untested | Level B check (test/containment) | The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets. | Wording; the digest test covers detection on both drivers. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-3** | medium | fixed-untested | Level B check (test/containment) | The gap text claimed Level A covers a host run of fsmonitor. | Wording only. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-F** | low | fixed-untested | campaign fixture teardown | Planted inert files were left in the host checkout when the run used KEEP=1. | \`disarmCampaign\` is called unconditionally in \`cleanup()\` (test/containment/run.ts), but nothing runs the suite with KEEP=1 to prove the planted .git/.envrc are gone. |
@@ -350,6 +352,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
 | [20261117-copilot-review-pr25](20261117-copilot-review-pr25.md) **CR25-4** | low | fixed-untested | harness runners | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-26** | low | accepted-residual | Level B check (test/containment) | A tab that tampers with a non-held arming file and restores it before the check is not caught. | accepted by an agent: The ungated checkout race the write-back ADR records; a host run descended from the editor is marked regardless. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-4** | low | accepted-residual | Level B check (test/containment) | The excusing denial is matched profile-wide, with no window, tab or time binding. | accepted by an agent: With host facts hard, the denial only explains an in-tab non-run, which a tab could equally cause by breaking its own probe. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-8** | low | fixed-untested | Level B check (test/containment) | The vector list was written out three times. | A refactor to one list; FXF-6 covers its effect. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
@@ -383,6 +388,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-3** | info | accepted-residual | Tab Manager (open request) | The Tab Manager's sameFolder keys on the platform, so a case-sensitive macOS volume keeps VVV-3's residual. | accepted by an agent: Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-5** | info | fixed-untested | docs/edr/20261112-main-process-routing.md | The EDR's "tab windows are untouched" was stale. | Documentation only; nothing to test. |
 | [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-5** | info | fixed-untested | build/check-pins.ts | check-pins' purity probe depended on the supplied file list. | No case removes the parser from the list while it stays on disk. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-19** | info | fixed-untested | Level B check (test/containment) | A dead field pointed inside the pinned directory. | A removed field. |
+| [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-9** | info | fixed-untested | Level B check (test/containment) | The sbx host-evidence row rested on an unstated premise. | The premise proved false and the row was removed (FXF-20). |
 
 ### RPC follow-ups
 
@@ -2116,6 +2123,38 @@ Every other commit the register cites is on main's history, or on the branch its
 | FU-10 | low | fixed | Exclude files and git config on the volume or the user could hide a planted file from the clean and the check. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)" |
 | FU-11 | low | fixed | The install stamp hashed unframed input, skipped symlinked lockfiles and mis-read paths with newlines. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)" |
 | FU-12 | info | false-positive | Upstream reuses a cached marketplace built-in by version without re-checking its hash. | Nothing we ship reads that cache: the local volume build makes only the REH and fetches none, and desktop builds start on fresh runners. |
+
+### [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| FXF-1 | high | fixed | The expected \[task\]/\[fsmonitor\] failure rested on two tab-reachable facts, so a host run could read as expected. | a5ef65b994e4 · `test/containment/evidence-shape.test.ts` "with no evidence, a host marker still fails (a tab cannot withhold a host run)" |
+| FXF-2 | medium | fixed | With no evidence file the host-marker check vanished while the sweep exempted the marker. | a5ef65b994e4 · `test/containment/evidence-shape.test.ts` "a missing evidence file is one honest failing check, and the host-marker check stands" |
+| FXF-3 | medium | fixed-untested | The gap text claimed Level A covers a host run of fsmonitor. | Wording only. |
+| FXF-4 | low | accepted-residual | The excusing denial is matched profile-wide, with no window, tab or time binding. | accepted by an agent: With host facts hard, the denial only explains an in-tab non-run, which a tab could equally cause by breaking its own probe. |
+| FXF-5 | info | false-positive | Removing the unconditional \[task\] expected failure was reviewed for regressions. | No issue: strictly narrower. |
+| FXF-6 | medium | fixed | On OCI the fsmonitor marker was exempt from the sweep with no fsmonitor row behind it. | bdfb38af7b54 · `test/containment/evidence-shape.test.ts` "FXF-6: on OCI a host fsmonitor marker is unattributed (no fsmonitor row covers it)" |
+| FXF-7 | medium | fixed | A tab could blank the probe's marker line, so a host run wrote no marker. | bdfb38af7b54 · `test/containment/evidence-shape.test.ts` "FXF-7: a host run (trusted env) writes its marker though the tab blanked and expired the targets" |
+| FXF-8 | low | fixed-untested | The vector list was written out three times. | A refactor to one list; FXF-6 covers its effect. |
+| FXF-9 | info | fixed-untested | The sbx host-evidence row rested on an unstated premise. | The premise proved false and the row was removed (FXF-20). |
+| FXF-10 | medium | fixed | On the trusted route an out-of-run canary line made the probe exit before its marker. | 7b1fda18c1c8 · `test/containment/evidence-shape.test.ts` "FXF-10: on the trusted route a canary path outside the run is skipped, not a reason to stay silent" |
+| FXF-11 | medium | fixed | The marker-line check accepted any matching line while the probe reads the first. | 7b1fda18c1c8 · `test/containment/evidence-shape.test.ts` "FXF-7, 10-12: any edit to what a host run reads fails, however small" |
+| FXF-12 | medium | fixed | On OCI the probe, its task or the fsmonitor config could be rewritten in the host checkout unseen. | 7b1fda18c1c8 · `test/containment/evidence-shape.test.ts` "FXF-7, 10-12: any edit to what a host run reads fails, however small" |
+| FXF-13 | low | fixed | The trusted route had no arming window. | 7b1fda18c1c8 · `test/containment/evidence-shape.test.ts` "the trusted route stays inert without the matching nonce file or past its window (FXF-13)" |
+| FXF-14 | medium | fixed | Digesting every fixture file failed every OCI run (the rogue extension rewrites its settings). | 9aaaebc40a46 · `test/containment/evidence-shape.test.ts` "FXF-14: on OCI the run output (rogue settings payload, its instructions, evidence) stays green" |
+| FXF-15 | low | fixed | Files a tab adds to the checkout were invisible. | 9aaaebc40a46 · `test/containment/evidence-shape.test.ts` "FXF-15: a file a tab adds to the checkout fails on both drivers" |
+| FXF-16 | info | fixed | Keys from the arming record weren't path-checked. | 9aaaebc40a46 · `test/containment/evidence-shape.test.ts` "FXF-16: an arming record naming a path outside the workspace is no record" |
+| FXF-17 | low | fixed | An unreadable directory read as nothing added. | 7d2b3af39881 · `test/containment/evidence-shape.test.ts` "FXF-17/18: an unreadable directory fails the added-files row and the record; OS artifacts are ignored" |
+| FXF-18 | low | fixed | Host OS artifacts would fail a clean run. | 7d2b3af39881 · `test/containment/evidence-shape.test.ts` "FXF-17/18: an unreadable directory fails the added-files row and the record; OS artifacts are ignored" |
+| FXF-19 | info | fixed-untested | A dead field pointed inside the pinned directory. | A removed field. |
+| FXF-20 | medium | fixed | Evidence syncs from an sbx tab to the host checkout, so the host-evidence row proved nothing and would fail any build where the task runs. | 7d2b3af39881 · `test/containment/evidence-shape.test.ts` "FXF-20: evidence synced to the host checkout is run output on both drivers, not a host run" |
+| FXF-21 | medium | fixed-untested | The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets. | Wording; the digest test covers detection on both drivers. |
+| FXF-22 | low | fixed | Evidence present on the host but hidden in the tab read as no evidence. | 550577ef36ad · `test/containment/evidence-shape.test.ts` "FXF-22: evidence on the host but not in the tab is a failure, not a missing file" |
+| FXF-23 | low | fixed | The OS-artifact filter matched at any depth. | 550577ef36ad · `test/containment/evidence-shape.test.ts` "FXF-23: a tab-added file cannot hide behind an OS artifact name" |
+| FXF-24 | low | fixed | A directory named like an OS artifact was skipped with its subtree. | d8f9db697231 · `test/containment/evidence-shape.test.ts` "PR 26 review: a directory named like an OS artifact is walked; only the real ones are skipped" |
+| FXF-25 | medium | fixed | On OCI a FIFO in place of an arming file blocked the check before report and teardown. | d8f9db697231 · `test/containment/evidence-shape.test.ts` "PR 26 review: a FIFO, symlink or oversized file in place of an arming file fails, never blocks" |
+| FXF-27 | low | fixed | A symlinked parent directory let the check read and hash a host file. | a12ac178bb0a · `test/containment/evidence-shape.test.ts` "a symlinked parent is hashed" |
+| FXF-26 | low | accepted-residual | A tab that tampers with a non-held arming file and restores it before the check is not caught. | accepted by an agent: The ungated checkout race the write-back ADR records; a host run descended from the editor is marked regardless. |
 
 ### [20261117-link-check-retries](20261117-link-check-retries.md)
 
