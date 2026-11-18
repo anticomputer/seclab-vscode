@@ -2315,8 +2315,8 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| PRC-1 | low | fixed | check_responses accepted any added seclabFromTab( in the named patch, so a registration whose customer never applied the sanitiser (return hover;, or a commented-out rewrite) still passed. | patch:863db6bb223957a5c9adadf7291145ebe15a4ae5 · `rpc-filter/tools/test_enforcement.py` "test_mutants_of_the_real_patch_fail" |
-| PRC-2 | low | fixed | No test reached tabSelector: the empty-argument case stopped at arity, so removing the scheme guard that keeps tab providers off host documents left the suite green. | patch:bcd5b0110b8b4d43950482938b0c6534a96b7e06 · `test/containment/arg-validators.test.ts` "provider selectors: host schemes, odd fields and non-filters are refused, for hover and completion" |
+| PRC-1 | low | fixed | check_responses accepted any added seclabFromTab( in the named patch, so a registration whose customer never applied the sanitiser (return hover;, or a commented-out rewrite) still passed. | patch:5bd455e45dd47dbc1e3308a840ba2331116a024e · `rpc-filter/tools/test_enforcement.py` "test_mutants_of_the_real_patch_fail" |
+| PRC-2 | low | fixed | No test reached the provider selector's scheme restriction: the empty-argument case stopped at arity, so removing the guard that keeps tab providers off host documents left the suite green. The restriction now lives in seclabFromTab(...).selector, tested on a real bundled provider's selector. | patch:4441fc7324901c4f9643cc87f74adad8b51a4b83 · `test/containment/filter-module.test.ts` "response: a provider selector keeps only documents the tab owns (review on #48)" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
