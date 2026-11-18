@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, readRegular, unattributedMarkers, withheldEvidence, type Evidence } from './assert.ts';
+import { armingDigest, armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, readRegular, unattributedMarkers, withheldEvidence, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -301,6 +301,19 @@ test('PR 26 review: a FIFO, symlink or oversized file in place of an arming file
 		fs.writeFileSync(path.join(dir, 'f'), 'x'.repeat(100));
 		assert.equal(readRegular(path.join(dir, 'f'), 10), undefined, 'over the bound');
 		assert.equal(readRegular(path.join(dir, 'f'))?.length, 100);
+		// A symlinked parent directory leads out of the workspace: not read, not hashed (Copilot
+		// review on PR 26). Control: the same file through a real directory.
+		const ws = path.join(dir, 'ws'), out = path.join(dir, 'outside');
+		fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
+		fs.mkdirSync(out);
+		fs.writeFileSync(path.join(out, 'tasks.json'), '{}');
+		fs.symlinkSync(out, path.join(ws, '.vscode'));
+		assert.equal(readRegular(path.join(ws, '.vscode', 'tasks.json'), undefined, ws), undefined, 'a symlinked parent');
+		assert.equal(armingDigest(ws, ['.vscode/tasks.json'])['.vscode/tasks.json'], null, 'a symlinked parent is hashed');
+		fs.rmSync(path.join(ws, '.vscode'));
+		fs.mkdirSync(path.join(ws, '.vscode'));
+		fs.writeFileSync(path.join(ws, '.vscode', 'tasks.json'), '{}');
+		assert.notEqual(armingDigest(ws, ['.vscode/tasks.json'])['.vscode/tasks.json'], null, 'the control');
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
