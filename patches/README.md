@@ -194,13 +194,14 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   management channels' replies and events (URI-shaped values; MCP servers also lose their icon and links), MCP discovery, file change events and scanned extensions. Install events from the
   tab lose any gallery entry; the host never installs a package from the tab's file system or from
   the tab's workspace folders, nor any extension a tab names from the gallery ("Install Locally",
-  "Install Remote Extensions Locally"), nor the packs and dependencies a tab
+  "Install Remote Extensions Locally", or an update or uninstall a tab language-pack manifest fans
+  out to the host), nor the packs and dependencies a tab
   extension's manifest names, and the window doesn't retry installs the tab's server reports failed
   (`host-install`). A foreign location refuses the environment or reply,
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-24;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-27;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this

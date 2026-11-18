@@ -972,8 +972,8 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
 /** Where a tab's server named a location outside the tab (patch 0059). */
 /**
  * How the walk takes `key` of the object at path `owner`: `true`, as sent, unchecked; `'strings'`, as
- * sent if it is a plain object of strings (a record whose keys the config's author chose, which may
- * be URI key names), else as foreign; `false`, walked.
+ * sent if it is a plain object of strings, numbers and nulls (a record whose keys the config's author
+ * chose, which may be URI key names; review ENV-27), else as foreign; `false`, walked.
  */
 export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean | 'strings';
 
@@ -1041,7 +1041,7 @@ export function seclabTabUris<T>(remoteAuthority: string, value: T, skip?: Secla
 				const how = skip?.(at, k);
 				if (how === 'strings') {
 					const r = o[k];
-					if (r !== undefined && (!r || typeof r !== 'object' || Array.isArray(r) || Object.getPrototypeOf(r) !== Object.prototype || Object.values(r).some(x => typeof x !== 'string'))) {
+					if (r !== undefined && (!r || typeof r !== 'object' || Array.isArray(r) || Object.getPrototypeOf(r) !== Object.prototype || Object.values(r).some(x => x !== null && typeof x !== 'string' && typeof x !== 'number'))) {
 						throw foreign();
 					}
 					out[k] = r;
@@ -1119,9 +1119,12 @@ export function seclabTabMcpChannel(channel: IChannel, remoteAuthority: string):
 		const { icon: _i, galleryUrl: _g, repositoryUrl: _r, ...rest } = v as Record<string, unknown>;
 		return rest;
 	};
-	const servers = (v: unknown): unknown => Array.isArray(v)
-		? v.map(x => x && typeof x === 'object' && Object.hasOwn(x, 'local') ? { ...x, local: server((x as { local: unknown }).local) } : server(x))
-		: v && typeof v === 'object' && Object.hasOwn(v, 'local') ? { ...v, local: server((v as { local: unknown }).local) } : server(v);
+	// Both the object and its `local`, whatever it claims to be (review ENV-26).
+	const both = (v: unknown): unknown => {
+		const s = server(v);
+		return s && typeof s === 'object' && Object.hasOwn(s, 'local') ? { ...s, local: server((s as { local: unknown }).local) } : s;
+	};
+	const servers = (v: unknown): unknown => Array.isArray(v) ? v.map(both) : both(v);
 	return {
 		call: async <T>(command: string, arg?: unknown, token?: CancellationToken) => servers(await checked.call<T>(command, arg, token)) as T,
 		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => checked.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables),
