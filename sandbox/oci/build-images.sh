@@ -45,14 +45,13 @@ if [[ -n "$PERBUILD" ]]; then
 	mkdir -p "$lease"
 	# One lock per tag, shared with clean-host: held from the lease until the tag is published, so a
 	# cleanup that decided earlier can't delete the tag this build renews (Copilot review on PR 25).
-	# A lock older than 15 minutes is a crashed build's.
+	# Only its holder ever removes it: breaking a "stale" lock races another contender's fresh one.
 	lock="$lease/$TAG.lock" got=0
 	for _ in $(seq 1 600); do
 		if mkdir "$lock" 2>/dev/null; then got=1; break; fi
-		[[ -n "$(find "$lock" -maxdepth 0 -mmin +15 2>/dev/null)" ]] && rmdir "$lock" 2>/dev/null
 		sleep 1
 	done
-	[[ $got = 1 ]] || { echo "$TAG: its lease lock $lock is held (another build or clean-host); retry" >&2; exit 1; }
+	[[ $got = 1 ]] || { echo "$TAG: its lease lock $lock is still held after 10 minutes (another build, clean-host, or a crashed build: once none runs, rmdir it)" >&2; exit 1; }
 	trap 'rmdir "$lock" 2>/dev/null || true' EXIT
 	date +%s > "$lease/$TAG"
 fi

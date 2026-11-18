@@ -87,24 +87,16 @@ function leaseDir(): string {
 }
 
 /** Run `fn` holding a tag's lease lock, the one the builders hold from writing its lease until
- *  the tag is published. Undefined when another holder has it (a build in progress): the caller
- *  leaves the tag alone. A lock older than 15 minutes is a crashed build's, and is broken
- *  (Copilot review on PR 25). */
+ *  the tag is published. Undefined when anyone else has it: the caller leaves the tag alone. Only
+ *  the holder removes a lock; a stale one (a crashed build) is reported, never broken, since
+ *  breaking it races another contender's fresh lock (Copilot review on PR 25). */
 export function withTagLock<T>(dir: string, name: string, fn: () => T): T | undefined {
 	const lock = path.join(dir, `${name}.lock`);
 	fs.mkdirSync(dir, { recursive: true });
 	try {
 		fs.mkdirSync(lock);
 	} catch {
-		try {
-			if (Date.now() - fs.statSync(lock).mtimeMs <= 15 * 60_000) {
-				return undefined;
-			}
-			fs.rmdirSync(lock);
-			fs.mkdirSync(lock);
-		} catch {
-			return undefined;
-		}
+		return undefined;
 	}
 	try {
 		return fn();
@@ -202,6 +194,10 @@ if (args.has('--self-test')) {
 		if (lockAt < 0 || releaseAt < 0 || !(lockAt < leaseAt && publishAt < releaseAt)) {
 			bad.push(`${file}: the lease lock isn't held from the lease until the tag is published`);
 		}
+		// Only the holder removes it: the exit trap and the release, never a "stale" break.
+		if ((text.match(/rmdir "\$lock"/g) ?? []).length !== 2) {
+			bad.push(`${file}: the lease lock is removed somewhere other than its holder's trap and release`);
+		}
 		// Not inside an && list, whose failure set -e wouldn't stop on.
 		if (/&&[^\n]*\$lease|\$lease[^\n]*&&/.test(text)) {
 			bad.push(`${file}: a lease step is in an && list, which set -e doesn't stop on`);
@@ -216,11 +212,18 @@ if (args.has('--self-test')) {
 			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined) {
 				bad.push('lease lock: a deletion ran while a build held the lock');
 			}
-			fs.mkdirSync(path.join(dir, 'seclab-tab:b-x.lock'), { recursive: true });
+			// An old lock is never broken: two contenders could both judge it stale, and the second
+			// would remove the first's fresh lock.
 			const old = new Date(Date.now() - 20 * 60_000);
 			fs.utimesSync(path.join(dir, 'seclab-tab:b-x.lock'), old, old);
-			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== 'ran' || fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
-				bad.push('lease lock: a stale lock was not broken, or the lock was kept after use');
+			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined || !fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
+				bad.push('lease lock: an old lock was broken or removed by a non-holder');
+			}
+			// A holder's lock excludes a concurrent contender, and the holder alone releases it.
+			fs.rmSync(path.join(dir, 'seclab-tab:b-x.lock'), { recursive: true, force: true });
+			const inner = withTagLock(dir, 'seclab-tab:b-x', () => withTagLock(dir, 'seclab-tab:b-x', () => 'ran'));
+			if (inner !== undefined || fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
+				bad.push('lease lock: a contender entered while the lock was held, or the holder kept it after use');
 			}
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
@@ -594,6 +597,17 @@ for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 		del: () => /^seclab-tab(-oci)?:b-/.test(n) ? perBuildDelete(n, img.created, () => ok('docker', ['image', 'rm', n])) : ok('docker', ['image', 'rm', n]),
 	});
 }
+// Lease locks are removed only by their holder; one older than 15 minutes is probably a crashed
+// build's, and is reported for removal by hand once no build runs (never broken automatically).
+try {
+	for (const f of fs.readdirSync(leaseDir()).filter(f => f.endsWith('.lock'))) {
+		const age = Date.now() - fs.statSync(path.join(leaseDir(), f)).mtimeMs;
+		if (age > 15 * 60_000) {
+			items.push({ kind: 'lease lock', name: path.join(leaseDir(), f), state: `${Math.round(age / 60_000)} min`, remove: false,
+				why: 'held long: a crashed build? rmdir it by hand once no build or clean-host runs', del: () => false });
+		}
+	}
+} catch { /* no lease directory */ }
 // sbx templates, a store of their own: a proof build's per-build template expires like its OCI
 // twin; --caches removes the live ones too.
 const tpl = run(SBX, ['template', 'ls', '--json']);
