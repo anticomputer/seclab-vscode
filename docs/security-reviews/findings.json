@@ -19741,6 +19741,45 @@
 			"status": "fixed-untested",
 			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
 			"gap": "A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-4",
+			"severity": "low",
+			"summary": "The try/catch around the two migration checks swallowed any error, so an error other than the gate's refusal became a silent, unlogged no-op",
+			"component": "patch 0018 chat session gate",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:d2937efd13e340d55c75e1673f2b31cc2f1d2c64",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-5",
+			"severity": "low",
+			"summary": "No assertion pinned the migration's catch body, so a best-effort carry-on would have passed the unit tests",
+			"component": "patch 0018 unit tests",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:d2937efd13e340d55c75e1673f2b31cc2f1d2c64",
+			"gap": "A test-quality fix: the unit test now pins the whole migration construct and that it holds no catch; nothing tests the test itself."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-6",
+			"severity": "low",
+			"summary": "Cancelling an in-flight request on the resend and send-now paths has no behavioural coverage, since the probe's restored session has nothing in flight",
+			"component": "chat-dispatch probe",
+			"owner": "agentic",
+			"status": "deferred",
+			"followUp": "With the increment that opens chat in tab windows (project owner decision, 2026-11-17): in a tab window a request can be in flight only in a session the gate allows, so a behavioural arm needs an allowed in-flight session. Until then the checks' position before both cancels is pinned by the patch-text ordering assertions.",
+			"ref": {
+				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
+				"quote": "R17-6 is deferred."
+			}
 		}
 	]
 }
