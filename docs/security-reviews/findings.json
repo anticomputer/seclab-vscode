@@ -18660,6 +18660,48 @@
 				"file": "build/check-required-checks.ts",
 				"name": "JSON with a permissions key inside a single-quoted value"
 			}
+		},
+		{
+			"record": "20261118-bump-alpine-zizmor-nginx.md",
+			"anchor": "BMP-1",
+			"round": "Round BMP",
+			"severity": "low",
+			"summary": "The pin-age lint dated an image index by its linux/amd64 config only, so a newer image in the index, such as an arm64 rebuild, passed the 7-day hold.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:c07e5ee2eb8c0a26930fc2551e49c6dec0221b89",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "BMP-1: an index is dated by the newest platform we run, not by linux/amd64 alone"
+			}
+		},
+		{
+			"record": "20261118-bump-alpine-zizmor-nginx.md",
+			"anchor": "BMP-2",
+			"round": "Round BMP",
+			"severity": "low",
+			"summary": "The dependency register's alpine entry omitted one of its pin sites from its used list.",
+			"component": "dependency register (deps/registry.json)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:7ff28ec62393f984dca05398cfc2f91d95928b86",
+			"gap": "A register data fix; deps check's pin scan already fails on a missed pin site, but nothing checks the used list itself."
+		},
+		{
+			"record": "20261118-bump-alpine-zizmor-nginx.md",
+			"anchor": "BMP-3",
+			"round": "Round BMP",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "pin bumps (deps/registry.json, docs-check.yml)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261118-bump-alpine-zizmor-nginx.md",
+				"quote": "None found in the diff"
+			}
 		}
 	]
 }

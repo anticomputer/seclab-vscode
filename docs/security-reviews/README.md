@@ -173,4 +173,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-17 | [the required-checks validator and Copilot's review backlog (round CR)](20261117-required-checks-review.md) | round CR, five rounds by an Opus-class model, of the fixes for Copilot's review | see record |
 | 2026-11-17 | [the scheme-squatting probe (Copilot review, PR #33)](20261117-scheme-squatting-probe.md) | test/squat/probe.ts and its probe extension, the runtime regression test for | see record |
 | 2026-11-17 | [the workspace-data probe (Copilot review, PR #37)](20261117-workspace-data-probe.md) | test/wsdata/probe.ts and its probe extension, the runtime regression test for | see record |
+| 2026-11-18 | [alpine, zizmor and nginx pin bumps (round BMP)](20261118-bump-alpine-zizmor-nginx.md) | round BMP, by an Opus-class model, of the pin bumps for alpine:3.22 (including | see record |
 <!-- index:end -->
