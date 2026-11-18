@@ -940,3 +940,19 @@ contribution and only iterate, and it is now frozen so the module's comment hold
 members. And the refusal now rests on the gate's sink being installed, which happens in a
 `BlockStartup` contribution, created synchronously before anything could dial; a future change to
 that contribution's phase would need to keep that ordering.
+
+## Automated PR review on #43, third pass
+
+| id | Sev | finding |
+|---|---|---|
+| CR43-5 | low | A refusal on a bypass path came after upstream had already removed the turn (resend), dequeued the message (drain), emptied the source queue (migration) or reordered and removed it (send-now), so refusing in a tab window cost the user that history or queue |
+
+**CR43-5 (fixed).** Nothing was dispatched, so the refusal held, but a tab window's restored
+history or queue was destroyed by the act of refusing it. Patch 0018 now also checks before each
+of the four mutations; the drain checks only when something is queued, since restoring a session
+drains too and an empty queue is not a request. The checks at dispatch stay, because the resource
+can still be re-targeted after entry. The chat-dispatch probe records whether each bypass arm left
+the restored session's transcript and queue as they were: with the previous 0018 exactly those six
+checks failed, with the fix they pass, and on both baselines they fail as predicted. The unit test
+`a refusal on a bypass path comes before the transcript or the queue is changed` pins each check
+ahead of its mutation in the patch text and fails on the previous patch.
