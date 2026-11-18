@@ -9,8 +9,8 @@
   included. A harness must not write through a path the running tab controls, must reach its
   teardown gate whatever the tab leaves, and must leave nothing behind.
 - **Related:** [squat probe review](20261117-scheme-squatting-probe.md),
-  [workspace-data probe review](20261117-workspace-data-probe.md),
-  [editor-tab review](20261116-editor-tab-provenance.md).
+  [editor-tab review](20261116-editor-tab-provenance.md); the workspace-data probe's review is in
+  PR #37.
 - **Prompt injection:** none found.
 
 ## Findings
