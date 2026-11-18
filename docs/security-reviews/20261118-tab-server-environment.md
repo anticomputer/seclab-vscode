@@ -123,6 +123,7 @@ two refusals ([EDR](../edr/20261118-tab-server-environment.md)).
 | ENV-65 | Info | extensions | Round 15 made `_reset` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | fixed-untested | Upstream's `_reset` is back. | none |
 | ENV-66 | Low | extensions | A tab extension claiming a host extension's dependency id, with no API and reported invalid, turned the host extension off in the tab window through the dependency rule. | fixed | In a tab window a host extension doesn't take a tab extension as its dependency. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
 | ENV-67 | Low | extensions | An uninstall the tab's server reported, carried as a bare id, removed a running host extension sharing the id from the tab window. | fixed | Such an uninstall never removes a host extension. | same |
+| ENV-68 | Low | extensions | A tab can make host extensions unavailable in its own window: the extension registry checks dependency loops by id across the host's and the tab's extensions, so a tab extension claiming an id that closes a cycle removes the host extension in it, and activation resolves a host extension's dependency through the tab's claimed id. An availability loss contained to that window, not an escape. Tab Manager can't be hit: the product pins it to the local host, so the local copy takes its id, and it has no dependencies. | deferred | Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts "Tab Manager stays out of reach of a tab claiming its id" keeps Tab Manager out of reach meanwhile. | none |
 | PR66-1 | Low | extensions | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | fixed | Round 16's fix: in a tab window a host extension takes its global state only, whatever the workspace's lists hold. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
 | PR66-2 | Medium | environment | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | fixed | In a tab window local history is unavailable instead. | same |
 | PR66-3 | Medium | environment | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | fixed | Every location a genuine server sends is required, each an object. | same |
@@ -147,6 +148,10 @@ uuid), and passes on the round-16 fix.
 Round 17 reviewed the round-16 fix and found ENV-66 and ENV-67, two other ways a tab could turn a
 host extension off in its own window. Both are rated as PR66-1 is. The final test's case fails on
 the round-16 docs tree with exactly those two leaks and passes on the round-17 fix.
+
+Round 18 reviewed the round-17 fix and found it correct; it found ENV-68, deferred by coordinator
+decision on 2026-11-18 as an availability loss contained to the tab's own window, with the
+registry's partition by tab as its follow-up.
 
 Round 14 reviewed the test-only rogue-REH hook change (`test/builds/variants.json` requires a round
 for a hook change): the hook now arms a run staged before a server starts as that server starts,

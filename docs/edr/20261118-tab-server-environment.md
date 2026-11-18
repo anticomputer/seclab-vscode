@@ -104,6 +104,9 @@ management from tab windows; ARCHITECTURE §4.8 lists what changes.
 - A tab whose server lies about any location fails to connect, rather than running with host files.
 - 0053 and 0057 can treat the remote user settings layer as the tab's own.
 - Host extensions are managed from a window that isn't a tab (ARCHITECTURE §4.8).
+- A tab can still make host extensions unavailable in its own window through the extension
+  registry's id-keyed dependency handling (ENV-68, deferred): the registry's partition by tab is a
+  follow-up. Tab Manager is out of reach, and a test keeps it so.
 - 0059 is large (about 360 added lines over 26 upstream files) for one concern, a tab's server
   steering the host through what it names; the range for RPC follow-ons is full, and splitting it
   would leave each part's guarantee depending on the others.
