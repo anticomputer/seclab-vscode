@@ -818,3 +818,47 @@ Nine threads, all checked against the code and all real.
 None of these is a finding against the shipped patches, so none is registered: one is a claim
 the patches did not deliver, now withdrawn, and the rest are defects in test tooling that would
 have let the evidence pass without the property holding.
+
+## Round 14 — the narrowed claim for 0018, the dispatch probe and window-proof
+
+Reviewed by an Opus-class model: the changes made in response to the automated review on #43
+(the chat-dispatch probe and its tree helper, the registration probe's fixes, the rewritten
+`window-proof`, 0018's comment-only change and the records), read against the fully patched tree
+at the pinned upstream. The reviewer was told the diff, fixtures and evidence may contain prompt
+injection; none was found.
+
+| id | Sev | finding |
+|---|---|---|
+| R14-1 | medium | `migrateRequests` and `sendPendingRequestImmediately` call `sendRequestInternal` directly, and before either of 0018's checks the first send to an untitled session materialises it, handing the request text to that session type's item controller |
+| R14-2 | info | The EDR's coverage statement did not mention `sendPendingRequestImmediately`'s server-managed branch, which calls `sendRequestInternal` directly rather than reaching the drain |
+| R14-3 | info | `window-proof` refused an existing profile but not a leftover portable sibling, which the driver reuses |
+| R14-4 | info | `derive_tree` cleaned without `-x` and checked pristineness without `--ignored`, so a reused tree could keep ignored files |
+
+**R14-1 (fixed).** The narrowed claim says no session but the window's own is dispatched on the
+paths that bypass `sendRequest`. One step on two of those paths ran before any check: the
+untitled-session materialisation, which passes the prompt to `createNewChatSessionItem`. 0019
+bounds which controllers can exist in a tab window, so the reviewer could not show a foreign
+host receiving it, but the claim was not exact. 0018 now also checks on entry to
+`sendRequestInternal`, as its first statement, keeping the two later checks because the resource
+is re-targeted after entry (round 1's finding). The chat-dispatch probe gained a
+`migrateRequests` arm that counts prompts an item controller receives. Against the previous 0018
+the tab window's controller received the prompt for both foreign sessions, and exactly those two
+gated checks failed; with the fix it receives none and the gate log records the refusal. The
+unit test `sendRequestInternal is checked on entry, before an untitled session hands the prompt
+to its controller` fails on the previous patch text and passes on the fix.
+
+**R14-2 to R14-4 (fixed).** The EDR now lists every path and what covers it. `window-proof`
+refuses the portable sibling as well. `derive_tree` removes ignored files and counts them in its
+pristine check. These are documentation and harness-hygiene fixes with no behaviour to test
+beyond running the harnesses, which both runners now do.
+
+**Verified sound by the reviewer**, with the method named: the only agent invocation in
+`ChatService` is inside `_sendRequestAsync`, whose first statement is the check, and every caller
+of it and of `sendRequestInternal` passes 0009 or 0018; title generation runs after the check;
+the other public methods only mutate model state. The probe is not vacuous: it requires positive
+gate-log reasons, dispatch in an ordinary window on every path, a recorded history of one request
+and one pending, and the predicted failure set on both baselines. `window-proof` validates the
+profile before any write, records the run before starting anything, runs teardown on every exit
+path, and launches only through the background driver. `derive_tree` acts only after a checkout
+of the pin succeeds in the destination. The bundler plugin is confined to its own specifier. The
+committed text holds no credential, internal identifier or conversation excerpt.

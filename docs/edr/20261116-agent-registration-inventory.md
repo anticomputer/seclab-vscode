@@ -293,11 +293,13 @@ refusal stays exactly as it is. Opening chat in tab windows is a separate future
 its own design and review.
 
 So increment 3 claims less than the opening of this record says. Its claim is now **a second
-layer behind 0009**: two public entry points reach the dispatch function without passing through
-`sendRequest`, namely `resendRequest` and the queue drain behind `processPendingRequests` (which
-`sendPendingRequestImmediately` also reaches for a local session). On those paths, in a tab window,
-no session other than this window's own agent-host session is dispatched. 0018 does not claim
-that the window's own session can be used for chat, and nothing here tests that.
+layer behind 0009**: three public entry points reach dispatch without passing through
+`sendRequest`, namely `resendRequest`, the queue drain behind `processPendingRequests` (which
+`sendPendingRequestImmediately` also reaches for a local session), and `migrateRequests` (and the
+server-managed branch of `sendPendingRequestImmediately`), which enter `sendRequestInternal`
+directly. On those paths, in a tab window, no session other than this window's own agent-host
+session is dispatched, and no item controller is handed the request text (review round 14). 0018
+does not claim that the window's own session can be used for chat, and nothing here tests that.
 
 R12-2 is unaffected: it concerns which agent a dispatched request reaches, and 0019 removes the
 only registration of another connection's agents whether or not anything is dispatched.
@@ -324,16 +326,23 @@ Three trees, at the pinned 1.145.3 upstream, each with its own expectation:
 Numbers are agent invocations. Every tree also dispatches all three paths in an ordinary window,
 so a refusal cannot be a harness that never runs an agent.
 
-**The controls fail.** The gated assertions are applied to each baseline as well, and the run
-passes only if they fail there exactly as the missing patch predicts: all six on pristine
-upstream (the `sendRequest` refusal, the four bypass refusals and the gate-log module), and
-exactly the four bypass refusals on the series without 0018. Both did, on the first run that
-reached a verdict.
+A fourth arm, added after review round 14, moves the restored queue to an untitled session of a
+contributed type with `migrateRequests`, and also counts prompts that type's item controller
+receives. Without 0018 the tab window's controller gets the prompt and the agent runs (1 and 1,
+for both sessions); with the series, neither happens and the gate log records `deny:unresolved` /
+`deny:other-connection`. Against the 0018 that round 14 reviewed, the controller still received
+the prompt (1) before the later check refused, which is the finding.
 
-What this does not cover: `migrateRequests`, which re-enters `sendRequestInternal` with the queue
-option and so meets 0018's check in the queued branch (pinned by the R12-1 unit test against the
-patch text, not issued here), and the server-managed queue of an agent-host session, which a tab
-window cannot have without the allow path this increment no longer claims.
+**The controls fail.** The gated assertions are applied to each baseline as well, and the run
+passes only if they fail there exactly as the missing patch predicts: all eight on pristine
+upstream (the `sendRequest` refusal, the six bypass refusals and the gate-log module), and
+exactly the six bypass refusals on the series without 0018. Both did.
+
+What this does not issue: the server-managed branch of `sendPendingRequestImmediately`, which
+needs an agent-host session a tab window cannot have without the allow path this increment no
+longer claims. It enters `sendRequestInternal` and so meets the same entry check the
+`migrateRequests` arm exercises, and the unit tests pin all three of 0018's call sites against
+the patch text.
 
 ## Review fixes to the evidence (PR #43)
 
