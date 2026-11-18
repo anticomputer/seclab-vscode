@@ -44,8 +44,17 @@ import * as path from 'node:path';
 export interface Exempt { subject: string; consumer: string | null; reason: string }
 /** A declaration a host calls (VS Code calls `activate`): live, and so is what it reaches. */
 export interface Entry { subject: string; calledBy: string; declaredIn: string }
-export interface Evidence { run?: number; workflow?: string; job?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
-export interface Subject { id: string; runBy: string; evidence: Evidence[] }
+export interface Evidence { run?: number; workflow?: string; job?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string; event?: 'workflow_run' }
+/**
+ * A workflow that runs on workflow_run alone runs only from the default branch, so it can have no
+ * run before it lands. It may be registered as pending: since when, and the proof PR whose run will
+ * be recorded. The weekly refresh fails once PENDING_DAYS pass with no run recorded.
+ */
+export interface Pending { since: string; proof: number }
+export interface Subject { id: string; runBy: string; evidence: Evidence[]; pending?: Pending }
+export const PENDING_DAYS = 3;
+const realPastDate = (d: unknown, now = Date.now()) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d))
+	&& new Date(Date.parse(d)).toISOString().slice(0, 10) === d && Date.parse(d) <= now;
 /**
  * An exemption removed on purpose, kept so that a merge cannot quietly bring it back. Append-only
  * against the base register; `restored` says why bringing it back is deliberate.
@@ -1220,7 +1229,7 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 	}
 	const ids = new Set<string>();
 	for (const s of reg.subjects ?? []) {
-		if (!s || typeof s.id !== 'string' || typeof s.runBy !== 'string' || !s.runBy.trim() || !Array.isArray(s.evidence) || !s.evidence.length) {
+		if (!s || typeof s.id !== 'string' || typeof s.runBy !== 'string' || !s.runBy.trim() || !Array.isArray(s.evidence) || (!s.evidence.length && s.pending === undefined)) {
 			errors.push(`subject ${JSON.stringify(s?.id)}: needs id, runBy and at least one evidence`);
 			continue;
 		}
@@ -1236,6 +1245,25 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 		const wfFile = s.id.startsWith('workflow:') ? found.get(s.id) : undefined;
 		if (wfFile && s.evidence.some(e => !e || e.run === undefined || e.workflow !== path.posix.basename(wfFile))) {
 			errors.push(`subject ${s.id}: every evidence must be a run of ${path.posix.basename(wfFile)}`);
+		}
+		// Pending and workflow_run evidence: only for a workflow whose sole trigger is workflow_run.
+		const onlyWorkflowRun = wfFile !== undefined && triggers(read(wfFile), files).join(',') === 'workflow_run';
+		if (s.pending !== undefined) {
+			const p = s.pending as Partial<Pending> | null;
+			if (!onlyWorkflowRun) {
+				errors.push(`subject ${s.id}: pending is only for a workflow that runs on workflow_run alone`);
+			} else if (s.evidence.length) {
+				errors.push(`subject ${s.id}: has run evidence; drop pending`);
+			} else if (!p || typeof p !== 'object' || Object.keys(p).sort().join(',') !== 'proof,since' || !realPastDate(p.since) || !Number.isSafeInteger(p.proof) || p.proof! <= 0) {
+				errors.push(`subject ${s.id}: pending needs exactly since (a real, past YYYY-MM-DD) and proof (the proof PR's number)`);
+			} else {
+				notes.push(`pending: ${s.id} since ${p.since}; proof PR ${p.proof} records its first run (the weekly refresh fails after ${PENDING_DAYS} days)`);
+			}
+		}
+		for (const e of s.evidence) {
+			if (e && e.event !== undefined && (e.event !== 'workflow_run' || e.run === undefined || !onlyWorkflowRun)) {
+				errors.push(`subject ${s.id}: event: workflow_run is only for a run of a workflow that runs on workflow_run alone`);
+			}
 		}
 		for (const e of s.evidence) {
 			const kinds = ['run', 'ci', 'record'].filter(k => k in e);
@@ -1335,6 +1363,16 @@ export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Pro
 	const errors: string[] = [];
 	const notes: string[] = [];
 	for (const s of reg.subjects ?? []) {
+		// A pending workflow_run subject (no run possible before it lands): past PENDING_DAYS with no
+		// run recorded, a note here and a failure in the weekly refresh job, fail closed.
+		if (s.pending !== undefined) {
+			const since = (s.pending as Partial<Pending> | null)?.since;
+			if (!realPastDate(since, now)) {
+				errors.push(`subject ${s.id}: malformed pending (run the offline check)`);
+			} else if ((now - Date.parse(since!)) / 86_400_000 > PENDING_DAYS) {
+				notes.push(`subject ${s.id}: pending since ${since} with no run recorded; record the proof PR's run (${s.runBy})`);
+			}
+		}
 		// A record is a run CI can't do: older than 30 days, it is due again (a note here, a
 		// failure in the weekly refresh job).
 		for (const e of (s.evidence ?? []).filter(x => x.record !== undefined && typeof x.date === 'string')) {
@@ -1358,8 +1396,10 @@ export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Pro
 				errors.push(`${at}: lookup failed (HTTP ${r.status})`);
 				continue;
 			}
+			// Dispatch or schedule, or workflow_run for evidence marked so (a workflow_run-only workflow).
+			const events = e.event === 'workflow_run' ? ['workflow_run'] : ['workflow_dispatch', 'schedule'];
 			const bad = run.path !== `.github/workflows/${e.workflow}` ? `is a run of ${String(run.path)}, not ${e.workflow}`
-				: run.event !== 'workflow_dispatch' && run.event !== 'schedule' ? `was triggered by ${String(run.event)}, not dispatch or schedule`
+				: !events.includes(String(run.event)) ? `was triggered by ${String(run.event)}, not ${events.join(' or ')}`
 				: run.conclusion !== 'success' ? `concluded ${String(run.conclusion)}`
 				: run.head_sha !== e.sha ? `ran at ${String(run.head_sha)}, not the recorded ${e.sha}`
 				: !String(run.created_at ?? '').startsWith(e.date) ? `ran on ${String(run.created_at)}, not the recorded ${e.date}`
@@ -1626,6 +1666,26 @@ async function selfTest(): Promise<void> {
 		r.exempt = r.exempt.filter(x => x.subject !== 'extensions/e/src/boot.ts#keyOnly');
 		injections.push(['KKK-6 key and member only', withReg(r), /exports keyOnly, but nothing/]);
 	}
+	{ // Pending workflow_run subjects (RJG-1 gate): the narrow shape passes; every widening fails.
+		const gateYml = 'on:\n  workflow_run:\n    workflows: [ci]\n    types: [completed]\njobs:\n  g:\n    steps:\n      - run: x\n';
+		const pend = (subject: Partial<Subject>, yml = gateYml, extra: Record<string, string> = {}) => {
+			const r = reg();
+			r.subjects = [...r.subjects, { id: 'workflow:gate', runBy: 'the gate, after CI on a PR', evidence: [], pending: { since: '2026-11-01', proof: 7 }, ...subject } as Subject];
+			return withReg(r, { '.github/workflows/gate.yml': yml, ...extra });
+		};
+		const ok = await run(pend({}));
+		if (ok.errors.length || !ok.notes.some(n => /^pending: workflow:gate since 2026-11-01; proof PR 7/.test(n))) {
+			throw new Error(`self-test: a pending workflow_run-only subject was refused or not noted:\n${ok.errors.join('\n')}`);
+		}
+		injections.push(['RJG pending on a dispatch workflow', pend({}, "on:\n  workflow_dispatch:\njobs:\n  g:\n    steps:\n      - run: x\n"), /pending is only for a workflow that runs on workflow_run alone/]);
+		injections.push(['RJG pending on workflow_run plus dispatch', pend({}, gateYml.replace('on:\n', 'on:\n  workflow_dispatch:\n')), /pending is only for a workflow that runs on workflow_run alone/]);
+		injections.push(['RJG pending dated in the future', pend({ pending: { since: '2999-01-01', proof: 7 } }), /pending needs exactly since/]);
+		injections.push(['RJG pending with no proof PR', pend({ pending: { since: '2026-11-01' } as Pending }), /pending needs exactly since/]);
+		injections.push(['RJG pending with an extra key', pend({ pending: { since: '2026-11-01', proof: 7, days: 99 } as unknown as Pending }), /pending needs exactly since/]);
+		injections.push(['RJG pending kept beside run evidence', pend({ evidence: [{ run: 5, workflow: 'gate.yml', sha: 'a'.repeat(40), date: '2026-11-02', event: 'workflow_run' }] }), /has run evidence; drop pending/]);
+		injections.push(['RJG workflow_run evidence for a dispatch workflow', withReg({ ...reg(), subjects: reg().subjects.map(x => x.id === 'workflow:weekly' ? { ...x, evidence: x.evidence.map(e => ({ ...e, event: 'workflow_run' as const })) } : x) }), /event: workflow_run is only for/]);
+		injections.push(['RJG gate with no subject', withReg(reg(), { '.github/workflows/gate.yml': gateYml }), /workflow:gate .* add it to/]);
+	}
 	for (const [name, tree, want] of injections) {
 		const got = await run(tree);
 		if (!got.errors.some(e => want.test(e))) {
@@ -1716,6 +1776,36 @@ async function selfTest(): Promise<void> {
 			throw new Error(`self-test: verify-runs --refresh "${name}": ${refreshed.errors.length} error(s), want ${want === 'ok' ? 'none' : 'some'}`);
 		}
 	}
+	// Pending workflow_run subjects: fresh is quiet; an expired one (injected: since 4 days before
+	// now, no run recorded) is a note here and fails the weekly refresh, fail closed (RJG-1 gate).
+	const pendingCases: Array<[string, unknown, 'ok' | 'note' | 'error']> = [
+		['pending, 1 day', { since: '2026-11-08', proof: 7 }, 'ok'],
+		['pending, exactly 3 days', { since: '2026-11-06', proof: 7 }, 'ok'],
+		['pending, expired (4 days, no run)', { since: '2026-11-05', proof: 7 }, 'note'],
+		['pending, malformed', { since: 'soon', proof: 7 }, 'error'],
+	];
+	for (const [name, pending, want] of pendingCases) {
+		const reg1 = { exempt: [], subjects: [{ id: 'workflow:gate', runBy: 'x', evidence: [], pending }] } as unknown as Register;
+		const got = await verifyRuns(reg1, async () => ({ status: 404 }), now);
+		const kind = got.errors.length ? 'error' : got.notes.length ? 'note' : 'ok';
+		if (kind !== want || (refreshReport(got).errors.length > 0) !== (want !== 'ok')) {
+			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want} (refresh must fail on anything but ok)`);
+		}
+	}
+	// workflow_run evidence: only a workflow_run run of the file counts, and only when marked so.
+	const wr = { ...good, path: '.github/workflows/gate.yml', event: 'workflow_run' };
+	const wrCases: Array<[string, Record<string, unknown>, boolean, 'ok' | 'error']> = [
+		['workflow_run run, marked', wr, true, 'ok'],
+		['dispatch run, marked workflow_run', { ...wr, event: 'workflow_dispatch' }, true, 'error'],
+		['workflow_run run, unmarked', wr, false, 'error'],
+	];
+	for (const [name, body, marked, want] of wrCases) {
+		const reg1: Register = { exempt: [], subjects: [{ id: 'workflow:gate', runBy: 'x', evidence: [{ run: 1, workflow: 'gate.yml', sha: 'a'.repeat(40), date: '2026-11-01', ...(marked ? { event: 'workflow_run' as const } : {}) }] }] };
+		const got = await verifyRuns(reg1, async () => ({ status: 200, body }), now);
+		if ((got.errors.length ? 'error' : 'ok') !== want) {
+			throw new Error(`self-test: verify-runs "${name}": want ${want}`);
+		}
+	}
 	// Records of runs CI can't do: due again after 30 days (a note; the weekly refresh fails).
 	const recordCases: Array<[string, string, 'ok' | 'note']> = [['fresh record', '2026-11-01', 'ok'], ['stale record', '2026-09-01', 'note']];
 	for (const [name, date, want] of recordCases) {
@@ -1736,7 +1826,7 @@ async function selfTest(): Promise<void> {
 			}
 		}
 	}
-	console.log(`liveness self-test: ok (control clean; ${injections.length + 3} injections, ${marks.length + 1} mark cases, ${runCases.length} run and ${recordCases.length} record cases caught)`);
+	console.log(`liveness self-test: ok (control clean; ${injections.length + 3} injections, ${marks.length + 1} mark cases, ${runCases.length} run, ${pendingCases.length} pending, ${wrCases.length} workflow_run and ${recordCases.length} record cases caught)`);
 }
 
 // ---- main ---------------------------------------------------------------------------------

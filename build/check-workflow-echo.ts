@@ -16,6 +16,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+import { GATE, GATE_SHA256 } from './check-required-checks.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
 
@@ -153,8 +155,13 @@ export function checkSecretScope(file: string, text: string): Finding[] {
 	// Any way a context expression can name secrets: case-insensitive, dot, index or toJSON (R22-3).
 	const SECRET = /\$\{\{[^}]*\bsecrets\b/i;
 	const comment = (l: string) => /^\s*(?:#.*)?$/.test(l);
+	// The one exception (EDR required-jobs-gate): the required-jobs-ran gate's workflow_run trigger,
+	// only in its reviewed bytes (pinned by build/check-required-checks.ts) and only while no
+	// expression in it names a secret.
+	const reviewedGate = file === `.github/workflows/${GATE}` && createHash('sha256').update(text).digest('hex') === GATE_SHA256 && !SECRET.test(text);
 	lines.forEach((l, i) => {
-		if (/^\s*(?:-\s*)?["']?(?:pull_request_target|workflow_run)["']?\s*:?\s*(?:#.*)?$/.test(l) || /\b(?:pull_request_target|workflow_run)\b\s*[:,\]}]/.test(l)) {
+		const trigger = reviewedGate ? 'pull_request_target' : 'pull_request_target|workflow_run';
+		if (new RegExp(`^\\s*(?:-\\s*)?["']?(?:${trigger})["']?\\s*:?\\s*(?:#.*)?$`).test(l) || new RegExp(`\\b(?:${trigger})\\b\\s*[:,\\]}]`).test(l)) {
 			out.push({ file, line: i + 1, rule: 'S1' });
 		}
 		if (/\bsecrets:\s*inherit\b/.test(l)) {
@@ -247,6 +254,13 @@ function selfTest(): number {
 	expect('S1: a secret job outside the denylist environment blocks', s1(job(okCond, '')) === 1);
 	expect('S1: a checkout of another ref blocks', s1(job(okCond, okEnv, '          ref: ${{ github.head_ref }}\n')) === 1);
 	expect('S1: a workflow_run trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  workflow_run:\n')) === 1);
+	// The required-jobs-ran gate's workflow_run is allowed in its reviewed bytes only (EDR required-jobs-gate).
+	const gatePath = `.github/workflows/${GATE}`;
+	const gateText = fs.readFileSync(path.join(import.meta.dirname, '..', gatePath), 'utf8');
+	expect('S1: the reviewed required-jobs-ran gate may use workflow_run', checkSecretScope(gatePath, gateText).length === 0);
+	expect("S1: the gate's workflow_run blocks once its bytes change", checkSecretScope(gatePath, `${gateText}\n`).length >= 1);
+	expect("S1: the gate's bytes under another file name block", checkSecretScope('.github/workflows/other.yml', gateText).length >= 1);
+	expect("S1: the gate exception never admits pull_request_target", checkSecretScope(gatePath, gateText.replace('  workflow_run:', '  pull_request_target:')).length >= 1);
 	expect('S1: a pull_request_target trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  pull_request_target:\n')) === 1);
 	expect('S1: secrets: inherit blocks', s1(job(okCond, okEnv) + '  call:\n    uses: ./.github/workflows/x.yml\n    secrets: inherit\n') === 1);
 	// Round 22: shapes the line reader can't follow fail closed; other spellings are secrets too.

@@ -52,6 +52,12 @@
 			"evidence": [{ "run": 43910231243, "workflow": "liveness-refresh.yml", "sha": "c5cb491ccbc4661a7209e45f848019cd1cc5b853", "date": "2026-11-16" }]
 		},
 		{
+			"id": "workflow:required-jobs-ran",
+			"runBy": "workflow_run after ci-unit, workflow-lint, docs-check or patch-build completes, from main's copy only (EDR required-jobs-gate); first run on proof PR 54 once the gate is on main",
+			"evidence": [],
+			"pending": { "since": "2026-11-18", "proof": 54 }
+		},
+		{
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
