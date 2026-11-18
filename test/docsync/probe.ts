@@ -175,6 +175,8 @@ if (mode === 'prepare') {
 		rep = undefined;
 	}
 	const isCount = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+	// Sorted by name only: the default sort would stringify each tab-made counter object (PH-12).
+	const schemeLines = (schemes: Record<string, Record<string, number>>) => Object.entries(schemes).sort(([a], [b]) => a.localeCompare(b)).map(([s, c]) => `  ${s.padEnd(28)} ${c.open}/${c.change}/${c.close}/${c.snapshot}`);
 	const schemeOk = (s: unknown) => typeof s === 'string' && /^[a-z][a-z0-9+.-]{0,63}$/i.test(s);
 	// The report is the tab's: its check must reject anything malformed without throwing, or the
 	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
@@ -203,6 +205,16 @@ if (mode === 'prepare') {
 			hijack: { providers: { toString: null }, hostSchemeAsks: 0, untitledClaims: 0, hostUntitledSeen: 0, fsUserdata: '', fsOutput: '' },
 			controls: { editSaved: false, untitledTyped: false, tabUntitled: false, gitDoc: false, cellDoc: false },
 		});
+	// A report the check accepts goes through the summary without throwing: counters with an extra
+	// `toString: null`, in two schemes (PH-12).
+	const summaryHolds = (() => {
+		const counter = () => ({ open: 0, change: 0, close: 0, snapshot: 0, toString: null });
+		try {
+			return schemeLines({ file: counter(), output: counter() } as never).length === 2;
+		} catch {
+			return false;
+		}
+	})();
 	let valid = false;
 	try {
 		valid = validReport(rep);
@@ -211,6 +223,7 @@ if (mode === 'prepare') {
 	}
 	expect('report present and matches the schema', valid);
 	expect('control: the tab-side logs were collected (no timeout or failure)', logsCollected);
+	expect('the report schema check passes nothing the summary cannot print (PH-12)', summaryHolds);
 	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	const armed = (() => {
 		try {
@@ -226,8 +239,8 @@ if (mode === 'prepare') {
 		const names = (rep.steps as Array<{ name: string; ok: boolean }>).map(s => `${s.ok ? '' : '!'}${s.name}`.replace(/[^a-z!-]/g, '?'));
 		console.log(`steps: ${names.join(' ')}${rep.done ? '' : ' (NOT done)'}`);
 		console.log('documents the tab saw, by scheme (open/change/close/snapshot):');
-		for (const [s, c] of Object.entries(rep.schemes as Record<string, Record<string, number>>).sort()) {
-			console.log(`  ${s.padEnd(28)} ${c.open}/${c.change}/${c.close}/${c.snapshot}`);
+		for (const line of schemeLines(rep.schemes)) {
+			console.log(line);
 		}
 		console.log(`canary hits: ${hitKinds.map(h => `${h.kind} via ${h.scheme}`).join(', ') || 'none'}`);
 		console.log(`perf pre-create: precreated=${rep.perf.precreated} foreignSeen=${rep.perf.foreignSeen} removedAt=${String(rep.perf.removedAt).replace(/[^a-z-]/g, '?').slice(0, 40) || '(never)'}`);
