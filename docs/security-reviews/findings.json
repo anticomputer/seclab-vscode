@@ -19475,7 +19475,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:21afc60d9a8d97652900baa39b70de5688dc345b",
+			"commit": "patch:326543fe64ee437750f79ae408fb2baa7895f3cd",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the patch gates the queued path, which never reaches the dispatch function"
@@ -19488,16 +19488,17 @@
 			"summary": "The agent a request is dispatched to is chosen from the caller, an participant mention in the request text or participant detection, none of which are constrained by the gated session resource",
 			"component": "chat agent selection in a tab window",
 			"owner": "agentic",
-			"status": "fixed",
+			"status": "fixed-before-landing",
 			"note": "closed by patch 0019 rather than inside 0018: IChatAgentData carries an extension id and no connection, so there is no comparison the chat gate could make. 0019 removes the only site that registers an agent for another connection, so the premise holds by construction. Proved by ./seclab test agent-registration, whose baseline arm on pristine upstream reports vulnerable.",
-			"commit": "patch:da87e959bc594f3542ec2bf76b31b5352e8bbd14",
+			"commit": "patch:b8e7efedea47ddbc300228ec47f622f950435c9c",
 			"test": {
 				"file": "test/agentic/ahp/agent-registration-probe.ts",
-<<<<<<< HEAD
-				"name": "forged-agent-id"
-=======
 				"name": "CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name"
->>>>>>> c5a380e0 (agentic: register the round 13 findings for patch 0019)
+			},
+			"preFix": "patch:4e23c5183e0e6f4b27ca41a926b97538484a2194",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
+				"quote": "**R12-2.** The probe check\n`CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name`\nfails on the reviewed commit, which carries patch 0018 without patch 0019."
 			}
 		},
 		{
@@ -19508,7 +19509,7 @@
 			"component": "patch 0015 window gate log",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:21afc60d9a8d97652900baa39b70de5688dc345b",
+			"commit": "patch:326543fe64ee437750f79ae408fb2baa7895f3cd",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the gate log counts per rule, so one rule cannot crowd out the refusals of another"
@@ -19522,13 +19523,11 @@
 			"component": "upstream invariants for patch 0018",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:21afc60d9a8d97652900baa39b70de5688dc345b",
+			"commit": "patch:326543fe64ee437750f79ae408fb2baa7895f3cd",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
 			}
-<<<<<<< HEAD
-=======
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -19537,11 +19536,16 @@
 			"summary": "The shape named missionControlAvailabilityService carried the neighbouring environment service's members, so the availability stand-in had no `available` and the environment service fell through to an empty stand-in; the unit test and the probe both asserted against the wrong interface and so could not fail",
 			"component": "patch 0019 null-provider shapes",
 			"owner": "agentic",
-			"status": "fixed",
-			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"status": "fixed-before-landing",
+			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
 			"test": {
 				"file": "test/agentic/gate/null-providers.test.ts",
 				"name": "THE REAL POINT: a shape is checked against the service it claims to stand in for"
+			},
+			"preFix": "patch:b8e7efedea47ddbc300228ec47f622f950435c9c",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
+				"quote": "**R13-1.** The unit test\n`THE REAL POINT: a shape is checked against the service it claims to stand in for`\nfails on the reviewed commit, which carries patch 0019 with the shape table as first written."
 			}
 		},
 		{
@@ -19552,7 +19556,7 @@
 			"component": "patch 0019 null-provider shapes",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
 			"test": {
 				"file": "test/agentic/gate/null-providers.test.ts",
 				"name": "a guarded name is shaped or recorded, never silently empty"
@@ -19566,12 +19570,11 @@
 			"component": "patch 0019 probe",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
 			"test": {
 				"file": "test/agentic/ahp/agent-registration-probe.ts",
 				"name": "the actual mechanism that"
 			}
->>>>>>> c5a380e0 (agentic: register the round 13 findings for patch 0019)
 		}
 	]
 }
