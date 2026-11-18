@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 249 | 411 | 52 | 817 |
+| fixed | 14 | 91 | 252 | 413 | 52 | 822 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
 | fixed-untested | 0 | 5 | 59 | 185 | 71 | 320 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 695 | 185 | 1346 |
+| **all** | 16 | 105 | 348 | 697 | 185 | 1351 |
 
 ## Baseline: open high and critical findings
 
@@ -1885,6 +1885,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | IIII-11 | low | fixed | Nothing pinned the tripwires' body scoping, so a whole-file search stayed green | 514e717c28e2 · `seclab` "the tripwire matched text outside findings_check (IIII-11)" |
 | IIII-12 | info | fixed | The schema accepted a patch: preFix on a fixed entry | 514e717c28e2 · `build/docs/findings.ts` "a patch: preFix on a fixed entry fails the schema (IIII-12)" |
 | PRR61-1 | medium | fixed | A landed high was no longer listed for the own-fix check, so a later change could set its fix to its own preFix | 514e717c28e2 · `build/docs/findings.ts` "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)" |
+| JJJJ-1 | medium | fixed | A recorded high's landed patch: fix failed on any tree behind a newer origin/main | patch:8da32bfa01c519114fdc9844e738f7cb3cd66037 · `seclab` "a landed high's fix failed on a tip behind main (JJJJ-1)" |
+| JJJJ-2 | low | fixed | rebase-resolve's regeneration failed when the bind mount showed a just-written file as it was | patch:8da32bfa01c519114fdc9844e738f7cb3cd66037 · `seclab` "a step that fails once wasn't retried (JJJJ-2)" |
+| JJJJ-3 | medium | fixed | A tip behind a revert on main could close a high on a fix main no longer has | patch:8da32bfa01c519114fdc9844e738f7cb3cd66037 · `seclab` "a high closed on a fix main has reverted since (JJJJ-3)" |
+| PRR65-1 | low | fixed | When main reverted and reapplied a fix, only the newest carrier counted, so a tree at the original fix failed | patch:8da32bfa01c519114fdc9844e738f7cb3cd66037 · `seclab` "a tip at the original fix failed after main reverted and reapplied it (PRR65-1)" |
+| PRR65-2 | medium | fixed | The main-side revert check applied only to patch: citations, so a pinned high escaped it | patch:8da32bfa01c519114fdc9844e738f7cb3cd66037 · `seclab` "a pinned high closed on a fix main has reverted since (PRR65-2)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

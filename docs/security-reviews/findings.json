@@ -16644,6 +16644,81 @@
 			}
 		},
 		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "JJJJ-1",
+			"round": "Round JJJJ",
+			"severity": "medium",
+			"summary": "A recorded high's landed patch: fix failed on any tree behind a newer origin/main",
+			"component": "findings register: ancestry",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:8da32bfa01c519114fdc9844e738f7cb3cd66037",
+			"test": {
+				"file": "seclab",
+				"name": "a landed high's fix failed on a tip behind main (JJJJ-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "JJJJ-2",
+			"round": "Round JJJJ",
+			"severity": "low",
+			"summary": "rebase-resolve's regeneration failed when the bind mount showed a just-written file as it was",
+			"component": "findings register: rebase-resolve",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:8da32bfa01c519114fdc9844e738f7cb3cd66037",
+			"test": {
+				"file": "seclab",
+				"name": "a step that fails once wasn't retried (JJJJ-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "JJJJ-3",
+			"round": "Round JJJJ",
+			"severity": "medium",
+			"summary": "A tip behind a revert on main could close a high on a fix main no longer has",
+			"component": "findings register: ancestry",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:8da32bfa01c519114fdc9844e738f7cb3cd66037",
+			"test": {
+				"file": "seclab",
+				"name": "a high closed on a fix main has reverted since (JJJJ-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR65-1",
+			"round": "Round PRR65",
+			"severity": "low",
+			"summary": "When main reverted and reapplied a fix, only the newest carrier counted, so a tree at the original fix failed",
+			"component": "findings register: ancestry",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:8da32bfa01c519114fdc9844e738f7cb3cd66037",
+			"test": {
+				"file": "seclab",
+				"name": "a tip at the original fix failed after main reverted and reapplied it (PRR65-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR65-2",
+			"round": "Round PRR65",
+			"severity": "medium",
+			"summary": "The main-side revert check applied only to patch: citations, so a pinned high escaped it",
+			"component": "findings register: ancestry",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:8da32bfa01c519114fdc9844e738f7cb3cd66037",
+			"test": {
+				"file": "seclab",
+				"name": "a pinned high closed on a fix main has reverted since (PRR65-2)"
+			}
+		},
+		{
 			"record": "20261116-editor-tab-provenance.md",
 			"round": "Copilot review (PR #24, third pass)",
 			"owner": "docsync",

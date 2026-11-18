@@ -471,3 +471,23 @@ Two threads. One restated IIII-10, already fixed in this change. The other is tr
 | # | Sev | Area | Finding | Disposition | Fix | Regression test |
 |---|---|---|---|---|---|---|
 | PRR61-1 | Medium | grandfathering | A landed high was no longer listed, so a later change could set its fix to its own preFix and pass. | Fixed | An entry that carries a preFix is always listed, so its evidence is always checked. | self-test "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)" |
+
+## Round JJJJ (recorded highs on a tip behind main)
+Scope: a recorded high closed on a landed `patch:` fix failed the check on any branch or checkout
+behind a newer `origin/main` (IIII-3 off `main`), since the gate required all of `main` in the
+tree. The fix asks only that the landed commit be on the tree's history. Also a retry for
+`rebase-resolve`'s regeneration step. Reviewed by an Opus-class model. No high or critical.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| JJJJ-1 | Medium | ancestry | A recorded high's landed `patch:` fix failed on any tree behind a newer `origin/main`, blocking pull requests. | Fixed | The commit on `main` that carries the fix must be on the tree's history. | `seclab` host self-test "a landed high's fix failed on a tip behind main (JJJJ-1)" |
+| JJJJ-2 | Low | rebase-resolve | The regeneration step failed when Docker Desktop's bind mount showed a file git had just written as it was, and a re-run worked. | Fixed | One retry after a pause; the second result stands. | `seclab` host self-test "a step that fails once wasn't retried (JJJJ-2)" |
+| JJJJ-3 | Medium | ancestry | With the JJJJ-1 relaxation, a tip behind a revert on `main` could close a high on a fix `main` no longer has. | Fixed | The fix must also not be reverted on `main`. | `seclab` host self-test "a high closed on a fix main has reverted since (JJJJ-3)" |
+
+## Round PRR65 (pull request #65's automated review)
+Two threads, both true, fixed in the same change. No high or critical.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR65-1 | Low | ancestry | When main reverted and reapplied a fix, only the newest carrier counted, so a tree at the original fix failed. | Fixed | Any main commit carrying the fix that is on the tree's history counts. | `seclab` host self-test "a tip at the original fix failed after main reverted and reapplied it (PRR65-1)" |
+| PRR65-2 | Medium | ancestry | The main-side revert check applied only to `patch:` citations, so a pinned high escaped it. | Fixed | A recorded high's SHA fix is checked for a revert on main too. | `seclab` host self-test "a pinned high closed on a fix main has reverted since (PRR65-2)" |
