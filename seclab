@@ -1280,6 +1280,15 @@ driver_bind() { # TGZ
 	fi
 }
 
+# Put a verified app in place, then clear the release marker (if given). Each step is checked on
+# its own: under set -e an `a && b` list doesn't stop on a failing `a` (review FAB3-1).
+install_app() { # STAGED_APP DEST [PENDING]
+	rm -rf "$2" || { echo "fetch: can't remove the earlier app at $2; nothing installed" >&2; exit 1; }
+	[[ ! -e "$2" ]] || { echo "fetch: the earlier app at $2 is still there; nothing installed" >&2; exit 1; }
+	mv "$1" "$2" || { echo "fetch: can't move the new app to $2" >&2; exit 1; }
+	[[ -z "${3:-}" ]] || rm -f "$3"
+}
+
 # Offline: every refusal that needs no network leaves no test build behind, and the release
 # location marked as not fetched (reviews FAB-1, FAB2-1, FAB2-7). Runs against a scratch ROOT.
 fetch_self_test() {
@@ -1299,6 +1308,18 @@ fetch_self_test() {
 		rc=0; ( ROOT="$tmp"; fetch_test_variant "$v" $args ) >/dev/null 2>&1 || rc=$?
 		[[ $rc -ne 0 && ! -e "$tmp/.work/test-builds/$v" ]] || { echo "fetch self-test: a refused variant fetch ($args) left an earlier build" >&2; rm -rf "$tmp"; exit 1; }
 	done
+	# An earlier app that can't be removed: nothing is installed and the marker stays (FAB3-1).
+	mkdir -p "$tmp/.work/app/locked" "$tmp/new" && touch "$tmp/.work/app/locked/f" "$tmp/.work/app-fetch-pending" && chmod 555 "$tmp/.work/app/locked"
+	rc=0; ( install_app "$tmp/new" "$tmp/.work/app" "$tmp/.work/app-fetch-pending" ) >/dev/null 2>&1 || rc=$?
+	chmod 755 "$tmp/.work/app/locked"
+	[[ $rc -ne 0 && -f "$tmp/.work/app-fetch-pending" && -d "$tmp/new" ]] || { echo "fetch self-test: an earlier app that couldn't be removed still cleared the marker (FAB3-1)" >&2; rm -rf "$tmp"; exit 1; }
+	rc=0; ( install_app "$tmp/new" "$tmp/.work/app" "$tmp/.work/app-fetch-pending" ) >/dev/null 2>&1 || rc=$?
+	[[ $rc -eq 0 && ! -e "$tmp/.work/app-fetch-pending" && -d "$tmp/.work/app" ]] || { echo "fetch self-test: a good install kept the marker" >&2; rm -rf "$tmp"; exit 1; }
+	rm -f "$tmp/.work/app-fetch-pending"
+	# The marker is a fresh file: a symlink there isn't written through (FAB3-3).
+	ln -s "$tmp/target" "$tmp/.work/app-fetch-pending"
+	rc=0; ( ROOT="$tmp"; fetch_macos x ) >/dev/null 2>&1 || rc=$?
+	[[ ! -e "$tmp/target" && -f "$tmp/.work/app-fetch-pending" && ! -L "$tmp/.work/app-fetch-pending" ]] || { echo "fetch self-test: the marker was written through a symlink (FAB3-3)" >&2; rm -rf "$tmp"; exit 1; }
 	rm -f "$tmp/.work/app-fetch-pending"
 	rc=0; ( ROOT="$tmp"; fetch_macos x ) >/dev/null 2>&1 || rc=$?
 	[[ $rc -ne 0 && -f "$tmp/.work/app-fetch-pending" ]] || { echo "fetch self-test: a refused release fetch left no app-fetch-pending marker" >&2; rm -rf "$tmp"; exit 1; }
@@ -1321,6 +1342,8 @@ fetch_macos() {
 	local pending="$ROOT/.work/app-fetch-pending"
 	if [[ -z "$branch_build" ]]; then
 		mkdir -p "$ROOT/.work"
+		# A fresh regular file, never written through a symlink (review FAB3-3).
+		rm -f "$pending"
 		printf 'run %s\n' "${run:-latest}" > "$pending"
 	fi
 	# Usage is checked only now, so a usage error leaves the same state as any refusal (FAB2-7).
@@ -1384,8 +1407,7 @@ fetch_macos() {
 	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
 	ditto -x -k "$stage/dl/seclab-vscode-darwin-arm64.zip" "$stage/app"
 	cp "$stage/dl/build-info.json" "$stage/dl/SHA256SUMS" "$stage/app/"
-	rm -rf "$dest" && mv "$stage/app" "$dest"
-	[[ -n "$branch_build" ]] || rm -f "$pending"
+	install_app "$stage/app" "$dest" "$([[ -n "$branch_build" ]] || echo "$pending")"
 	cat "$dest/build-info.json"
 	echo
 	grep seclab-vscode-darwin-arm64.zip "$dest/SHA256SUMS"
@@ -1481,11 +1503,13 @@ build_linux() {
 	fi
 	# The commit the build is of: HEAD, only when the tree has no changes, since the build reads the
 	# working tree (review FAB2-2). A dirty tree's build records none.
-	local repo_sha=""
-	if [[ -z "$(git_clean -C "$ROOT" status --porcelain 2>/dev/null)" ]]; then
+	local repo_sha="" st rc=0
+	st="$(git_clean -C "$ROOT" status --porcelain)" || rc=$?
+	if [[ $rc -eq 0 && -z "$st" ]]; then
 		repo_sha="$(git_clean -C "$ROOT" rev-parse HEAD)"
 	else
-		echo "build: the working tree has changes; this build records no commit" >&2
+		# A failed status is not a clean tree (review FAB3-4).
+		echo "build: can't confirm a clean working tree; this build records no commit" >&2
 	fi
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \

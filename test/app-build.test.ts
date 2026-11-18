@@ -121,3 +121,24 @@ test('fetched-app binding: a build in a nested checkout is that checkout HEAD bu
 	assert.equal(appBuildProblem(app(dir, { repoSha: base, testBuild: {} }, 'build-info-app.json'), o), undefined);
 	assert.match(appBuildProblem(app(dir, { repoSha: r.head, testBuild: {} }, 'build-info-app.json'), o) ?? '', /stale or different build/);
 });
+
+test('fetched-app binding: a .git planted beside an app does not choose its HEAD (FAB3-2)', () => {
+	const r = repo();
+	const o = { repoRoot: r.root, platform: 'darwin' };
+	// A repository whose HEAD is the stale commit, and .git files pointing at it.
+	const stale = path.join(r.root, 'stale-repo');
+	execFileSync('git', ['clone', '-q', r.root, stale]);
+	execFileSync('git', ['-C', stale, 'checkout', '-q', r.old]);
+	for (const at of [path.join('.work', 'app-branch'), '.work']) {
+		const dir = path.join(r.root, '.work', 'app-branch');
+		const a = app(dir, { repoSha: r.old });
+		fs.writeFileSync(path.join(r.root, at, '.git'), `gitdir: ${path.join(stale, '.git')}\n`);
+		assert.match(appBuildProblem(a, o) ?? '', /stale or different build/, at);
+		fs.rmSync(path.join(r.root, at, '.git'));
+	}
+	// The release location keeps its rule and its marker with a .git planted in it.
+	const rel = app(path.join(r.root, '.work', 'app'), { repoSha: r.old });
+	fs.writeFileSync(path.join(r.root, '.work', 'app', '.git'), `gitdir: ${path.join(stale, '.git')}\n`);
+	fs.writeFileSync(path.join(r.root, '.work', 'app-fetch-pending'), 'run 1\n');
+	assert.match(appBuildProblem(rel, o) ?? '', /didn't complete/);
+});
