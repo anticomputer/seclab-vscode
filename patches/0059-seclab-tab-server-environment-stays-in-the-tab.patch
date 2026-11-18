@@ -1,0 +1,58 @@
+diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts
+--- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:52:57
++++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:52:57
+@@ -14,6 +14,8 @@
+ import { revive } from '../../../../base/common/marshalling.js';
+ import { IUserDataProfile } from '../../../../platform/userDataProfile/common/userDataProfile.js';
+ import { ProtocolConstants } from '../../../../base/parts/ipc/common/ipc.net.js';
++import { Schemas } from '../../../../base/common/network.js';
++import { seclabIsTabAuthority, seclabRefuseEnvironment } from '../../extensions/common/seclabRpcFilter.js';
+ 
+ export interface IGetEnvironmentDataArguments {
+ 	remoteAuthority: string;
+@@ -51,6 +53,37 @@
+ 	reconnectionGraceTime?: number;
+ }
+ 
++/**
++ * seclab: a tab's server names where the window keeps that tab's settings, storage, logs and
++ * profiles, and the window then reads and writes those files as the tab's own. In a `seclab+`
++ * window every URI in the reply must be on the tab's own file system (`vscode-remote` on this
++ * window's authority, which a genuine server's URI transformer always produces); one that isn't,
++ * such as the host user's settings file, refuses the whole environment and the connection fails
++ * (patch 0059, review R5-17). Fail closed: anything nested too deep to check counts as foreign.
++ */
++function seclabCheckEnvironment(remoteAuthority: string, data: unknown): void {
++	if (!seclabIsTabAuthority(remoteAuthority)) {
++		return;
++	}
++	const foreign = (v: unknown, depth: number): boolean => {
++		if (!v || typeof v !== 'object') {
++			return false;
++		}
++		if (depth > 8) {
++			return true;
++		}
++		const u = v as { scheme?: unknown; authority?: unknown; path?: unknown };
++		if (typeof u.scheme === 'string' && typeof u.path === 'string') {
++			return u.scheme !== Schemas.vscodeRemote || u.authority !== remoteAuthority;
++		}
++		return Object.values(v).some(x => foreign(x, depth + 1));
++	};
++	if (foreign(data, 0)) {
++		seclabRefuseEnvironment(remoteAuthority);
++		throw new Error('seclab: the tab\'s server named a location outside the tab; its environment is refused');
++	}
++}
++
+ export class RemoteExtensionEnvironmentChannelClient {
+ 
+ 	static async getEnvironmentData(channel: IChannel, remoteAuthority: string, profile: string | undefined): Promise<IRemoteAgentEnvironment> {
+@@ -60,6 +93,7 @@
+ 		};
+ 
+ 		const data = await channel.call<IRemoteAgentEnvironmentDTO>('getEnvironmentData', args);
++		seclabCheckEnvironment(remoteAuthority, data);
+ 		const reconnectionGraceTime = (typeof data.reconnectionGraceTime === 'number' && data.reconnectionGraceTime >= 0)
+ 			? data.reconnectionGraceTime
+ 			: ProtocolConstants.ReconnectionGraceTime;

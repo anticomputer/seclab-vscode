@@ -968,6 +968,20 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
 }
 
 /**
+ * Record that a tab window refused its server's environment (patch 0059): a URI in the
+ * `getEnvironmentData` reply was not `vscode-remote` on the tab's own authority, so the window
+ * would have read or written a host file as the tab's settings, storage or logs. The line
+ * carries the policy key and a fixed reason only, never the URI the server named.
+ */
+export function seclabRefuseEnvironment(remoteAuthority: string): void {
+	seclabRecord({
+		surface: 'data', id: 'data:remote-environment', ref: 'data:remote-environment',
+		tabId: seclabResolveTabId(remoteAuthority) ?? 'unparsed',
+		verdict: 'deny', reason: 'a server environment URI outside the tab', at: Date.now(),
+	});
+}
+
+/**
  * Tab id for an authority, derived from the authority itself.
  *
  * The authority a remote window connects to *is* `seclab+<tabId>`: the Tab

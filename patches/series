@@ -46,6 +46,9 @@
 0051-seclab-sanitise-tab-search-responses.patch
 # 0052: one file's text matches go in pieces the RPC filter accepts (PR review on #52).
 0052-seclab-split-large-text-matches.patch
+# 0059: every location a tab's server names in its environment is on the tab's own file system,
+# or the window refuses the environment (review R5-17).
+0059-seclab-tab-server-environment-stays-in-the-tab.patch
 0035-seclab-document-sync-provenance.patch
 0036-seclab-tab-configuration-snapshot.patch
 # 0038: a tab's host learns only that host-side editors exist, not their URIs or labels (EDR editor-tab-provenance).

@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1416 @@
+@@ -0,0 +1,1430 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4765,6 +4765,20 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		surface: 'push', id: ref, ref,
 +		tabId: seclabResolveTabId(remoteAuthority ?? '') ?? 'unparsed',
 +		verdict: 'deny', reason: 'server-initiated push refused in a tab window', at: Date.now(),
++	});
++}
++
++/**
++ * Record that a tab window refused its server's environment (patch 0059): a URI in the
++ * `getEnvironmentData` reply was not `vscode-remote` on the tab's own authority, so the window
++ * would have read or written a host file as the tab's settings, storage or logs. The line
++ * carries the policy key and a fixed reason only, never the URI the server named.
++ */
++export function seclabRefuseEnvironment(remoteAuthority: string): void {
++	seclabRecord({
++		surface: 'data', id: 'data:remote-environment', ref: 'data:remote-environment',
++		tabId: seclabResolveTabId(remoteAuthority) ?? 'unparsed',
++		verdict: 'deny', reason: 'a server environment URI outside the tab', at: Date.now(),
 +	});
 +}
 +
