@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 85 | 229 | 372 | 48 | 748 |
+| fixed | 14 | 91 | 235 | 379 | 48 | 767 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 58 | 175 | 62 | 300 |
-| accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
+| fixed-untested | 0 | 5 | 59 | 177 | 62 | 303 |
+| accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 24 | 24 |
-| **all** | 16 | 94 | 325 | 643 | 166 | 1244 |
+| false-positive | 0 | 0 | 0 | 0 | 25 | 25 |
+| **all** | 16 | 100 | 332 | 652 | 168 | 1268 |
 
 ## Baseline: open high and critical findings
 
@@ -218,6 +218,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB2-3** | medium | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | The agentic build check could not fail; no build check at prepare. | Agentic harness wiring that needs a real macOS run; the check itself is unit-tested. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-21** | medium | fixed-untested | Level B check (test/containment) | The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets. | Wording; the digest test covers detection on both drivers. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-3** | medium | fixed-untested | Level B check (test/containment) | The gap text claimed Level A covers a host run of fsmonitor. | Wording only. |
+| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-5** | medium | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | The validator was dragged into the token-holding verify-runs mount. | ./seclab lint mounts enforces the one-file mount on every push. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-F** | low | fixed-untested | campaign fixture teardown | Planted inert files were left in the host checkout when the run used KEEP=1. | \`disarmCampaign\` is called unconditionally in \`cleanup()\` (test/containment/run.ts), but nothing runs the suite with KEEP=1 to prove the planted .git/.envrc are gone. |
@@ -367,6 +368,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
+| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-2** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | A supersede link resolved by basename across record kinds, and any mention counted as a back-link. | docs-check has no self-test; the whole tree is checked on every push, and a moved back-link was shown failing. |
+| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-3** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | After update-branch the procedure re-armed before the new review, and the EDR named no resolver. | Procedure text in AGENTS.md and the EDR. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -399,6 +402,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-5** | info | fixed-untested | build/check-pins.ts | check-pins' purity probe depended on the supplied file list. | No case removes the parser from the list while it stays on disk. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-19** | info | fixed-untested | Level B check (test/containment) | A dead field pointed inside the pinned directory. | A removed field. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-9** | info | fixed-untested | Level B check (test/containment) | The sbx host-evidence row rested on an unstated premise. | The premise proved false and the row was removed (FXF-20). |
+| [20261117-required-checks-review](20261117-required-checks-review.md) **CR-23** | info | accepted-residual | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit. |
 
 ### RPC follow-ups
 
@@ -2262,6 +2266,35 @@ Every other commit the register cites is on main's history, or on the branch its
 | PH-12 | low | fixed | docsync's summary sorted tab-made scheme counters with the default sort, which stringified them, so a crafted counter threw before the teardown gate. | 83f5937b125f · `test/docsync/probe.ts` "the report schema check passes nothing the summary cannot print (PH-12)" |
 | PH-13 | low | fixed | docsync's log collection ended in a forced success, so a failed read still counted as collected and the absence checks could pass without the extension-host logs. | 5831c83c515f · `test/docsync/probe.ts` "control: the tab-side logs were collected (no timeout or failure)" |
 | PH-14 | info | fixed-untested | check --measure dropped the log-collection control from its verdict. | A filter fix; no measure-mode run is part of the proof. |
+
+### [20261117-required-checks-review](20261117-required-checks-review.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| CR-1 | high | fixed | needs on a skipped job, continue-on-error, an empty matrix or a reusable uses skipped a required job. | e9215e32 · `build/check-required-checks.ts` "needs on a skipped gate job" |
+| CR-2 | low | fixed-untested | A supersede link resolved by basename across record kinds, and any mention counted as a back-link. | docs-check has no self-test; the whole tree is checked on every push, and a moved back-link was shown failing. |
+| CR-3 | low | fixed-untested | After update-branch the procedure re-armed before the new review, and the EDR named no resolver. | Procedure text in AGENTS.md and the EDR. |
+| CR-4 | high | fixed | Any workflow could add a job reporting a required context while the real one was gutted. | a7fa92f8 · `build/check-required-checks.ts` "a decoy job named lint" |
+| CR-5 | medium | fixed-untested | The validator was dragged into the token-holding verify-runs mount. | ./seclab lint mounts enforces the one-file mount on every push. |
+| CR-6 | low | fixed | The key allowlist admitted defaults:, which can make every step a no-op. | a7fa92f8 · `build/check-required-checks.ts` "defaults (could no-op every step)" |
+| CR-7 | high | fixed | The job reader skipped unrecognised lines, so a decoy name or a hidden if: could sit at another indent or after a comment. | c4863f34 · `build/check-required-checks.ts` "CR-7 a name indented 6" |
+| CR-8 | high | fixed | A step with checks or statuses write could post a passing required context as GitHub Actions. | c4863f34 · `build/check-required-checks.ts` "CR-8 checks: write" |
+| CR-9 | high | fixed | The scope check matched literal text; an escaped or block-scalar grant went unseen. | 36902968 · `build/check-required-checks.ts` "CR-9 an escaped scope key" |
+| CR-10 | info | false-positive | Prompt injection. | The review recorded no issue. |
+| CR-11 | high | fixed | A quoted, escaped, duplicated or merged if key skipped a required job unseen. | 8cab0893 · `build/check-required-checks.ts` "a double-quoted if key" |
+| CR-12 | medium | fixed | An escaped double-quoted branch filter item was compared literally. | c0e5754b · `build/liveness/liveness.ts` "an escaped double-quoted item" |
+| CR-13 | low | fixed | A step named Verify permissions or a comment failed lint. | b733d2fd · `build/check-required-checks.ts` "a step named after permissions, and a comment" |
+| CR-14 | medium | fixed | A null, ~ or empty job name let a decoy job id report a required context. | ec998414 · `build/check-required-checks.ts` "a decoy id lint with a null name" |
+| CR-15 | low | fixed | Backslashes or merge keys in comments and plain scalars failed lint. | ec998414 · `build/check-required-checks.ts` "a plain-scalar run with an escape, and comments" |
+| CR-16 | medium | fixed | An alias as a mapping key granted a scope the scan could not see. | 38376c33 · `build/check-required-checks.ts` "an alias as a block permissions key" |
+| CR-17 | medium | fixed | A jobs: line inside an open quoted scalar hid the real jobs. | 38376c33 · `build/check-required-checks.ts` "a decoy jobs block inside a quoted name" |
+| CR-18 | low | fixed | A quoted label containing permissions: failed lint. | 38376c33 · `build/check-required-checks.ts` "a quoted label holding permissions:" |
+| CR-19 | medium | fixed | A multiline quoted value with a column-0 continuation ended the job early, hiding an if:. | 8db7a7cd · `build/check-required-checks.ts` "a job-level if after a multiline quoted step value" |
+| CR-20 | medium | fixed | The last job reached end-of-file without the open-value check. | e365d825 · `build/check-required-checks.ts` "a decoy name inside a quoted step at the end of the file" |
+| CR-21 | low | fixed | A backslash inside a single-quoted command failed lint. | e365d825 · `build/check-required-checks.ts` "a single-quoted run holding an escape-like backslash" |
+| CR-22 | low | fixed | A quote after a bracket inside a plain scalar read as an open value. | 0c9c31b7 · `build/check-required-checks.ts` "a plain-scalar command holding a quoted bracket" |
+| CR-23 | info | accepted-residual | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit. |
+| CR-24 | low | fixed | A lone-quote plain label and JSON inside a single-quoted value failed lint. | 858bdff7 · `build/check-required-checks.ts` "JSON with a permissions key inside a single-quoted value" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
