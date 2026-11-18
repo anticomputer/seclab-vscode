@@ -20168,6 +20168,66 @@
 				"file": "seclab",
 				"name": "owner rows under a case variant passed (RJG-22)"
 			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-1",
+			"round": "Copilot review (PR 63)",
+			"severity": "medium",
+			"summary": "Push runs finishing before a PR opened could leave the gate success standing while the PR run skipped lint.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "gate script: push runs alone are pending until the PR run is judged"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-2",
+			"round": "Copilot review (PR 63)",
+			"severity": "medium",
+			"summary": "An API read failure in the gate exited before the post, leaving an earlier success.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "gate script: an API read failure after an earlier success posts failure"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-3",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "The owner-file case-variant check was a grep -q pipeline that can fail open under pipefail.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"test": {
+				"file": "seclab",
+				"name": "a case variant before 10000 canonical paths was missed"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-4",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "The observability-docs re-validation overlaid product inputs with the old main, refusing a regenerated change and passing a stale one.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"test": {
+				"file": "seclab",
+				"name": "a regenerated product-input change was refused"
+			}
 		}
 	]
 }
