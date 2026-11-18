@@ -652,8 +652,62 @@ export function removeRunResources(runDir: string, m: RunManifest = readManifest
 	for (const c of m.containers ?? []) {
 		spawnSync('docker', ['rm', '-f', c], { stdio: 'ignore' });
 	}
-	for (const c of runFalcoSensors(m, runPids)?.own ?? []) {
-		spawnSync('docker', ['rm', '-f', '--', c], { stdio: 'ignore' });
+	removeFalcoSensors(runFalcoSensors(m, runPids)?.own ?? []);
+}
+
+/**
+ * Remove Falco sensors and wait (bounded) until docker no longer lists them (PS-8). A sensor
+ * may already be being removed, by its own tabd as the last tab stopped: a second `rm -f` then
+ * fails at once ("removal ... is already in progress") while `docker ps -a` still lists it, so a
+ * listing straight after the `rm` reads that as a leak. What is still listed after the wait is.
+ */
+export function removeFalcoSensors(names: string[], timeoutMs = 20_000): boolean {
+	const docker = (args: string[], ms: number) => {
+		const r = spawnSync('docker', args, { encoding: 'utf8', timeout: ms, killSignal: 'SIGKILL' });
+		return r.error || r.signal ? undefined : { status: r.status, stdout: r.stdout ?? '' };
+	};
+	return removeSensorsWithin(names, docker, s => sleep(s), timeoutMs);
+}
+
+/**
+ * One deadline for everything (PS-13): each `rm -f` and each listing gets only the time left, so a
+ * stalled Docker daemon makes this return false at the deadline instead of hanging. A docker
+ * call that fails or times out never counts as the sensor gone.
+ */
+export function removeSensorsWithin(names: string[], docker: (args: string[], timeoutMs: number) => { status: number | null; stdout: string } | undefined,
+	pause: (seconds: number) => void, timeoutMs: number, now: () => number = Date.now): boolean {
+	if (!names.length) {
+		return true;
+	}
+	const until = now() + timeoutMs;
+	const left = () => Math.max(1, until - now());
+	for (const n of names) {
+		if (now() >= until) {
+			return false;
+		}
+		docker(['rm', '-f', '--', n], left());
+	}
+	return awaitGone(names, () => {
+		const r = docker(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--format', '{{.Names}}'], left());
+		return r && r.status === 0 ? r.stdout.split('\n').map(x => x.trim()).filter(Boolean) : undefined;
+	}, pause, Math.max(0, until - now()), now);
+}
+
+/** Poll `list` until none of `names` is in it, or the time is up; true when all are gone. A failed listing never counts as gone. */
+export function awaitGone(names: string[], list: () => string[] | undefined, pause: (seconds: number) => void, timeoutMs: number, now: () => number = Date.now): boolean {
+	if (!names.length) {
+		return true;
+	}
+	const until = now() + timeoutMs;
+	for (;;) {
+		const l = list();
+		if (l && !names.some(n => l.includes(n))) {
+			return true;
+		}
+		if (now() >= until) {
+			return false;
+		}
+		pause(0.25);
 	}
 }
 
@@ -725,9 +779,7 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	add(left.length === 0, 'no sandbox, container, network or volume from this run remains', left.join(', '));
 	add(unknown.length === 0, 'runtimes could be listed (leftovers otherwise unknown)', unknown.length ? `could not list: ${unknown.join(', ')}` : '');
 	// Any run's Falco sensor whose tabd is gone has no reader and no owner left to stop it (PS-1).
-	for (const o of hostFalcoOrphans() ?? []) {
-		spawnSync('docker', ['rm', '-f', '--', o.name], { stdio: 'ignore' });
-	}
+	removeFalcoSensors((hostFalcoOrphans() ?? []).map(o => o.name));
 	const orphans = hostFalcoOrphans();
 	add(orphans ? orphans.length === 0 : m.driver !== 'oci', 'no Falco sensor outlives its tabd (this run or an earlier one)',
 		orphans ? orphans.map(o => `${o.name}: ${o.why}`).join(', ') : 'could not list docker or processes');

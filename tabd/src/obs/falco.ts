@@ -180,6 +180,8 @@ export class FalcoSensor {
 	private cleaned = false;
 	private wantSha = '';
 	private errTail = '';
+	private stopping: Promise<void> | undefined;
+	private closed = false;
 
 	constructor(d: FalcoDeps) {
 		this.d = d;
@@ -232,15 +234,41 @@ export class FalcoSensor {
 		const c = this.child;
 		this.child = undefined;
 		if (c) {
-			await this.d.runDocker(['rm', '-f', '--', this.d.name]);
-			c.kill('SIGKILL');
+			this.stopping = (async () => {
+				try {
+					await this.d.runDocker(['rm', '-f', '--', this.d.name]);
+				} finally {
+					c.kill('SIGKILL');
+				}
+			})().catch(() => undefined); // a failed removal is not re-thrown to every later caller (PS-10)
 		}
+		// A removal another caller started (the last tab's `remove`) counts too: whoever stops
+		// returns only once the container is gone (PS-8).
+		await this.stopping;
+	}
+
+	/**
+	 * The supervisor is exiting: wait for any removal in flight, remove the container, and never
+	 * start another, whatever is still queued (PS-8: tabd exited while its own `docker rm -f` was
+	 * still running, and a pending `add` could have started Falco again with no one left to stop it).
+	 */
+	close(): Promise<void> {
+		this.closed = true;
+		return this.stop();
 	}
 
 	private async apply(): Promise<void> {
+		if (this.closed) {
+			// Before any readiness waiter exists, so nothing is left to time out (PS-9).
+			throw new Error('Falco sensor closed: the supervisor is exiting');
+		}
 		if (!this.child && !this.cleaned) {
 			await this.cleanupStale();
 			this.cleaned = true;
+		}
+		if (this.closed) {
+			// Closed while the stale-sensor cleanup above was running (PS-12).
+			throw new Error('Falco sensor closed: the supervisor is exiting');
 		}
 		fs.mkdirSync(this.d.rulesDir, { recursive: true, mode: 0o755 });
 		const rules = falcoRules([...this.tabs].map(([shortId, w]) => ({ shortId, deep: w.deep })));
@@ -287,6 +315,9 @@ export class FalcoSensor {
 	}
 
 	private start(): void {
+		if (this.closed) {
+			throw new Error('Falco sensor closed: the supervisor is exiting');
+		}
 		const child = this.d.spawnDocker(falcoArgs(this.d.name, this.d.rulesDir, this.d.labels));
 		this.child = child;
 		const out = new LineSplitter(64 * 1024);

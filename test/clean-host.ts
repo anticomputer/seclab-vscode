@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { sensorOwner } from '../tabd/src/obs/falco.ts';
-import { classifyFalco, classifyRunFalco, FALCO_PS_FORMAT, falcoOrphans, falcoRemovable, pidAliveFrom, treeTexts } from './containment/teardown.ts';
+import { classifyFalco, classifyRunFalco, FALCO_PS_FORMAT, falcoOrphans, falcoRemovable, pidAliveFrom, removeFalcoSensors, treeTexts } from './containment/teardown.ts';
 import { repoRoot } from './harness.ts';
 import { avFindings } from './safety/av-shape.ts';
 
@@ -578,7 +578,14 @@ for (const s of sensors) {
 	items.push({
 		kind: 'falco sensor', name: n, state: c?.orphan ? why : '', remove: !!c?.orphan, why,
 		// A stray tabd's sensor goes only once that tabd has really exited (CR16-3).
-		del: () => !!c && falcoRemovable(c, strayTabds, pidAlive) && ok('docker', ['rm', '-f', '--', n]),
+		del: () => {
+			if (!c || !falcoRemovable(c, strayTabds, pidAlive)) {
+				return false;
+			}
+			// Waits out a removal already in progress (PS-8); gone only if docker could list and
+			// no longer shows it (PS-11).
+			return removeFalcoSensors([n]);
+		},
 	});
 }
 for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.volume.test(n) || isCacheVolume(n))) {
