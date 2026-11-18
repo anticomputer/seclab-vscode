@@ -467,6 +467,7 @@ function selfTest(): void {
 	const realFiles = Object.fromEntries([GATE, ...REQUIRED.map(r => r.workflow)].map(f => [f, fs.readFileSync(path.join(wfDir, f), 'utf8')]));
 	const g = realFiles[GATE];
 	const allowStatuses = (files: Record<string, string>) => permissionsProblems(files, (f, scope) => WRITE_OK.has(scope) || (f === GATE && scope === 'statuses' && gateProblems(files).length === 0));
+	let gateEdits = 0;
 	for (const [name, edit, want] of [
 		['gate control', (s: string) => s, null],
 		['gate on pull_request too', (s: string) => s.replace('\non:\n', '\non:\n  pull_request:\n'), /workflow_run alone/],
@@ -485,6 +486,7 @@ function selfTest(): void {
 		['gate misses re-runs (no in_progress)', (s: string) => s.replace('types: [requested, in_progress, completed]', 'types: [requested, completed]'), /types \[requested, in_progress, completed\]/],
 		['gate waits on another workflow list', (s: string) => s.replace('workflows: [ci-unit, workflow-lint, docs-check, patch-build]', 'workflows: [ci-unit]'), /not the required workflows/],
 	] as Array<[string, (s: string) => string, RegExp | null]>) {
+		gateEdits++;
 		const files = { ...realFiles, [GATE]: edit(g) };
 		const got = [...gateProblems(files), ...allowStatuses(files)];
 		if (want ? !got.some(p => want.test(p)) || (name !== 'gate control' && !got.some(p => /statuses: write/.test(p))) : got.length) {
@@ -558,7 +560,8 @@ esac
 	if (!script.includes('gh api --paginate "repos/$REPO/actions/workflows/$wf/runs?')) {
 		throw new Error('required-checks self-test "gate script RJG-6": the runs list is not read with --paginate');
 	}
-	console.log(`required-checks self-test: ${cases.length + 40 + gateRuns.length} cases OK`);
+	// Each array counted, so a dropped case shows in the total (review RJG-25).
+	console.log(`required-checks self-test: ${cases.length + gateEdits + gateRuns.length} cases OK (${cases.length} required-job shapes, ${gateEdits} gate edits, ${gateRuns.length} gate script runs)`);
 }
 
 if (import.meta.main) {
