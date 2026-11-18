@@ -21,6 +21,7 @@ import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../c
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'telemetryid');
 const ws = path.join(base, 'ws');
+const armFile = path.join(base, 'arm');
 const seededFile = path.join(base, 'seeded.json');
 const resultsFile = path.join(repo, '.work', 'telemetryid-results.jsonl');
 // One profile per worktree: the previous-run guard lives in this worktree's .work, so a shared
@@ -33,7 +34,8 @@ const [mode, ...rest] = process.argv.slice(2);
 const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// Bounded (review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
 
 if (mode === 'prepare') {
 	checkUserDataDir(userData);
@@ -47,7 +49,8 @@ if (mode === 'prepare') {
 	const seeded = { machineId: randomBytes(32).toString('hex'), sqmId: `{${randomUUID().toUpperCase()}}`, devDeviceId: randomUUID() };
 	fs.writeFileSync(seededFile, JSON.stringify(seeded));
 	writeSnapshot(base);
-	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+	// The teardown gate removes the workspace and the packaged probe, and checks (review SQ-8).
+	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix')] });
 	fs.writeFileSync(path.join(ws, 'README.md'), '# telemetryid probe workspace\n');
 	fs.mkdirSync(path.join(userData, 'User', 'globalStorage'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'User', 'globalStorage', 'storage.json'), JSON.stringify({
@@ -57,7 +60,11 @@ if (mode === 'prepare') {
 		'security.workspace.trust.enabled': false, 'seclab.tabs.driver': 'sbx', 'seclab.tabs.allowedRoots': [base], 'window.restoreWindows': 'none',
 	}, null, '\t'));
 	const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+	// The harness keeps the arm on the host, outside the tab's workspace, and never reads it back
+	// from there (review SQ-5).
+	const arm = randomBytes(16).toString('hex');
+	fs.writeFileSync(armFile, arm);
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\n`);
 
 	const vsixDir = path.join(base, 'vsix');
 	fs.mkdirSync(vsixDir, { recursive: true });
@@ -70,11 +77,12 @@ if (mode === 'prepare') {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('telemetryid-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (review SQ-7).
+	fs.copyFileSync(path.join(vsixDir, 'telemetryid-probe.vsix'), path.join(ws, '.telemetryid-probe.vsix'));
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	writeManifest(base, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
-	fs.copyFileSync(path.join(vsixDir, 'telemetryid-probe.vsix'), path.join(ws, '.telemetryid-probe.vsix'));
-	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.telemetryid-probe.vsix')]);
+	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.telemetryid-probe.vsix')], 300_000);
 	client.dispose();
 	await new Promise(res => client.once('exit', res));
 	if (r.status !== 0) {
@@ -96,10 +104,31 @@ if (mode === 'prepare') {
 	} catch {
 		rep = undefined;
 	}
-	const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
-	const field = (f: any) => !!f && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.shape === 'string' && /^[\x20-\x7e]{0,120}$/.test(f.shape);
-	const valid = !!rep && rep.schema === 'seclab-telemetryid-report/1' && rep.arm === armed && field(rep.machineId) && field(rep.sessionId)
+	const armed = (() => {
+		try {
+			return (fs.readFileSync(armFile, 'utf8').match(/^[0-9a-f]{32}$/) ?? [])[0];
+		} catch {
+			return undefined;
+		}
+	})();
+	const field = (f: any) => !!f && typeof f.sha256 === 'string' && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.shape === 'string' && /^[\x20-\x7e]{0,120}$/.test(f.shape);
+	// The report is the tab's: its check must reject anything malformed without throwing, or the
+	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-telemetryid-report/1' && rep.arm === armed && field(rep.machineId) && field(rep.sessionId)
 		&& (rep.devDeviceId === null || field(rep.devDeviceId));
+	const hostileRejected = (() => {
+		try {
+			return !validReport({ schema: 'seclab-telemetryid-report/1', arm: armed, machineId: { sha256: { toString: null }, shape: '' } });
+		} catch {
+			return false;
+		}
+	})();
+	let valid = false;
+	try {
+		valid = validReport(rep);
+	} catch {
+		// a malformed report is invalid
+	}
 	const launched = (() => {
 		try {
 			return String(JSON.parse(fs.readFileSync(path.join(userData, 'seclab-launch.json'), 'utf8')).app ?? '');
@@ -111,6 +140,7 @@ if (mode === 'prepare') {
 	const results: Array<{ name: string; ok: boolean }> = [];
 	const expect = (name: string, ok: boolean) => results.push({ name, ok });
 	expect('report present, from this run, and matches the schema', valid);
+	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
 	if (valid) {
 		console.log(`tab machineId: ${rep.machineId.shape} (${rep.machineId.sha256 === sha(seeded.machineId) ? 'THE HOST\'S' : 'not the host\'s'})`);
 		console.log(`tab sessionId: ${rep.sessionId.shape}; devDeviceId: ${rep.devDeviceId ? rep.devDeviceId.shape : 'not readable (proposed API)'}`);

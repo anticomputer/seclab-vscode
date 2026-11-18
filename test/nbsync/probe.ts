@@ -24,6 +24,7 @@ import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../c
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'nbsync');
 const ws = path.join(base, 'ws');
+const armFile = path.join(base, 'arm');
 const hostIpynb = path.join(base, 'host', 'host.ipynb');
 const hostNb = path.join(base, 'host', 'host.seclabnb');
 const canaryFile = path.join(base, 'canaries.json');
@@ -38,7 +39,8 @@ const [mode, ...rest] = process.argv.slice(2);
 const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// Bounded (review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
 const KINDS = ['hostIpynb', 'hostNb', 'detect'] as const;
 type Canaries = Record<typeof KINDS[number], string>;
 const SYNC = ['notebooks', 'notebooks-cell', 'onopen', 'onopen-cell', 'onchange', 'onchange-cell', 'celldocs'];
@@ -60,7 +62,9 @@ async function prepare(): Promise<string> {
 	const c = Object.fromEntries(KINDS.map(k => [k, `seclabcanary_nb_${k}_${randomBytes(12).toString('hex')}`])) as Canaries;
 	fs.writeFileSync(canaryFile, JSON.stringify(c));
 	writeSnapshot(base);
-	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+	// The teardown gate removes the workspace, the packaged probe and the host fixtures, and checks
+	// (review SQ-8).
+	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix'), path.join(base, 'host')] });
 	fs.writeFileSync(path.join(ws, 'README.md'), '# nbsync probe workspace\n');
 	fs.writeFileSync(path.join(ws, 'nb.ipynb'), ipynb(c.detect));
 	fs.writeFileSync(hostIpynb, ipynb(c.hostIpynb));
@@ -71,7 +75,11 @@ async function prepare(): Promise<string> {
 		'workbench.welcomePage.experimentalOnboarding': false, 'workbench.startupEditor': 'none', 'workbench.tips.enabled': false, 'chat.disableAIFeatures': true,
 	}, null, '\t'));
 	const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\nhostipynb=${hostIpynb}\nhostnb=${hostNb}\n`);
+	// The harness keeps the arm on the host, outside the tab's workspace, and never reads it back
+	// from there (review SQ-5).
+	const arm = randomBytes(16).toString('hex');
+	fs.writeFileSync(armFile, arm);
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\nhostipynb=${hostIpynb}\nhostnb=${hostNb}\n`);
 
 	const vsixDir = path.join(base, 'vsix');
 	fs.mkdirSync(vsixDir, { recursive: true });
@@ -84,11 +92,12 @@ async function prepare(): Promise<string> {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('nbsync-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (review SQ-7).
+	fs.copyFileSync(path.join(vsixDir, 'nbsync-probe.vsix'), path.join(ws, '.nbsync-probe.vsix'));
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	writeManifest(base, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
-	fs.copyFileSync(path.join(vsixDir, 'nbsync-probe.vsix'), path.join(ws, '.nbsync-probe.vsix'));
-	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.nbsync-probe.vsix')]);
+	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.nbsync-probe.vsix')], 300_000);
 	client.dispose();
 	await new Promise(res => client.once('exit', res));
 	if (r.status !== 0) {
@@ -128,13 +137,34 @@ async function check(measure: boolean): Promise<boolean> {
 		spawnSync('sleep', ['1']);
 		rep = read();
 	}
-	const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
-	const hitOk = (h: any) => !!h && typeof h.channel === 'string' && /^[a-z-]{1,20}$/.test(h.channel) && typeof h.phase === 'string' && /^[a-z-]{1,30}$/.test(h.phase) && /^[0-9a-f]{64}$/.test(h.sha256);
-	const valid = !!rep && rep.schema === 'seclab-nbsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
+	const armed = (() => {
+		try {
+			return (fs.readFileSync(armFile, 'utf8').match(/^[0-9a-f]{32}$/) ?? [])[0];
+		} catch {
+			return undefined;
+		}
+	})();
+	const hitOk = (h: any) => !!h && typeof h.channel === 'string' && /^[a-z-]{1,20}$/.test(h.channel) && typeof h.phase === 'string' && /^[a-z-]{1,30}$/.test(h.phase) && typeof h.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h.sha256);
+	// The report is the tab's: its check must reject anything malformed without throwing, or the
+	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-nbsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
 		&& Array.isArray(rep.hits) && rep.hits.length <= 5000 && rep.hits.every(hitOk)
 		&& !!rep.schemes && typeof rep.schemes === 'object' && Object.entries(rep.schemes).every(([k, v]) => /^[a-z-]{1,20}:[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v))
 		&& !!rep.steps && typeof rep.steps === 'object' && Object.entries(rep.steps).every(([k, v]) => /^[a-z-]{1,30}$/.test(k) && typeof v === 'string' && /^[\x20-\x7e]{0,60}$/.test(v))
 		&& !!rep.controls && ['ownNotebook', 'tabUntitled', 'tabUntitledEdited'].every(k => typeof rep.controls[k] === 'boolean');
+	const hostileRejected = (() => {
+		try {
+			return !validReport({ schema: 'seclab-nbsync-report/1', arm: armed, done: true, hits: [{ channel: 'sync', phase: 'open', sha256: { toString: null } }] });
+		} catch {
+			return false;
+		}
+	})();
+	let valid = false;
+	try {
+		valid = validReport(rep);
+	} catch {
+		// a malformed report is invalid
+	}
 	const launched = (() => {
 		try {
 			return String(JSON.parse(fs.readFileSync(path.join(userData, 'seclab-launch.json'), 'utf8')).app ?? '');
@@ -146,6 +176,7 @@ async function check(measure: boolean): Promise<boolean> {
 	const results: Array<{ name: string; ok: boolean }> = [];
 	const expect = (name: string, ok: boolean) => results.push({ name, ok });
 	expect('report present, from this run, and matches the schema', valid);
+	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
 	const byHash = new Map(KINDS.map(k => [sha(c[k]), k]));
 	const hits: Array<{ kind: string; channel: string; phase: string }> = valid
 		? (rep.hits as Array<{ channel: string; phase: string; sha256: string }>).filter(h => byHash.has(h.sha256)).map(h => ({ kind: byHash.get(h.sha256)!, channel: h.channel, phase: h.phase }))

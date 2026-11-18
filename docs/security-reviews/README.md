@@ -164,6 +164,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
 | 2026-11-17 | [link-check retries (round LCR)](20261117-link-check-retries.md) | round LCR, by an Opus-class model, of the lychee change in | see record |
 | 2026-11-17 | [Review: automated PR review threads on the RPC follow-ups (#9, #14, #20, #27)](20261117-pr-review-threads.md) | see record | see record |
+| 2026-11-17 | [probe harnesses and the tab's workspace (follow-up to PR #24, #33, #37)](20261117-probe-harness-hygiene.md) | the configsync, docsync, edtabs, nbsync and telemetryid probe harnesses on main, for | see record |
 | 2026-11-17 | [the scheme-squatting probe (Copilot review, PR #33)](20261117-scheme-squatting-probe.md) | test/squat/probe.ts and its probe extension, the runtime regression test for | see record |
 | 2026-11-17 | [the workspace-data probe (Copilot review, PR #37)](20261117-workspace-data-probe.md) | test/wsdata/probe.ts and its probe extension, the runtime regression test for | see record |
 <!-- index:end -->
