@@ -15,12 +15,12 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 239 | 391 | 51 | 786 |
+| fixed | 14 | 91 | 240 | 391 | 51 | 787 |
 | fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
 | fixed-untested | 0 | 5 | 59 | 180 | 65 | 309 |
 | accepted-residual | 0 | 1 | 12 | 72 | 25 | 110 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
-| open | 0 | 2 | 12 | 15 | 8 | 37 |
+| open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
 | **all** | 16 | 102 | 335 | 668 | 178 | 1299 |
 
@@ -120,7 +120,6 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 |---|---|---|---|---|---|
 | [20261104-tab-observability](20261104-tab-observability.md) **CW-1** | medium | deferred | settings-withheld notice (patch 0036) | A tab extension registering the same command id would win through ICommandService, suppressing the withheld notice and learning key names. | follow-up: Lands with patch 0036 (config/settings filter), owned by the docsync session; 0036 is not in patches/series on main nor on origin/anticomputer-config-snapshot yet. tabd refuses the claim unless 0036 is shipped, so no notice is produced meanwhile. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-2** | medium | fixed-untested | patch 0036 configuration snapshot | A tab-declared \`__proto__.&lt;x&gt;\` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like \`constructor\`. | No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here). |
-| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-11** | medium | open | docsync harness | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F3** | low | fixed-untested | patch 0035 document sync | \`$onVirtualDocumentChange\` could replace the text of any loaded model, host settings included (pre-existing; line touched). | A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records "code review; no probe" — driving it needs the user settings path inside the tab. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
@@ -1630,7 +1629,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| F1 | high | fixed | A tab registering a filesystem provider for a host scheme (\`output\`) made the scheme-level rule sync every host output model into the tab. | 95a1f55 · `test/docsync/probe.ts` "hijack 1b: the tab registered a filesystem provider for \`output\`" |
+| F1 | high | fixed | A tab registering a filesystem provider for a host scheme (\`output\`) made the scheme-level rule sync every host output model into the tab. | 95a1f55 · `test/docsync/probe.ts` "hijack 1: the filter refused the tab providers for host schemes (decision log)" |
 | F2 | medium | fixed | \`openTextDocument('untitled:Untitled-N')\` reopened the host's existing untitled model and tagged it as the tab's. | 95a1f55 · `test/docsync/probe.ts` "no host-seeded untitled text reached the tab (claim by URI refused)" |
 | F3 | low | fixed-untested | \`$onVirtualDocumentChange\` could replace the text of any loaded model, host settings included (pre-existing; line touched). | A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records "code review; no probe" — driving it needs the user settings path inside the tab. |
 | F4 | info | fixed-untested | \`CellUri.parse\` on a tab-made URI could throw; the sole-consumer pin matches substrings; other calls still name host URIs. | Parse now fails closed and cells are limited to the tab authority, but the record lists no regression test; the remaining host-URI call paths are accepted and reported as siblings. |
@@ -1988,7 +1987,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | EDT-8 | low | fixed | EDT-1's regression test never opened a media preview, so restoring the webview exemption would have passed it. | f64c184e1c87 · `test/edtabs/probe.ts` "EDT-1 a host media file dropped in the window reaches the tab without its path" |
 | EDT-9 | low | fixed-untested | A multi-diff's source id has no model, so tab-owned multi-diffs went anonymous. | The RPC filter refuses a tab's commands, so no runtime case opens a tab-owned multi-diff. |
 | EDT-10 | low | fixed | An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous. | f64c184e1c87 · `test/edtabs/probe.ts` "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)" |
-| EDT-11 | medium | open | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel. |
+| EDT-11 | medium | fixed | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | patch:8516d7e64629cf5d19d6317cdc727ddccb719883 · `test/docsync/probe.ts` "DOCSYNC no host canary in any tab document (settings, keybindings, window log, host file and its diff)" |
 | EDT-12 | info | fixed-untested | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
 | EDT-13 | low | fixed | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | d9d10beb1e7b · `test/edtabs/probe.ts` "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)" |
 | EDT-14 | low | fixed | Every model add fired 0035's origin change, rebuilding the whole document state: quadratic in a tab's background opens up to MainThreadDocuments' 50 held references, a constant factor past it. | 436ca0449157 · `test/edtabs/probe.ts` "EDT-14 a background document open does not rebuild the document state" |
