@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 215 | 348 | 45 | 706 |
+| fixed | 14 | 84 | 215 | 349 | 45 | 707 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 611 | 157 | 1183 |
+| **all** | 16 | 93 | 306 | 612 | 157 | 1184 |
 
 ## Baseline: open high and critical findings
 
@@ -2093,6 +2093,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR25-7 | low | fixed | A symlinked .git/info made the clean-up delete files in its target. | patch:4b72119f6c072b7e795581cceef913f32fced684 · `build/fetch-upstream.test.ts` "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)" |
 | CR25-8 | low | fixed | A kept replacement ref made the reset and the check use another commit's tree while HEAD named the pin. | patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb · `build/fetch-upstream.test.ts` "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)" |
 | CR25-9 | low | fixed | An untracked directory with a .gitignore of * hid itself from the clean and the check. | patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb · `build/fetch-upstream.test.ts` "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)" |
+| CR25-10 | low | fixed | A per-build tag lease was written after the tag existed; a concurrent clean-host could prune it. | patch:4bb7e65462e8a4fbd2b0f2467cb36d7957443af1 · `test/clean-host.ts` "the per-build lease isn't written before the tag is published" |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 
