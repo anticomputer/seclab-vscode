@@ -80,3 +80,10 @@ In response: `tabTextMatches` requires each resource and result `uri` to be a pl
 URI (`$mid` 1, URI keys only), and a result to carry only its own keys and never `$mid`. Two
 injected defects cover this (`a0fb6e29`). SRCH2-2 is accepted as the listed UI-spoofing
 residual. The records are aligned.
+
+## Automated PR review on #52
+One thread, real and functional: upstream batches a file's text matches whole, so a file with
+more matching lines than `tabTextMatches` accepts had its whole batch refused, and its results went
+missing without a warning. Patch 0052 splits a file's matches at that bound in the extension host,
+and the window merges them. `search-split.test.ts` runs upstream's own collector on such a file,
+unpatched as the control and patched, with a mutant.
