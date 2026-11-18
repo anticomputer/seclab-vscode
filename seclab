@@ -77,7 +77,7 @@ usage: ./seclab <command>
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
   landing verify SHA            After a merge, from main's code: refuse unless every required job ran and
-                                concluded success for SHA, and the required-jobs-ran gate posted success
+                                concluded success for SHA (and reports the required-jobs-ran status)
                                 (EDR required-jobs-gate; AGENTS.md landing step 8); then re-runs this main's
                                 validators (lint job, docs check, findings) over the merged tree, and lists
                                 every merged change to owner-acceptances.md with its rows
@@ -1423,9 +1423,10 @@ landing_verify() {
 		[[ "$verdict" == success ]] || bad=1
 	done
 	# Advisory: once merged, the main branch's own workflows could post this context too.
+	# Report only: the gate posts success on a PR head once its pull_request runs are judged, and a
+	# rebase merge makes a new commit with push runs only, so its status here is pending at best.
 	got="$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[] | select(.context == "required-jobs-ran")] | first | .state // "missing"')" || return 2
-	echo "landing verify: required-jobs-ran: $got"
-	[[ "$got" == success ]] || bad=1
+	echo "landing verify: required-jobs-ran on the merged commit: $got (report only; the gate judged the PR head)"
 	# A job that ran to success may still have been gutted by the change it gated (RJG-1): re-run
 	# this checkout's validators over the merged tree (owner decision 2026-11-17).
 	landing_revalidate "$(git -C "$ROOT" rev-parse HEAD)" "$sha" || bad=1
@@ -1438,7 +1439,7 @@ landing_verify() {
 # required-jobs-gate). Every required job runs code the merged change controls, so a change can gut
 # a validator and the job still concludes success. Here each validator runs from this checkout (a
 # main older than the change) against a worktree of the merged commit: the step resets the
-# worktree to the commit, copies this checkout's copy of the validator's own import closure over
+# worktree to the commit, copies this checkout's copy of the validator code (build/, tabd/tools/) in its import closure over
 # it, and runs this checkout's shell logic with the worktree as its root. Only the validator's
 # code is the old main's; everything it judges (workflows, registers, the code it scans as data,
 # the files a finding cites) is the merged tree's. Residual: a finding the change registers
@@ -1455,6 +1456,11 @@ landing_self_test() {
 		if landing_safe_path "$ROOT/.work" "$bad_path"; then echo "landing self-test: the overlay accepted the path '$bad_path' (RJG-14)" >&2; exit 1; fi
 	done
 	landing_safe_path "$ROOT/.work" build/check-pins.ts || { echo "landing self-test: the overlay refused a plain relative path" >&2; exit 1; }
+	# The case-variant check holds with a long list (Copilot review on PR 63).
+	local many
+	many="$(printf 'docs/security-reviews/OWNER-acceptances.md\n'; for _ in $(seq 10000); do echo docs/security-reviews/owner-acceptances.md; done)"
+	landing_case_variant "$many" docs/security-reviews/owner-acceptances.md || { echo "landing self-test: a case variant before 10000 canonical paths was missed" >&2; exit 1; }
+	if landing_case_variant "$(for _ in $(seq 10000); do echo docs/security-reviews/owner-acceptances.md; done)" docs/security-reviews/owner-acceptances.md; then echo "landing self-test: canonical paths alone reported a case variant" >&2; exit 1; fi
 	src="$ROOT/.work/landing-self-test"
 	git -C "$ROOT" worktree remove --force "$src" 2>/dev/null || true
 	rm -rf "$src"
@@ -1532,8 +1538,19 @@ landing_self_test() {
 	git -C "$src" "${id[@]}" commit -qm 'landing self-test: owner rows under a case variant'
 	owner_twin="$(git -C "$src" rev-parse HEAD)"
 	git -C "$src" checkout -q -f --detach "$owner2"
+	# 10. A product input the validator reads, changed and its output regenerated, passes; changed
+	#     without regenerating, it is refused (Copilot review on PR 63).
+	local obs_regen obs_stale
+	git -C "$src" checkout -q -f --detach "$old"
+	sed -i.bak 's/^export const SCHEMA_VERSION = \([0-9]*\);/export const SCHEMA_VERSION = 99;/' "$src/tabd/src/obs/schema.ts" && rm -f "$src/tabd/src/obs/schema.ts.bak"
+	grep -q '^export const SCHEMA_VERSION = 99;' "$src/tabd/src/obs/schema.ts" || { echo "landing self-test: couldn't change the schema version" >&2; exit 1; }
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: schema changed, docs stale'
+	obs_stale="$(git -C "$src" rev-parse HEAD)"
+	docker run --rm --network none -u "$(id -u):$(id -g)" -v "$src:/repo" -w /repo "$(node_image)" node tabd/tools/gen-obs-docs.ts write >/dev/null
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: schema changed, docs regenerated'
+	obs_regen="$(git -C "$src" rev-parse HEAD)"
 	# 3. A clean merge.
-	git -C "$src" checkout -q --detach "$old"
+	git -C "$src" checkout -q -f --detach "$old"
 	echo '' >> "$src/raw-idea.md"
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: clean'
 	clean="$(git -C "$src" rev-parse HEAD)"
@@ -1549,6 +1566,8 @@ landing_self_test() {
 	rm -rf "$ROOT/.work/landing-victim-dir"
 	rm -f "$canary" "$victim"
 	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
+	landing_revalidate "$old" "$obs_regen" obs-docs || { echo "landing self-test: a regenerated product-input change was refused (Copilot review on PR 63)" >&2; exit 1; }
+	if landing_revalidate "$old" "$obs_stale" obs-docs; then echo "landing self-test: a product-input change with stale output passed" >&2; exit 1; fi
 	local report
 	report="$(landing_owner_rows "$old" "$owner_tip")"
 	[[ "$report" == *"OWNER ACCEPTANCES changed in $owner"* && "$report" == *"added or changed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope |"* ]] \
@@ -1576,11 +1595,18 @@ landing_self_test() {
 # commit in OLD..SHA that changes docs/security-reviews/owner-acceptances.md, with the table rows it
 # added or changed and those it removed, for the coordinator to check against an owner decision.
 # Rows are the merged tree's text: printed as data with control characters removed, never run.
+# Does NAMES (one path per line) hold FILE under another case? No pipeline: grep -q on the reading
+# side can fail open under pipefail once the list is large (Copilot review on PR 63).
+landing_case_variant() { # NAMES FILE
+	local same
+	same="$(grep -ix -- "$2" <<<"$1")" || return 1
+	grep -vxF -- "$2" <<<"$same" >/dev/null
+}
 landing_owner_rows() { # OLD SHA
 	local old="$1" sha="$2" file=docs/security-reviews/owner-acceptances.md commits c n=0 names
 	# A rename or case variant would move the rows out of view: refuse it (RJG-22).
 	names="$(git -C "$ROOT" log -m --format= --name-only --no-renames "$old..$sha")" || { echo "landing verify: can't list the merged paths" >&2; return 2; }
-	if grep -ix "$file" <<<"$names" | grep -qvxF "$file"; then echo "landing verify: REFUSED: a merged commit writes $file under another case" >&2; return 1; fi
+	if landing_case_variant "$names" "$file"; then echo "landing verify: REFUSED: a merged commit writes $file under another case" >&2; return 1; fi
 	git -C "$ROOT" cat-file -e "$sha:$file" 2>/dev/null || { echo "landing verify: REFUSED: $sha has no $file" >&2; return 1; }
 	commits="$(git -C "$ROOT" rev-list --reverse "$old..$sha" -- "$file")" || { echo "landing verify: can't list the commits changing $file" >&2; return 2; }
 	for c in $commits; do
@@ -1629,6 +1655,10 @@ landing_overlay() { # WT OLD ENTRY...: WT back to its commit, then OLD's copy of
 			'const m = await import("/repo/build/import-closure.ts"); console.log(m.closure("/repo", process.argv[1]).join("\n"));' "$e")" || return 1
 		[[ -n "$files" ]] || { echo "landing verify: no closure for $e" >&2; return 1; }
 		for f in $files; do
+			# Only validator code is the old main's: build/ and tabd/tools/. A product module the
+			# validator reads as input (tabd/src/obs for the observability docs) stays the merged
+			# tree's, so a merge that changes it is judged on what it merged (Copilot review on PR 63).
+			[[ "$f" == build/* || "$f" == tabd/tools/* ]] || continue
 			# The merged tree must not put a symlink anywhere on the path: the old code would be
 			# written through it, and the validator would run whatever it points at (RJG-10).
 			landing_safe_path "$wt" "$f" || { echo "landing verify: REFUSED: $f is not a plain path in the merged tree (a symlink on it?)" >&2; return 1; }

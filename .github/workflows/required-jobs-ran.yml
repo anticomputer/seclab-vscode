@@ -18,7 +18,7 @@ on:
   # The one workflow_run trigger: a scoped exception to CI hardening (EDR 20261117-required-jobs-gate).
   workflow_run: # zizmor: ignore[dangerous-triggers] runs main's copy, executes nothing from the PR
     workflows: [ci-unit, workflow-lint, docs-check, patch-build]
-    types: [completed]
+    types: [requested, completed]
 
 permissions: {}
 
@@ -44,6 +44,10 @@ jobs:
           set -euo pipefail
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "not a commit SHA" >&2; exit 1; }
           [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "not a repository" >&2; exit 1; }
+          # Any failure before the final post leaves failure, never an earlier success (Copilot
+          # review on PR 63).
+          post() { gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$1" -f context=required-jobs-ran -f description="$2" >/dev/null; }
+          trap 'post failure "the gate could not read the runs"' EXIT
           state=success
           detail=""
           # workflow file, required job (= the required context): REQUIRED
@@ -54,14 +58,16 @@ jobs:
             # skip a job on one event and run it on the other (RJG-2), and runs pushed on other
             # branches mustn't page the PR's own run out of view (RJG-6).
             runs="$(gh api --paginate "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=100" \
-              --jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status)"')"
+              --jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status) \(.event)"')"
             if [[ -z "$runs" ]]; then
               state=failure
               detail+=" $job:missing"
               continue
             fi
             verdict=success
-            while read -r id status; do
+            saw_pr=0
+            while read -r id status event; do
+              [[ "$event" == pull_request ]] && saw_pr=1
               if [[ "$status" != completed ]]; then
                 [[ "$verdict" == success ]] && verdict=running
                 continue
@@ -70,6 +76,9 @@ jobs:
                 --jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")"
               [[ "$got" == success ]] || verdict="$got"
             done <<<"$runs"
+            # Success needs the PR's own run judged: push runs alone can't vouch for a PR run that
+            # hasn't started (Copilot review on PR 63). Each run's requested event re-posts pending.
+            [[ "$verdict" == success && $saw_pr == 0 ]] && verdict=running
             case "$verdict" in
               success) ;;
               running) [[ "$state" == failure ]] || state=pending ;;
@@ -78,5 +87,5 @@ jobs:
             detail+=" $job:$verdict"
           done
           echo "required-jobs-ran: $state ($detail )"
-          gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$state" -f context=required-jobs-ran \
-            -f description="${detail# }" >/dev/null
+          post "$state" "${detail# }"
+          trap - EXIT
