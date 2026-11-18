@@ -158,7 +158,7 @@ if (mode === 'prepare') {
 		commandMarks: [beacon.mark],
 	});
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
-	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
+	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')), expect: process.env.SECLAB_APP_SHA || undefined }, null, '\t'));
 
 	// The probed build is the shipped build, so the only thing the profile sets is the tab
 	// driver and root. `seclab.agents.enabled` is deliberately NOT set here: since review
@@ -258,7 +258,7 @@ if (mode === 'prepare') {
 	console.log(`then, after about 60s:  node test/agentic/runner/runner.ts check ${userData}\n`);
 } else {
 	const checks: Check[] = [];
-	const meta = JSON.parse(fs.readFileSync(path.join(userData, 'seclab-run-build.json'), 'utf8')) as { build: 'u' | 'g'; buildInfo: { repoSha: string } };
+	const meta = JSON.parse(fs.readFileSync(path.join(userData, 'seclab-run-build.json'), 'utf8')) as { build: 'u' | 'g'; buildInfo: { repoSha: string }; expect?: string };
 	const build = meta.build;
 	// The verdict refuses a run whose build is not the one requested: the window that ran was
 	// launched from this build's app, whose build info still names the commit recorded at prepare
@@ -277,7 +277,8 @@ if (mode === 'prepare') {
 			return undefined;
 		}
 	})();
-	const buildProblem = appBuildProblem(APPS[build], { repoRoot, expect: process.env.SECLAB_APP_SHA || undefined });
+	// The commit prepare was asked for, as it recorded it, not this process's environment.
+	const buildProblem = appBuildProblem(APPS[build], { repoRoot, expect: meta.expect });
 	const buildOk = launched === path.resolve(APPS[build]) && nowInfo === meta.buildInfo.repoSha && buildProblem === undefined;
 	checks.push({ vector: 'build', name: `ran the requested build (${build}, repo ${String(meta.buildInfo.repoSha).slice(0, 7)})`, ok: buildOk,
 		detail: buildOk ? meta.buildInfo.repoSha : `launched ${launched ?? 'nothing recorded'}; build info now ${nowInfo ?? 'missing'}; ${buildProblem ?? 'build check passed'}` });

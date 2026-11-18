@@ -8,7 +8,7 @@ import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { CdpPipe } from './cdp.ts';
 import { editorEnv, executable, hasBootstrapPolicy, BOOTSTRAP_POLICY_MARK } from './editor.ts';
-import { tabImageProblem } from '../harness.ts';
+import { editorLaunchCommand, tabImageProblem } from '../harness.ts';
 
 function pair() {
 	const toEditor = new PassThrough();
@@ -130,5 +130,25 @@ test('every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)', 
 		const text = fs.readFileSync(path.join(repo, f), 'utf8');
 		assert.match(text, /tabImageArgs\(driver\)/, f);
 		assert.match(text, /'tabd\/src\/main\.ts'\)[^\n]*(\n[^\n]*){0,2}\.\.\.tab[Ii]mage/, f);
+	}
+});
+
+test('a printed launch line carries the commit the run was prepared for (PR 42 review)', () => {
+	const saved = process.env.SECLAB_APP_SHA;
+	try {
+		delete process.env.SECLAB_APP_SHA;
+		assert.match(editorLaunchCommand('/u', 'vscode-remote://x/y'), /^node test\/window\.ts launch /);
+		process.env.SECLAB_APP_SHA = 'a'.repeat(40);
+		const line = editorLaunchCommand('/u', 'vscode-remote://x/y', { K: 'v' });
+		assert.match(line, new RegExp(`^SECLAB_APP_SHA=${'a'.repeat(40)} node test/window\\.ts launch `));
+		assert.doesNotMatch(line, /--env SECLAB_APP_SHA/);
+		process.env.SECLAB_APP_SHA = '$(id)';
+		assert.match(editorLaunchCommand('/u', 'vscode-remote://x/y'), /^node /);
+	} finally {
+		if (saved === undefined) {
+			delete process.env.SECLAB_APP_SHA;
+		} else {
+			process.env.SECLAB_APP_SHA = saved;
+		}
 	}
 });
