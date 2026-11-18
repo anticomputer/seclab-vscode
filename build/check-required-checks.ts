@@ -111,36 +111,91 @@ function yamlLines(yml: string): string[] {
 	return out;
 }
 
-/** Whether a double-quoted scalar on the line holds a backslash (an escape YAML decodes).
- *  Single-quoted scalars, whose backslashes are literal and whose quote is doubled to escape it,
- *  are skipped whole (Copilot review on PR 32). A quote opens a scalar only where a value can
- *  start; one left open counts as an escape (unreadable, so fail closed). */
-function dqEscape(l: string): boolean {
-	for (let i = 0; i < l.length; i++) {
-		const c = l[i];
-		const atStart = i === 0 || /[\s:[{,-]/.test(l[i - 1]);
-		if (c === '#' && (i === 0 || /\s/.test(l[i - 1]))) {
-			return false;
+interface Tok { kind: 'plain' | 'sq' | 'dq' | 'alias'; text: string; open: boolean; key: boolean }
+
+/** One YAML line split into scalars and aliases, each marked a key when a `:` follows it. A quote
+ *  opens a scalar only where a node starts, a plain scalar runs to `: ` or a comment (and to `,`,
+ *  `]` or `}` inside a flow collection), so quotes inside it are text; a single-quoted scalar's
+ *  backslashes are literal and its quote is doubled (Copilot review on PR 32). */
+function scanLine(l: string): Tok[] {
+	const out: Tok[] = [];
+	let depth = 0;
+	let prev = '';
+	const starter = () => prev === '' || /[:\-[{,?]/.test(prev);
+	const keyAfter = (rest: string) => /^\s*:(\s|$|[,\]}])/.test(rest);
+	for (let k = 0; k < l.length; k++) {
+		const c = l[k];
+		if (/\s/.test(c)) {
+			continue;
 		}
-		if (c === "'" && atStart) {
-			let j = i + 1;
-			while (j < l.length && !(l[j] === "'" && l[j + 1] !== "'")) {
-				j += l[j] === "'" ? 2 : 1;
+		if (c === '#' && (k === 0 || /\s/.test(l[k - 1]))) {
+			break;
+		}
+		if (!starter() || c === ':' || c === ',') {
+			if ((c === ']' || c === '}') && depth > 0) {
+				depth--;
 			}
-			i = j;
-		} else if (c === '"' && atStart) {
-			for (let j = i + 1; ; j++) {
-				if (j >= l.length || l[j] === '\\') {
-					return true;
+			prev = c;
+			continue;
+		}
+		if (c === '"' || c === "'") {
+			let j = k + 1, text = '', open = true;
+			while (j < l.length) {
+				if (c === '"' && l[j] === '\\') {
+					text += l[j] + (l[j + 1] ?? '');
+					j += 2;
+					continue;
 				}
-				if (l[j] === '"') {
-					i = j;
+				if (c === "'" && l[j] === "'" && l[j + 1] === "'") {
+					text += "'";
+					j += 2;
+					continue;
+				}
+				if (l[j] === c) {
+					open = false;
 					break;
 				}
+				text += l[j++];
 			}
+			out.push({ kind: c === '"' ? 'dq' : 'sq', text, open, key: !open && keyAfter(l.slice(j + 1)) });
+			k = j;
+			prev = c;
+		} else if (c === '[' || c === '{') {
+			depth++;
+			prev = c;
+		} else if ((c === ']' || c === '}') && depth > 0) {
+			depth--;
+			prev = c;
+		} else if (c === '-' && (k + 1 >= l.length || /\s/.test(l[k + 1]))) {
+			prev = '-';
+		} else if (c === '&' || c === '!' || c === '*') {
+			let j = k;
+			while (j + 1 < l.length && !/[\s,\]}]/.test(l[j + 1])) {
+				j++;
+			}
+			if (c === '*') {
+				out.push({ kind: 'alias', text: l.slice(k + 1, j + 1), open: false, key: keyAfter(l.slice(j + 1)) });
+				prev = '*';
+			}
+			k = j;
+		} else {
+			let j = k;
+			while (j < l.length && !(l[j] === ':' && (j + 1 >= l.length || /\s/.test(l[j + 1]) || (depth > 0 && /[,\]}]/.test(l[j + 1]))))
+				&& !(depth > 0 && /[,\]}]/.test(l[j])) && !(l[j] === '#' && /\s/.test(l[j - 1] ?? ''))) {
+				j++;
+			}
+			out.push({ kind: 'plain', text: l.slice(k, j).trimEnd(), open: false, key: l[j] === ':' });
+			k = j - 1;
+			prev = 'x';
 		}
 	}
-	return false;
+	return out;
+}
+
+/** Whether a double-quoted scalar on the line holds a backslash (an escape YAML decodes), or is
+ *  left open (unreadable, so fail closed). */
+function dqEscape(l: string): boolean {
+	return scanLine(l).some(t => t.kind === 'dq' && (t.open || t.text.includes('\\')));
 }
 
 /** Every `permissions:` grant, read fail-closed (reviews CR-8, CR-9). Actions decodes YAML the way
@@ -162,7 +217,7 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 		}
 		// An alias as a mapping key (`*p :` with `&p permissions` elsewhere) names the key the
 		// anchor holds, which a text scan can't see (Copilot review on PR 32).
-		if (lines.some(l => /^\s*(?:-\s+)?\*[^\s:]*\s*:/.test(l) || /[{,]\s*\*[^\s:,}]*\s*:/.test(l))) {
+		if (lines.some(l => scanLine(l).some(t => t.kind === 'alias' && t.key))) {
 			bad('an alias as a mapping key');
 			continue;
 		}
@@ -181,8 +236,7 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 				// named "Verify permissions" isn't one (Copilot review on PR 32).
 				// A quoted `permissions` key anywhere is one; otherwise quoted values are text, so a
 				// label like 'Verify permissions: read-only' isn't (Copilot review on PR 32).
-				const code = lines[i].replace(/(^|\s)#.*$/, '');
-				if (/(["'])permissions\1\s*:/.test(code) || /(^|[^\w-])permissions\s*:/.test(code.replace(/'(?:[^']|'')*'|"[^"\\]*"/g, '""'))) {
+				if (scanLine(lines[i]).some(t => t.key && t.kind !== 'alias' && t.text === 'permissions')) {
 					bad(`line ${i + 1}: a permissions key it can't read`);
 				}
 				continue;
@@ -299,6 +353,9 @@ function selfTest(): void {
 		['a quoted permissions key in a flow step', { 'x.yml': wf("  a:\n    steps:\n      - { name: x, 'permissions': {checks: write} }\n") }, /can't read|permissions/],
 		['a single-quoted run holding an escape-like backslash', { 'x.yml': wf("  a:\n    steps:\n      - run: 'printf \"%s\\n\" ok'\n      - run: 'it''s \\x'\n") }, null],
 		['a double-quoted escape after a single-quoted value', { 'x.yml': wf("  a:\n    permissions: {'x': 'y', \"check\\x73\": write}\n    steps:\n      - run: x\n") }, /double-quoted YAML escape/],
+		['a plain label holding a lone double quote', { 'x.yml': wf('  a:\n    steps:\n      - name: Check "literal\n        run: x\n') }, null],
+		['JSON with a permissions key inside a single-quoted value', { 'x.yml': wf("  a:\n    env:\n      CONFIG: '{\"permissions\":\"read-all\"}'\n    steps:\n      - run: x\n") }, null],
+		['an escape inside a flow mapping', { 'x.yml': wf('  a:\n    steps:\n      - { run: x, name: "a\\x41" }\n') }, /double-quoted YAML escape/],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
