@@ -1,16 +1,23 @@
 /*---------------------------------------------------------------------------------------------
- *  seclab-vscode patch 0018: in a `seclab+` window, a chat request may address only this
- *  window's own agent-host session.
+ *  seclab-vscode patch 0018: in a `seclab+` window, no chat request is dispatched for a session
+ *  other than this window's own agent-host session. A SECOND LAYER behind patch 0009.
  *
- *  Patch 0009 refuses `chatService.sendRequest` outright in a tab window, which is right while
- *  no agent host is allowed there. Once `SECLAB_AGENTS_ENABLED=1` turns one on (0015's gate),
- *  that blanket refusal would also refuse the agent host's own session, so the refusal is
- *  narrowed rather than lifted: anything but this window's own session.
+ *  Patch 0009 throws at the top of `chatService.sendRequest` in every tab window, and that
+ *  refusal stays as it is (project owner decision, 2026-11-17): chat is not open in tab windows.
+ *  But `sendRequest` is not the only way in. `resendRequest` and the queue drain
+ *  (`processPendingRequests`, also reached from `sendPendingRequestImmediately`) call the
+ *  dispatch function directly, and `migrateRequests` re-enters below `sendRequest`. On those
+ *  paths this check refuses every session that is not this window's own. `./seclab test
+ *  chat-dispatch` issues requests down each path in the real ChatService.
  *
- *  WHAT STAYS REFUSED. Every other chat path, because each runs a model loop on the TRUSTED
- *  side with the tab's workspace in reach: built-in agents and extension participants, which
- *  have no agent-host session; a session belonging to any other connection; and every request
- *  in a tab window where agents are off, which is 0009 unchanged.
+ *  WHAT THIS DOES NOT CLAIM. That a tab window's own agent-host session can be used for chat.
+ *  The allow verdict below exists so the rule is stated whole, but 0009 refuses the public entry
+ *  point before it is consulted. Opening chat in tab windows is separate future work, with its
+ *  own design and review.
+ *
+ *  WHAT IS REFUSED on the bypass paths: built-in agents and extension participants, which have no
+ *  agent-host session; a session belonging to any other connection; and every session in a tab
+ *  window where agents are off.
  *
  *  WHY REGISTRATION, NOT JUST IDENTITY (security review round 1, alert 1). Comparing the
  *  resolved connection object with the ambient connection is NOT by itself a test that this
@@ -99,7 +106,7 @@ export function seclabChatSessionVerdict(
 	return 'allow';
 }
 
-/** Whether a chat request in this window may address `sessionResource`. */
+/** Whether this window's chat gate would dispatch `sessionResource` (behind 0009; see the header). */
 export function seclabChatSessionAllowed(
 	authority: string | undefined,
 	agentsEnabled: boolean,

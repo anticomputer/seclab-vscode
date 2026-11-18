@@ -1,5 +1,5 @@
-// Patch 0018: a chat request in a tab window may address only this window's own agent-host
-// session.
+// Patch 0018: on the chat paths that bypass `sendRequest` (which patch 0009 refuses outright in a
+// tab window), no session but this window's own agent-host session is dispatched.
 //
 // The point of these tests is the thing the patch's security argument actually rests on: the
 // allowed case is decided by object IDENTITY, not by a session-type or authority string. A
