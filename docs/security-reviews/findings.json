@@ -16296,6 +16296,183 @@
 			}
 		},
 		{
+			"record": "20261110-security-findings-register.md",
+			"round": "Round HHHH",
+			"owner": "register",
+			"anchor": "HHHH-4",
+			"severity": "medium",
+			"summary": "The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later",
+			"component": "findings register: row authorship",
+			"status": "deferred",
+			"followUp": "Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18"
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"round": "Round HHHH",
+			"owner": "register",
+			"anchor": "HHHH-5",
+			"severity": "medium",
+			"summary": "Re-dating a pending row, or deleting and re-adding it, restarted its seven days",
+			"component": "findings register: expiry",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a re-dated or re-added pending row is judged from its first commit (HHHH-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"round": "Round HHHH",
+			"owner": "register",
+			"anchor": "HHHH-6",
+			"severity": "low",
+			"summary": "An empty list of main's records was read as nothing on main",
+			"component": "findings register: main's records",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "an empty main record list fails closed like a missing one (HHHH-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"round": "Round HHHH",
+			"owner": "register",
+			"anchor": "HHHH-7",
+			"severity": "low",
+			"summary": "A date a day ahead stretched the pending window, and an impossible date was reported as a future one",
+			"component": "findings register: dates",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a pending row with an impossible date says so (HHHH-7)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"round": "Round HHHH",
+			"owner": "register",
+			"anchor": "HHHH-8",
+			"severity": "low",
+			"summary": "An expired pending row fails every landing until someone removes it",
+			"component": "findings register: expiry",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Failing on expiry is the coordinator's design; any change may remove an expired pending row",
+			"ref": {
+				"file": "docs/security-reviews/20261110-security-findings-register.md",
+				"quote": "Failing on expiry is the coordinator's design; any change may remove an expired pending row."
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-1",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "A pending owner-row key with no # or no anchor could pass as pending",
+			"component": "findings register: row keys",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a row key without record and anchor is never pending"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-2",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "An invalid pending-row date threw instead of being reported",
+			"component": "findings register: dates",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "is reported, not thrown (PR #58 review)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-3",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "A pending row dated tomorrow passed",
+			"component": "findings register: dates",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a pending row dated tomorrow fails (PR #58 review)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-4",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "The first-seen lookup matched only one spelling of a row, so a backticked row could be re-dated",
+			"component": "findings register: first seen",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "first-seen dates read rows as the gate does: backticks, spacing and escaped pipes (PR #58 review)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-5",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "An uncommitted last owner row made the first-seen lookup stop the check",
+			"component": "findings register: first seen",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "seclab",
+				"name": "the history isn't oldest first"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-6",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "A pending row dated before its first commit could be re-dated to restart its window",
+			"component": "findings register: first seen",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR58-7",
+			"round": "Round PRR58",
+			"severity": "low",
+			"summary": "An impossible historical Date could become the first date, then be rejected, so the window fell back to the current date",
+			"component": "findings register: first seen",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "an impossible historical date never becomes the first date (PRR58-7)"
+			}
+		},
+		{
 			"record": "20261116-editor-tab-provenance.md",
 			"round": "Copilot review (PR #24, third pass)",
 			"owner": "docsync",
