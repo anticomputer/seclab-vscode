@@ -20385,6 +20385,922 @@
 				"file": "seclab",
 				"name": "landing verify took the repository from the caller's directory"
 			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "R5-17",
+			"round": "DOCSYNC-R5 round 4",
+			"severity": "high",
+			"summary": "The window took the settings, storage, log and profile locations in its server's `getEnvironmentData` reply as given, so a tab's server could name the host user's settings file as the tab's, which the window then read and wrote.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:09fe963c1bed0895446de688a4f34e4d91b0c023",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-1",
+			"round": "patch 0059 round 1",
+			"severity": "critical",
+			"summary": "The first check stopped walking at a URI-shaped object, so URI fields set on the reply itself hid the whole reply.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "patch:09fe963c1bed0895446de688a4f34e4d91b0c023",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On the commit round 1 reviewed the case \"a tab window takes none of them, and logs each refusal\" fails, with ENV-1's URI fields on the reply among its leaks."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-2",
+			"round": "patch 0059 round 1",
+			"severity": "medium",
+			"summary": "A checked URI kept the server's `external` and `fsPath`, which `URI.revive` honours.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-3",
+			"round": "patch 0059 round 1",
+			"severity": "high",
+			"summary": "The `userDataProfiles` channel's replies and events named profile locations unchecked.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-4",
+			"round": "patch 0059 round 1",
+			"severity": "medium",
+			"summary": "A refused environment read as \"no remote\", and callers fell back to host locations.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-5",
+			"round": "patch 0059 round 1",
+			"severity": "medium",
+			"summary": "File change events named host files unchecked.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-6",
+			"round": "patch 0059 round 1",
+			"severity": "low",
+			"summary": "Scanned extensions' locations were unchecked.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-7",
+			"round": "patch 0059 round 1",
+			"severity": "info",
+			"summary": "The unit test stubbed `URI.revive` and had no decoy cases.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:01e9ab4b17f7a4a7f3dac2e1f1ac839e5ff96701",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-8",
+			"round": "patch 0059 round 2",
+			"severity": "critical",
+			"summary": "An object marked `$mid` other than 1 was walked as a container, though `URI.revive` ignores `$mid`.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:3f2f1119505e71063ca6e9951ca49bedfaf3b78c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "patch:bebecdf526f1b91b1767e2cf7e22aa8a2356e824",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On the commit round 2 reviewed the case \"a tab window takes none of them, and logs each refusal\" fails, with ENV-8's host files marked `$mid` other than 1 among its leaks."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-9",
+			"round": "patch 0059 round 2",
+			"severity": "medium",
+			"summary": "Callers used the URI they were sent, not the rebuilt one.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:3f2f1119505e71063ca6e9951ca49bedfaf3b78c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-10",
+			"round": "patch 0059 round 2",
+			"severity": "medium",
+			"summary": "The extension management channel was unchecked; a host `file:` location routes to host management.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:3f2f1119505e71063ca6e9951ca49bedfaf3b78c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-11",
+			"round": "patch 0059 round 3",
+			"severity": "medium",
+			"summary": "A bare `{path}` object passed as a container but revives as a file URI.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ec442348e6d2a60ed687e9cc9663bae279f32e57",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-12",
+			"round": "patch 0059 round 3",
+			"severity": "low",
+			"summary": "Genuine `getManifest` replies were refused (manifests carry `scheme` keys).",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ec442348e6d2a60ed687e9cc9663bae279f32e57",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-13",
+			"round": "patch 0059 round 3",
+			"severity": "high",
+			"summary": "An install event's gallery `source` and a tab VSIX let the host install the tab's package (\"Install Locally\").",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ec442348e6d2a60ed687e9cc9663bae279f32e57",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-14",
+			"round": "patch 0059 round 3",
+			"severity": "low",
+			"summary": "The enforcement entry named a symbol that doesn't exist, and the drift gate didn't check entries for constrained surfaces.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ec442348e6d2a60ed687e9cc9663bae279f32e57",
+			"test": {
+				"file": "rpc-filter/tools/test_enforcement.py",
+				"name": "test_a_constrained_surface_entry_naming_a_missing_symbol_fails"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-15",
+			"round": "patch 0059 round 4",
+			"severity": "high",
+			"summary": "A tab extension's manifest named packs and dependencies the host then installed.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5e5eb399dd9abfbf9f1e3ee8df42f4f048498b36",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-16",
+			"round": "patch 0059 round 4",
+			"severity": "medium",
+			"summary": "The window retried the server's failed installs with options it chose.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5e5eb399dd9abfbf9f1e3ee8df42f4f048498b36",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-17",
+			"round": "patch 0059 round 4",
+			"severity": "info",
+			"summary": "`manifest` was skipped at any depth.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5e5eb399dd9abfbf9f1e3ee8df42f4f048498b36",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-18",
+			"round": "patch 0059 round 4",
+			"severity": "info",
+			"summary": "A host VSIX inside the tab's workspace mount installed on the host.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5e5eb399dd9abfbf9f1e3ee8df42f4f048498b36",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-19",
+			"round": "patch 0059 round 5",
+			"severity": "high",
+			"summary": "The MCP discovery reply named host directories the window read and watched.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f8985a8077e9359485afc97d3d1d6ff4f5f6f585",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-20",
+			"round": "patch 0059 round 5",
+			"severity": "medium",
+			"summary": "The MCP management channel was unchecked.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f8985a8077e9359485afc97d3d1d6ff4f5f6f585",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-21",
+			"round": "patch 0059 round 5",
+			"severity": "low",
+			"summary": "The workspace check compared unresolved, unnormalised paths.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f8985a8077e9359485afc97d3d1d6ff4f5f6f585",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-22",
+			"round": "patch 0059 round 6",
+			"severity": "medium",
+			"summary": "\"Install Locally\" and \"Install Remote Extensions Locally\" installed a tab-named gallery extension on the host.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f982bb20158871d8a543fbc908ffe13742857203",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-23",
+			"round": "patch 0059 round 6",
+			"severity": "medium",
+			"summary": "MCP servers' icon and link URLs reached the renderer, which fetched the icon over the host network.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f982bb20158871d8a543fbc908ffe13742857203",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-24",
+			"round": "patch 0059 round 6",
+			"severity": "info",
+			"summary": "Genuine `config.env` and `config.headers` keys named like URI parts were refused.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f982bb20158871d8a543fbc908ffe13742857203",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-25",
+			"round": "patch 0059 round 7",
+			"severity": "high",
+			"summary": "A tab language-pack manifest fanned an update or uninstall out to the host.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:700077b70490da5295b3940f624b92e31c79b0be",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-26",
+			"round": "patch 0059 round 7",
+			"severity": "medium",
+			"summary": "A `local` key on a server object skipped the URL strip.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:700077b70490da5295b3940f624b92e31c79b0be",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-27",
+			"round": "patch 0059 round 7",
+			"severity": "low",
+			"summary": "Numeric and null env values were refused.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:700077b70490da5295b3940f624b92e31c79b0be",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-28",
+			"round": "patch 0059 round 8",
+			"severity": "high",
+			"summary": "Install-side language-pack and sync fan-out installs a tab-named gallery extension on the host (\"Update All\", a workspace recommendation).",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:6adb0dacbf1ed7fbc84a730101b0d71d4bdb1933",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			},
+			"preFix": "f00912bb09a509f57dfd91c273b88a76d04aaf30",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-server-environment.md",
+				"quote": "On main (f00912bb) the case \"a tab window takes none of them, and logs each refusal\" fails, taking every lie, which is the evidence for each high found on main and fixed here."
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-29",
+			"round": "patch 0059 round 8",
+			"severity": "medium",
+			"summary": "A tab extension's pack list makes its uninstall remove host extensions.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:6adb0dacbf1ed7fbc84a730101b0d71d4bdb1933",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-30",
+			"round": "patch 0059 round 8",
+			"severity": "medium",
+			"summary": "A tab extension's pack and dependency lists change host extensions' enablement.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:6adb0dacbf1ed7fbc84a730101b0d71d4bdb1933",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-31",
+			"round": "patch 0059 round 8",
+			"severity": "medium",
+			"summary": "The unsupported-extensions migration acts on the tab's data.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:6adb0dacbf1ed7fbc84a730101b0d71d4bdb1933",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-32",
+			"round": "patch 0059 round 8",
+			"severity": "low",
+			"summary": "The genuine case cleared the refusal log before its final check.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:a39d8f3e3e82c3181214f0feeb9393ec87fba474",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-33",
+			"round": "patch 0059 round 9",
+			"severity": "medium",
+			"summary": "Install and uninstall events from the tab reset the host's global enablement by id.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-34",
+			"round": "patch 0059 round 9",
+			"severity": "medium",
+			"summary": "A tab extension claiming a host id could switch the host's copy with a click.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-35",
+			"round": "patch 0059 round 9",
+			"severity": "low",
+			"summary": "The read-only host channel also refused `download`, which installs in the tab.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-36",
+			"round": "patch 0059 round 9",
+			"severity": "low",
+			"summary": "A tab install event prompted to change the host's display language.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-37",
+			"round": "patch 0059 round 9",
+			"severity": "info",
+			"summary": "The host channel's authority came from the connection.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-38",
+			"round": "patch 0059 round 9",
+			"severity": "low",
+			"summary": "The marketplace token went to the tab's server; publisher trust granted in a tab window was kept.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:837416b0592fcdf17ffeee4474389fa58c548834",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-39",
+			"round": "patch 0059 round 10",
+			"severity": "medium",
+			"summary": "Profile import built the unguarded enablement service.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:55fe96f8130080d4f811e0284da0539db7ad91d3",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-40",
+			"round": "patch 0059 round 10",
+			"severity": "low",
+			"summary": "One-time migrations used up their host-shared flags in a tab window.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:55fe96f8130080d4f811e0284da0539db7ad91d3",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-41",
+			"round": "patch 0059 round 10",
+			"severity": "low",
+			"summary": "A refused global change reported success.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:55fe96f8130080d4f811e0284da0539db7ad91d3",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-42",
+			"round": "patch 0059 round 10",
+			"severity": "low",
+			"summary": "The suite didn't cover the singleton registration, and silently skipped unlisted files.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:31ac263e67c7db411b8a69b2c0e65b4d0d6ab4bb",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-43",
+			"round": "patch 0059 round 10",
+			"severity": "info",
+			"summary": "ARCHITECTURE §4.8 misstated some losses.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:9b1127376c5d74ba03f135825a12b9e5f7365ca6",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-44",
+			"round": "patch 0059 round 11",
+			"severity": "low",
+			"summary": "Extension Bisect from a tab window disabled host extensions by id.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9d76a6f382b898ad256b4926e343d5d597ce366c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-45",
+			"round": "patch 0059 round 11",
+			"severity": "medium",
+			"summary": "Auto-update settings from a tab window changed the host's lists by tab-chosen id or publisher.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9d76a6f382b898ad256b4926e343d5d597ce366c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-46",
+			"round": "patch 0059 round 11",
+			"severity": "low",
+			"summary": "Removing a trusted publisher from a tab window changed the host's list.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9d76a6f382b898ad256b4926e343d5d597ce366c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-47",
+			"round": "patch 0059 round 11",
+			"severity": "low",
+			"summary": "A profile from a template in a tab window dropped its disabled extensions.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9d76a6f382b898ad256b4926e343d5d597ce366c",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-48",
+			"round": "patch 0059 round 12",
+			"severity": "medium",
+			"summary": "\"Sync This Extension\" in a tab window wrote the host user's synced ignore list, by ids the tab chose.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:94114284dc580dcea7bd51c5d140d9b35f1823cd",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-49",
+			"round": "patch 0059 round 12",
+			"severity": "medium",
+			"summary": "A tab extension claiming the chat extension's id was offered the host user's \"AI features\" setting.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:94114284dc580dcea7bd51c5d140d9b35f1823cd",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-50",
+			"round": "patch 0059 round 12",
+			"severity": "low",
+			"summary": "A publisher-trust revocation in a tab window was dropped silently.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:94114284dc580dcea7bd51c5d140d9b35f1823cd",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-51",
+			"round": "patch 0059 round 13",
+			"severity": "low",
+			"summary": "A tab window wrote the host's dismissed extension notifications, rebuilt from ids the tab chose.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:03712bf342290d6b9a87bfbf87ea9bdc8eb5e426",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-52",
+			"round": "patch 0059 round 13",
+			"severity": "low",
+			"summary": "Extension feature access is kept by claimed id in host-shared storage; no caller reaches it today.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "deferred",
+			"followUp": "Latent: no feature asks for consent or can be toggled, and the one caller has no caller. Needs the same guard if that changes."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-53",
+			"round": "patch 0059 round 13",
+			"severity": "low",
+			"summary": "A tab extension's theme, applied in a tab window, is cached in host-shared storage and painted briefly by the next host window.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "deferred",
+			"followUp": "Appearance only, the same for any remote window upstream, and not extension management; a follow-up."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-54",
+			"round": "patch 0059 round 13",
+			"severity": "info",
+			"summary": "Two record rows had drifted from the code.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:9b1127376c5d74ba03f135825a12b9e5f7365ca6",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-55",
+			"round": "patch 0059 round 14",
+			"severity": "low",
+			"summary": "A fault in the rogue-REH payload's early arming would escape into the test server's startup.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:5b862080dc41ea932e4c7b8ce13770c802eae087",
+			"gap": "Covered by review; no regression test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-56",
+			"round": "patch 0059 round 14",
+			"severity": "info",
+			"summary": "The EDR described a runtime vector the harness no longer runs.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:9b1127376c5d74ba03f135825a12b9e5f7365ca6",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-57",
+			"round": "patch 0059 round 14",
+			"severity": "info",
+			"summary": "The harness saved the REH log before the evidence, so a failed save lost the evidence.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:5b862080dc41ea932e4c7b8ce13770c802eae087",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-58",
+			"round": "patch 0059 round 14",
+			"severity": "info",
+			"summary": "The arming test didn't cover the hook's new startup path.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5b862080dc41ea932e4c7b8ce13770c802eae087",
+			"test": {
+				"file": "test/builds/rogue-reh-arming.ts",
+				"name": "a run expired when the server starts: early not called"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-59",
+			"round": "patch 0059 round 14",
+			"severity": "info",
+			"summary": "The saved REH log is the tab's text, unmarked.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:5b862080dc41ea932e4c7b8ce13770c802eae087",
+			"gap": "A record, harness or test-fixture correction; nothing to test."
 		}
 	]
 }
