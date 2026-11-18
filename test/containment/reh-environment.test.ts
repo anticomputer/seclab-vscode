@@ -46,6 +46,7 @@ const FILES = {
 	mcpManagement: 'services/mcp/common/mcpWorkbenchManagementService.ts',
 	workbench: 'contrib/extensions/browser/extensionsWorkbenchService.ts',
 	actions: 'contrib/extensions/browser/extensionsActions.ts',
+	management: 'services/extensionManagement/common/extensionManagementService.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -363,6 +364,40 @@ async function mcpManagement(b: Build, authority: string, reply: unknown, event?
 		return { refused: true, events };
 	}
 }
+/**
+ * The workbench's extension management with a host and a tab server: which servers an update of,
+ * and an uninstall of, a tab extension whose manifest says it is a language pack reach.
+ */
+async function languagePackFanOut(b: Build, authority: string): Promise<{ updated: string[]; uninstalled: string[] }> {
+	const updated: string[] = [];
+	const uninstalled: string[] = [];
+	const ext = { identifier: { id: 'attacker.pack' }, location: remote(authority, '/ext'), manifest: { name: 'pack', main: './x.js', contributes: { localizations: [{ languageId: 'fr' }] } } };
+	const server = (id: string) => ({
+		id, extensionManagementService: {
+			installFromGallery: async () => { updated.push(id); return ext; },
+			getInstalled: async () => [{ ...ext, isBuiltin: false }],
+		},
+	});
+	const local = server('local');
+	const tab = server('remote');
+	const self: Record<string, unknown> = {
+		servers: [local, tab],
+		extensionManagementServerService: { localExtensionManagementServer: local, remoteExtensionManagementServer: tab, webExtensionManagementServer: null },
+		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
+		getServer: () => tab,
+		uninstallExtensionFromWorkspace: async () => { },
+		uninstallInServer: async (srv: { id: string }) => { uninstalled.push(srv.id); },
+	};
+	const deps = { ...b.deps, isLanguagePackExtension: (m: { contributes?: { localizations?: unknown[] } }) => !!m?.contributes?.localizations?.length, areSameExtensions: (a: { id: string }, c: { id: string }) => a.id === c.id };
+	const guard = slice(b.sources.management, /\n\tprivate seclabFromTab\(/);
+	if (guard) {
+		self.seclabFromTab = evaluate<(...a: unknown[]) => boolean>(asFunction(guard), 'seclabFromTab', { ...deps, IWorkbenchEnvironmentService: {} });
+	}
+	await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.management, /\n\tasync updateFromGallery\(/)!), 'updateFromGallery', { ...deps, Promises: { settled: (ps: Promise<unknown>[]) => Promise.all(ps) } }).call(self, { identifier: { id: 'attacker.pack' } }, ext);
+	await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.management, /\n\tasync uninstallExtensions\(/)!), 'uninstallExtensions', deps).call(self, [{ extension: ext }]);
+	return { updated: updated.sort(), uninstalled: uninstalled.sort() };
+}
+
 const ICON = { dark: 'https://198.51.100.7/i.png', light: 'https://198.51.100.7/i.png' };
 
 /** Whether "Install Locally" (installInServer to the host) of a tab server's extension reaches the install. */
@@ -523,6 +558,17 @@ async function leaks(b: Build): Promise<string[]> {
 	if (await installLocally(b, TAB)) {
 		out.push('install locally: the host installs what the tab names');
 	}
+	const fan = await languagePackFanOut(b, TAB);
+	if (fan.updated.includes('local')) {
+		out.push('a tab language-pack manifest updates on the host');
+	}
+	if (fan.uninstalled.includes('local')) {
+		out.push('a tab language-pack manifest uninstalls on the host');
+	}
+	const ml = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), icon: ICON, local: 0 }]);
+	if (JSON.stringify(ml.reply ?? null).includes('198.51.100.7')) {
+		out.push('mcp management: a server claiming a local keeps its URLs');
+	}
 	if (await installRemoteLocally(b, TAB)) {
 		out.push('install remote extensions locally: the host installs what the tab names');
 	}
@@ -553,7 +599,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'install remote extensions locally: the host installs what the tab names',
+	'install locally: the host installs what the tab names', 'a tab language-pack manifest updates on the host',
+	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
 
@@ -603,8 +650,11 @@ const tests: Array<[string, () => Promise<void>]> = [
 		await (wrapper(b, b.sources.mcpDiscovery, /INativeMcpDiscoveryHelperService>\((seclab\w+)\(channel,/)!(genuineDiscovery, TAB, 'mcp-discovery')).call('load');
 		const mm = await mcpManagement(b, TAB, [mcpServer(TAB, remote(TAB, '/srv/README.md'))]);
 		assert.equal(mm.refused, false);
+		// A tab language pack still updates and uninstalls in the tab.
+		assert.deepEqual(await languagePackFanOut(b, TAB), { updated: ['remote'], uninstalled: ['remote'] });
+		b.refusals.length = 0;
 		// ENV-24: env and headers are the config author's records; their keys may be URI key names.
-		const rec = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'http', url: 'http://192.0.2.1/', headers: { authority: 'x', path: '/' } } }, { ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'stdio', command: 'node', env: { path: '/usr/bin', scheme: 'a' } } }]);
+		const rec = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'http', url: 'http://192.0.2.1/', headers: { authority: 'x', path: '/' } } }, { ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'stdio', command: 'node', env: { path: '/usr/bin', scheme: 'a', PORT: 3000, UNSET: null } } }]);
 		assert.equal(rec.refused, false);
 		assert.deepEqual((mm.reply as Array<{ manifest: unknown }>)[0].manifest, mcpServer(TAB, null).manifest);
 		assert.deepEqual(b.refusals, []);
@@ -626,6 +676,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal((await mcpManagement(b, other, [mcpServer(other, HOST)])).refused, false);
 		assert.equal(await installLocally(b, other), true);
 		assert.equal(await installRemoteLocally(b, other), true);
+		assert.deepEqual(await languagePackFanOut(b, other), { updated: ['local', 'remote'], uninstalled: ['local', 'remote'] });
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -661,9 +712,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['mcp management unchecked', { patch: ["seclabTabMcpChannel(remoteAgentConnection.getChannel<IChannel>('mcpManagement'), remoteAgentConnection.remoteAuthority)", "remoteAgentConnection.getChannel<IChannel>('mcpManagement')"] }, 'mcp management: a reply naming a host readme'],
 			['mcp servers keep their URLs', { filter: ["		const { icon: _i, galleryUrl: _g, repositoryUrl: _r, ...rest } = v as Record<string, unknown>;\n		return rest;", "		return v;"] }, 'mcp management: a server carrying URLs the renderer loads'],
 			['mcp events reach the window unchecked', { filter: ["checked.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables)", "channel.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables)"] }, 'mcp management: an event naming a host readme'],
-			['config records take any value', { filter: [" || Object.values(r).some(x => typeof x !== 'string')", ""] }, 'mcp management: a host location as a config record value'],
+			['config records take any value', { filter: [" || Object.values(r).some(x => x !== null && typeof x !== 'string' && typeof x !== 'number')", ""] }, 'mcp management: a host location as a config record value'],
 			['install locally from a tab window', { patch: ["+		if (authority && seclabIsTabAuthority(authority) && server === this.extensionManagementServerService.localExtensionManagementServer) {", "+		if (false) {"] }, 'install locally: the host installs what the tab names'],
 			['install remote extensions locally from a tab window', { patch: ["+		// the tab's server's to name (patch 0059, review ENV-22).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "+		// the tab's server's to name (patch 0059, review ENV-22).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'install remote extensions locally: the host installs what the tab names'],
+			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
+			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
+			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
 			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
 			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
