@@ -52,7 +52,9 @@ fs.rmSync(base, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 fs.writeFileSync(runFile, JSON.stringify({ canary }));
 writeSnapshot(base);
-writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+// The workspace, the packaged probe and the host media fixture: the teardown gate removes them
+// and checks (review SQ-8).
+writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix'), path.join(base, 'host')] });
 fs.writeFileSync(path.join(ws, 'README.md'), '# edtabs probe workspace\n');
 // The tab's own files for the scale phases (EDT-14): SCALE[0], then SCALE[1], then SCALE[2] more.
 // All under MainThreadDocuments' cap of 50 references held for documents an extension opens: past

@@ -37,6 +37,7 @@ import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../c
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'configsync');
 const ws = path.join(base, 'ws');
+const armFile = path.join(base, 'arm');
 const canaryFile = path.join(base, 'canaries.json');
 const resultsFile = path.join(repo, '.work', 'configsync-results.jsonl');
 // One profile per worktree: the previous-run guard lives in this worktree's .work, so a shared
@@ -54,7 +55,8 @@ const DETECT = 'detect';
 type Canaries = Record<typeof KINDS[number] | typeof DETECT, string>;
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
+// Bounded (review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
 const basic = (canary: string) => `Basic ${Buffer.from(`probe:${canary}`).toString('base64')}`;
 const settings = (c: Canaries, tabSize: number, proxyCanary: string) => JSON.stringify({
 	'security.workspace.trust.enabled': false,
@@ -100,14 +102,19 @@ if (mode === 'prepare') {
 	};
 	fs.writeFileSync(canaryFile, JSON.stringify(c));
 	writeSnapshot(base);
-	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+	// The teardown gate removes the workspace and the packaged probe, and checks (review SQ-8).
+	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix')] });
 	fs.writeFileSync(path.join(ws, 'README.md'), '# configsync probe workspace\n');
 	fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
 	fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({ 'seclabProbe.detect': c.detect, 'seclabProbe.color': 'teal' }));
 	fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
 	fs.writeFileSync(settingsFile, settings(c, 7, c.proxyAuth));
 	const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+	// The harness keeps the arm on the host, outside the tab's workspace, and never reads it back
+	// from there (review SQ-5).
+	const arm = randomBytes(16).toString('hex');
+	fs.writeFileSync(armFile, arm);
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\n`);
 
 	const vsixDir = path.join(base, 'vsix');
 	fs.mkdirSync(vsixDir, { recursive: true });
@@ -120,11 +127,12 @@ if (mode === 'prepare') {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('configsync-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (review SQ-7).
+	fs.copyFileSync(path.join(vsixDir, 'configsync-probe.vsix'), path.join(ws, '.configsync-probe.vsix'));
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	writeManifest(base, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
-	fs.copyFileSync(path.join(vsixDir, 'configsync-probe.vsix'), path.join(ws, '.configsync-probe.vsix'));
-	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.configsync-probe.vsix')]);
+	const r = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.configsync-probe.vsix')], 300_000);
 	client.dispose();
 	await new Promise(res => client.once('exit', res));
 	if (r.status !== 0) {
@@ -155,11 +163,32 @@ if (mode === 'prepare') {
 	} catch {
 		rep = undefined;
 	}
-	const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
-	const valid = !!rep && rep.schema === 'seclab-configsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
-		&& Array.isArray(rep.hits) && rep.hits.every((h: any) => ['initial', 'after-change'].includes(h?.phase) && /^[0-9a-f]{64}$/.test(h?.sha256))
+	const armed = (() => {
+		try {
+			return (fs.readFileSync(armFile, 'utf8').match(/^[0-9a-f]{32}$/) ?? [])[0];
+		} catch {
+			return undefined;
+		}
+	})();
+	// The report is the tab's: its check must reject anything malformed without throwing, or the
+	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-configsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
+		&& Array.isArray(rep.hits) && rep.hits.every((h: any) => ['initial', 'after-change'].includes(h?.phase) && typeof h?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h?.sha256))
 		&& Array.isArray(rep.keys) && rep.keys.every((k: unknown) => typeof k === 'string' && /^[\x20-\x7e]{1,300}$/.test(k))
 		&& ['tabSizeInitial', 'colorInitial', 'changeSeen'].every(f => typeof rep.controls?.[f] === 'boolean');
+	const hostileRejected = (() => {
+		try {
+			return !validReport({ schema: 'seclab-configsync-report/1', arm: armed, done: true, hits: [{ phase: 'initial', sha256: { toString: null } }] });
+		} catch {
+			return false;
+		}
+	})();
+	let valid = false;
+	try {
+		valid = validReport(rep);
+	} catch {
+		// a malformed report is invalid
+	}
 	const launched = (() => {
 		try {
 			return String(JSON.parse(fs.readFileSync(path.join(userData, 'seclab-launch.json'), 'utf8')).app ?? '');
@@ -171,6 +200,7 @@ if (mode === 'prepare') {
 	const results: Array<{ name: string; ok: boolean; detail?: string }> = [];
 	const expect = (name: string, ok: boolean, detail = '') => results.push({ name, ok, detail });
 	expect('report present, from this run, and matches the schema', valid);
+	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
 	const byHash = new Map([...KINDS, DETECT].map(k => [sha(c[k]), k]));
 	const hits = valid ? (rep.hits as Array<{ phase: string; sha256: string }>).map(h => `${byHash.get(h.sha256) ?? 'unknown'}@${h.phase}`) : [];
 	if (valid) {
