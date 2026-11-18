@@ -17494,6 +17494,21 @@
 				"file": "test/driver/driver.test.ts",
 				"name": "every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-14",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "clean-host deleted a per-build tag on a stale decision while a build renewed it.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:95b17d6e25fb7640145d3754b4cefe20a8d844a7",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "lease lock: a deletion ran while a build held the lock"
+			}
 		}
 	]
 }
