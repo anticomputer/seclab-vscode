@@ -1,0 +1,104 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 10:51:48
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 10:51:48
+@@ -20,6 +20,9 @@
+ import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
+ import { hasKey, isString } from '../../../../base/common/types.js';
+ import { Event } from '../../../../base/common/event.js';
++import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
++import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
++import { seclabIsTabWindow, seclabTabSetting } from '../common/seclabTabTerminalSettings.js';
+ 
+ 
+ type DefaultProfileName = string;
+@@ -30,7 +33,9 @@
+ 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+ 		@IQuickInputService private readonly _quickInputService: IQuickInputService,
+ 		@IThemeService private readonly _themeService: IThemeService,
+-		@INotificationService private readonly _notificationService: INotificationService
++		@INotificationService private readonly _notificationService: INotificationService,
++		@IWorkbenchEnvironmentService private readonly _seclabEnvironment: IWorkbenchEnvironmentService,
++		@IWorkspaceContextService private readonly _seclabWorkspace: IWorkspaceContextService
+ 	) { }
+ 
+ 	async showAndGetResult(type: 'setDefault' | 'createInstance'): Promise<IQuickPickTerminalObject | DefaultProfileName | undefined> {
+@@ -44,7 +49,7 @@
+ 		if (type === 'setDefault') {
+ 			if (hasKey(result.profile, { id: true })) {
+ 				// extension contributed profile
+-				await this._configurationService.updateValue(defaultProfileKey, result.profile.title, ConfigurationTarget.USER);
++				await this._configurationService.updateValue(defaultProfileKey, result.profile.title, this._seclabTarget());
+ 				return {
+ 					config: {
+ 						extensionIdentifier: result.profile.extensionIdentifier,
+@@ -61,7 +66,7 @@
+ 
+ 			// Add the profile to settings if necessary
+ 			if (hasKey(result.profile, { profileName: true })) {
+-				const profilesConfig = await this._configurationService.getValue(profilesKey);
++				const profilesConfig = this._seclabProfiles(profilesKey);
+ 				if (typeof profilesConfig === 'object') {
+ 					const newProfile: ITerminalProfileObject = {
+ 						path: result.profile.path
+@@ -70,11 +75,11 @@
+ 						newProfile.args = result.profile.args;
+ 					}
+ 					(profilesConfig as { [key: string]: ITerminalProfileObject })[result.profile.profileName] = this._createNewProfileConfig(result.profile);
+-					await this._configurationService.updateValue(profilesKey, profilesConfig, ConfigurationTarget.USER);
++					await this._configurationService.updateValue(profilesKey, profilesConfig, this._seclabTarget());
+ 				}
+ 			}
+ 			// Set the default profile
+-			await this._configurationService.updateValue(defaultProfileKey, result.profileName, ConfigurationTarget.USER);
++			await this._configurationService.updateValue(defaultProfileKey, result.profileName, this._seclabTarget());
+ 		} else if (type === 'createInstance') {
+ 			if (hasKey(result.profile, { id: true })) {
+ 				const config: {
+@@ -110,6 +115,29 @@
+ 		return hasKey(result.profile, { profileName: true }) ? result.profile.profileName : result.profile.title;
+ 	}
+ 
++	/**
++	 * seclab: in a tab window the profiles come from the tab's REH, so choosing or saving one
++	 * writes the tab's own (remote) settings, never the host user's, which a normal window's next
++	 * terminal would run; and the profiles a write extends are the tab's own, so none of the host
++	 * user's are copied to the tab (patch 0057, review R5-14).
++	 */
++	private _seclabTab(): string | undefined {
++		const window = this._seclabEnvironment.remoteAuthority;
++		return window && seclabIsTabWindow(window) ? window : undefined;
++	}
++	private _seclabTarget(): ConfigurationTarget {
++		return this._seclabTab() ? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER;
++	}
++	private _seclabProfiles(key: string): unknown {
++		const tab = this._seclabTab();
++		if (!tab) {
++			return this._configurationService.getValue(key);
++		}
++		// A copy: the caller adds to it, and a layer's own object must not change.
++		const value = seclabTabSetting<object>(this._configurationService, this._seclabWorkspace.getWorkspace(), tab, key);
++		return value && typeof value === 'object' ? { ...value } : value;
++	}
++
+ 	private async _createAndShow(type: 'setDefault' | 'createInstance'): Promise<IProfileQuickPickItem | undefined> {
+ 		const platformKey = await this._terminalProfileService.getPlatformKey();
+ 		const profiles = this._terminalProfileService.availableProfiles;
+@@ -126,7 +154,7 @@
+ 				if (hasKey(context.item.profile, { id: true })) {
+ 					return;
+ 				}
+-				const configProfiles: { [key: string]: ITerminalExecutable | null | undefined } = this._configurationService.getValue(TerminalSettingPrefix.Profiles + platformKey);
++				const configProfiles = (this._seclabProfiles(TerminalSettingPrefix.Profiles + platformKey) ?? {}) as { [key: string]: ITerminalExecutable | null | undefined };
+ 				const existingProfiles = !!configProfiles ? Object.keys(configProfiles) : [];
+ 				const name = await this._quickInputService.input({
+ 					prompt: nls.localize('enterTerminalProfileName', "Enter terminal profile name"),
+@@ -145,7 +173,7 @@
+ 					...configProfiles,
+ 					[name]: this._createNewProfileConfig(context.item.profile)
+ 				};
+-				await this._configurationService.updateValue(profilesKey, newConfigValue, ConfigurationTarget.USER);
++				await this._configurationService.updateValue(profilesKey, newConfigValue, this._seclabTarget());
+ 			},
+ 			onKeyMods: mods => keyMods = mods
+ 		};

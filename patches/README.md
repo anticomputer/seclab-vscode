@@ -228,6 +228,48 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   so a tab could type a command into a normal window's local shell (review R5-32, a high on main).
   The tab's own backend installs only pairs in the tab's own settings (0060's rule), never the host
   user's (review AR-5; [EDR](../docs/edr/20261119-tab-auto-replies.md)).
+- `0053-seclab-no-host-terminal-settings-for-tabs.patch`: a new
+  `contrib/terminal/common/seclabTabTerminalSettings.ts`, `remoteTerminalChannel.ts`,
+  `terminalProfileService.ts`, both `terminalProfileResolverService.ts` files and
+  `mainThreadTerminalService.ts`. In a tab window the restricted terminal settings come only from
+  the layers the tab owns: defaults, the REH's remote user settings, and the workspace's only when
+  it is the tab's own (0036's test). Upstream's recursive merge is kept. That covers:
+  - `env.<os>` and `cwd` in `createProcess`;
+  - `profiles.<os>` in `getProfiles`;
+  - `defaultProfile.<os>`, which also picks among the profiles the REH returns, so a host value
+    could be confirmed by guessing;
+  - the automation and agent-host profiles, which reach the tab's extension host in
+    `$acceptDefaultProfile`.
+
+  The window's own extension host is sent no default profile there. The resolver reads the
+  window's authority from the environment, not the connection. Patch 0036 already withholds the
+  host user's values of these from the tab's extension host (reviews DOCSYNC-R5, RFU1R-2,
+  RFU1R2-1, R5-1, R5-3, R5-5, R5-10, R5-13;
+  [EDR](../docs/edr/20261118-tab-terminal-settings.md)).
+- `0054-seclab-tab-own-terminal-env-collections.patch`: `environmentVariableService.ts` and
+  `mainThreadTerminalService.ts`. In a tab window each extension host gets only the environment
+  variable collections it set itself (upstream filtered only other origins' `PATH` entries), and a
+  tab can't replace or delete a collection another host set under the same id; the window's own
+  extension host can (reviews DOCSYNC-R5, R5-8, R5-11).
+- `0055-seclab-no-host-file-path-to-tab-terminals.patch`: `remoteTerminalChannel.ts`. In a tab
+  window the REH is told only the tab's own folders, active folder and active file, a workspace
+  label only from them, and, for a workspace that isn't the tab's own, a workspace id derived from
+  the tab rather than a host path; a detach request naming another window's workspace is refused
+  without reaching the REH (reviews RFU1R-3, R5-2, R5-12, R5-16). Applies after 0053, whose
+  helper it uses.
+- `0056-seclab-no-foreign-terminal-icons-in-tabs.patch`: `terminalProfileResolverService.ts`. In a
+  tab window a terminal's image icon is kept only if it is on the tab's own file system; anything
+  else becomes a codicon. A REH's profiles or the tab's settings could otherwise name any `https`
+  image, which the trusted window fetches past the tab's broker (review R5-9).
+- `0057-seclab-tab-profile-writes-stay-in-the-tab.patch`: `terminalProfileQuickpick.ts`. In a tab
+  window "Select Default Profile" and saving a detected profile write the tab's own (remote) user
+  settings, and extend only the tab's own profiles. Upstream wrote the REH's profile (path, args,
+  `env`) into the host user's settings, where a normal window's next terminal would run it
+  (review R5-14, a high on main).
+- `0058-seclab-plain-text-terminal-profile-descriptions.patch`: `platform/terminal/common/terminalProfiles.ts`.
+  The Settings editor renders terminal profile descriptions as markdown; their text is now escaped
+  and their icon must be a codicon id, so a REH's profile or a tab extension's contributed
+  profile can't make the trusted window fetch an image (review R5-15). Applies in every window.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
