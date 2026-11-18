@@ -153,7 +153,8 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		CancellationToken: { None: {} },
 		posix,
 		Promises: { settled: (ps: Promise<unknown>[]) => Promise.all(ps) },
-		areSameExtensions: (a: { id: string }, b: { id: string }) => a.id === b.id,
+		// Upstream's: uuid first when both have one, else the id, ignoring case.
+		areSameExtensions: (a: { id: string; uuid?: string }, b: { id: string; uuid?: string }) => a.uuid && b.uuid ? a.uuid === b.uuid : a.id.toLowerCase() === b.id.toLowerCase(),
 		nls: { localize: (_k: string, m: string) => m },
 		localize: (_k: string, m: string) => m,
 		IWorkbenchEnvironmentService: {},
@@ -442,24 +443,46 @@ async function hostManagement(b: Build, authority: string): Promise<string[]> {
 }
 
 /** The extensions whose enablement changes when a tab window enables a tab extension whose pack names a host one. */
-async function enablement(b: Build, authority: string, state = 2, ownId = 'tab.pack'): Promise<string[]> {
+/** A host extension the tab's extensions may claim to be. */
+const HOST_EXT = { identifier: { id: 'host.ext', uuid: 'host-uuid' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
+
+/** The host's own extension servers, as the enablement service sees them. */
+const hostServers = () => ({ localExtensionManagementServer: { extensionManagementService: { getInstalled: async () => [HOST_EXT] } }, webExtensionManagementServer: null });
+
+/** The enablement service's own helpers that 0059 adds, bound to `self`, where the build has them. */
+function enablementHelpers(b: Build, self: Record<string, unknown>): void {
+	const shared = slice(b.sources.enablement, /\n\tprivate async seclabSharedWithHost\(/);
+	if (shared) {
+		self.seclabSharedWithHost = evaluate<(...a: unknown[]) => unknown>(asFunction(shared), 'seclabSharedWithHost', b.deps).bind(self);
+	}
+}
+
+/**
+ * The ids whose workspace enablement changes when a window on `authority` sets `state` on the
+ * tab's extension `ownId` (with `uuid`); `listed` is whether the window's own list holds the host's.
+ */
+async function enablement(b: Build, authority: string, state = 2, ownId = 'tab.pack', uuid?: string, listed = true): Promise<string[]> {
 	const changed: string[] = [];
-	const own = { identifier: { id: ownId }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
-	const host = { identifier: { id: 'host.ext' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
-	const set = evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
+	const own = { identifier: { id: ownId, uuid }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
+	const host = HOST_EXT;
+	const fn = evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
 		...b.deps, EnablementState: { EnabledGlobally: 1, EnabledWorkspace: 2, DisabledGlobally: 3, DisabledWorkspace: 4, DisabledByTrustRequirement: 5, DisabledByExtensionDependency: 6 },
-	}).call({
-		extensionsManager: { whenInitialized: async () => { }, extensions: [own, host] },
-		getExtensionsToEnableRecursively: () => [host],
+	});
+	const self: Record<string, unknown> = {
+		extensionsManager: { whenInitialized: async () => { }, extensions: listed ? [own, host] : [own] },
+		extensionManagementServerService: hostServers(),
+		getExtensionsToEnableRecursively: () => ownId === 'tab.pack' ? [host] : [],
 		throwErrorIfCannotChangeEnablement: () => { },
 		throwErrorIfCannotChangeWorkspaceEnablement: () => { },
 		getEnablementState: () => 3,
 		isEnabledEnablementState: () => false,
 		getDependenciesEnablementStates: () => [],
-		_setUserEnablementState: async (e: { identifier: { id: string } }) => { changed.push(e.identifier.id); return true; },
+		_setUserEnablementState: async (e: { identifier: { id: string; uuid?: string } }) => { changed.push((b.deps.areSameExtensions as (x: unknown, y: unknown) => boolean)(e.identifier, host.identifier) ? 'host.ext' : e.identifier.id); return true; },
 		environmentService: { remoteAuthority: authority },
 		_onEnablementChanged: { fire: () => { } },
-	}, [own], state);
+	};
+	enablementHelpers(b, self);
+	const set = fn.call(self, [own], state);
 	try {
 		await set;
 	} catch (e) {
@@ -615,6 +638,22 @@ function aiActions(b: Build, authority: string): string[] {
 		}
 	}
 	return offered;
+}
+
+/** Whether a window on `authority` drops a host extension's workspace enablement when the tab reports `host.ext` uninstalled. */
+async function resetOnUninstall(b: Build, authority: string): Promise<boolean> {
+	let dropped = false;
+	const self: Record<string, unknown> = {
+		environmentService: { remoteAuthority: authority },
+		extensionManagementServerService: hostServers(),
+		_removeFromWorkspaceDisabledExtensions: () => { dropped = true; },
+		_removeFromWorkspaceEnabledExtensions: () => { dropped = true; },
+		globalExtensionEnablementService: { enableExtension: () => { } },
+	};
+	enablementHelpers(b, self);
+	evaluate<(...a: unknown[]) => void>(asFunction(slice(b.sources.enablement, /\n\tprivate _reset\(/)!), '_reset', b.deps).call(self, { id: 'host.ext' });
+	await new Promise(r => setTimeout(r, 0));
+	return dropped;
 }
 
 /** Where local history goes in a window on `authority` whose environment was refused: the host's directory, or none. */
@@ -808,6 +847,15 @@ async function leaks(b: Build): Promise<string[]> {
 	if ((await enablement(b, TAB, 2, 'host.ext')).includes('host.ext')) {
 		out.push('a tab extension sharing a host id changes its enablement here');
 	}
+	if ((await enablement(b, TAB, 2, 'evil.tab', 'host-uuid')).includes('host.ext')) {
+		out.push('a tab extension sharing a host uuid changes its enablement here');
+	}
+	if ((await enablement(b, TAB, 2, 'host.ext', undefined, false)).includes('host.ext')) {
+		out.push('a shared id goes unseen when the window has no host extensions listed');
+	}
+	if (await resetOnUninstall(b, TAB)) {
+		out.push('an uninstall the tab reports drops a host extension\'s workspace enablement');
+	}
 	if ((await enablement(b, TAB)).includes('host.ext')) {
 		out.push('a tab extension\'s pack changes a host extension\'s enablement');
 	}
@@ -889,7 +937,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a tab extension sharing a host id changes its enablement here',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a tab extension sharing a host id changes its enablement here', 'a tab extension sharing a host uuid changes its enablement here', 'a shared id goes unseen when the window has no host extensions listed', 'an uninstall the tab reports drops a host extension\'s workspace enablement',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
@@ -987,6 +1035,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
 		assert.equal(await historyHome(b, other), '/Users/someone/History');
+		assert.equal(await resetOnUninstall(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
 		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'dismissed notifications', 'profile import']);
 		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
@@ -1040,7 +1089,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
 			['locations may be left out', { patch: ["'localHistoryHome', 'userHome'].some(k => !d[k] || typeof d[k] !== 'object')", "'localHistoryHome', 'userHome'].some(() => false)"] }, 'environment: a host fallback: localHistoryHome left out'],
 			['local history falls back', { patch: ["+		if (!historyHome && seclabIsTabAuthority(this.environmentService.remoteAuthority)) {", "+		if (false) {"] }, 'local history falls back to the host'],
-			['host ids enabled for the workspace', { patch: ["const own = extensions.filter(e => onTab(e) && !hostIds.includes(e.identifier.id.toLowerCase()));", "const own = extensions.filter(e => onTab(e));"] }, 'a tab extension sharing a host id changes its enablement here'],
+			['host ids enabled for the workspace', { patch: ["const own = extensions.filter((e, i) => onTab(e) && !shared[i]);", "const own = extensions.filter(e => onTab(e));"] }, 'a tab extension sharing a host id changes its enablement here'],
+			['host uuids enabled for the workspace', { patch: ["host.some(h => areSameExtensions(h.identifier, i) || ", "host.some(h => "] }, 'a tab extension sharing a host uuid changes its enablement here'],
+			['host ids judged by the window list', { patch: ["const host = (await Promise.all(servers.map(s => s ? s.extensionManagementService.getInstalled() : []))).flat();", "const host = this.extensionsManager.extensions.filter(e => e.location.scheme !== 'vscode-remote');"] }, 'a shared id goes unseen when the window has no host extensions listed'],
+			['uninstall resets host ids', { patch: ["+				if (!shared) {", "+				if (true) {"] }, 'an uninstall the tab reports drops a host extension\'s workspace enablement'],
 			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
 			['auto-update from a tab', { patch: ["(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
 			['untrust from a tab', { patch: ["(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (false) {"] }, 'a tab window changes host extension settings: untrust'],
