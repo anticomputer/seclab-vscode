@@ -158,7 +158,11 @@ if (mode === 'prepare') {
 	const canaries = JSON.parse(fs.readFileSync(canaryFile, 'utf8')) as Canaries;
 	const raw = tabId() ? inTab(['cat', path.join(ws, '.seclab-docsync', 'report.json')]).stdout ?? '' : '';
 	// Tab-side text outputs: the REH and extension-host logs and the workspace tree.
-	const tabLogs = tabId() ? inTab(['sh', '-c', 'cat /run/user/$(id -u)/seclab/reh.log; find "$HOME" -maxdepth 7 -name "*.log" -size -8M -exec cat {} + 2>/dev/null']).stdout ?? '' : '';
+	// Collected with its own bounded call that keeps whatever it read: a failed or timed-out read must
+	// not erase evidence already emitted, and a control requires the collection to complete (PH-11).
+	const logRun = tabId() ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, 'sh', '-c', 'cat /run/user/$(id -u)/seclab/reh.log; find "$HOME" -maxdepth 7 -name "*.log" -size -8M -exec cat {} + 2>/dev/null; true'], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: 60_000, killSignal: 'SIGKILL' }) : undefined;
+	const tabLogs = logRun?.stdout ?? '';
+	const logsCollected = !!logRun && logRun.status === 0 && !logRun.error && tabLogs.length > 0;
 	const wsText = [...treeTexts(ws).values()].join('\n');
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 
@@ -206,6 +210,7 @@ if (mode === 'prepare') {
 		// a malformed report is invalid
 	}
 	expect('report present and matches the schema', valid);
+	expect('control: the tab-side logs were collected (no timeout or failure)', logsCollected);
 	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	const armed = (() => {
 		try {
