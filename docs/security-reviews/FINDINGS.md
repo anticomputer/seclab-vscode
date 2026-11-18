@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 215 | 349 | 45 | 707 |
+| fixed | 14 | 84 | 215 | 351 | 45 | 709 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 612 | 157 | 1184 |
+| **all** | 16 | 93 | 306 | 614 | 157 | 1186 |
 
 ## Baseline: open high and critical findings
 
@@ -2094,6 +2094,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR25-8 | low | fixed | A kept replacement ref made the reset and the check use another commit's tree while HEAD named the pin. | patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb · `build/fetch-upstream.test.ts` "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)" |
 | CR25-9 | low | fixed | An untracked directory with a .gitignore of * hid itself from the clean and the check. | patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb · `build/fetch-upstream.test.ts` "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)" |
 | CR25-10 | low | fixed | A per-build tag lease was written after the tag existed; a concurrent clean-host could prune it. | patch:4bb7e65462e8a4fbd2b0f2467cb36d7957443af1 · `test/clean-host.ts` "the per-build lease isn't written before the tag is published" |
+| CR25-11 | low | fixed | A failing mkdir in an &amp;&amp; list let the tag publish unleased. | patch:781f2a0019590039de3250a5442e0370195dd928 · `test/clean-host.ts` "a lease step is in an &amp;&amp; list, which set -e doesn't stop on" |
+| CR25-12 | low | fixed | Per-build sbx templates were never expired by clean-host. | patch:781f2a0019590039de3250a5442e0370195dd928 · `test/clean-host.ts` "sbx per-build templates: got" |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 
