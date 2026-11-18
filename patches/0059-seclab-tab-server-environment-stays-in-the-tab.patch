@@ -1,58 +1,189 @@
+diff -ruN a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts
+--- a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:53:15
++++ b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:53:15
+@@ -20,6 +20,7 @@
+ import { IProductService } from '../../../../platform/product/common/productService.js';
+ import { IUserDataProfileService } from '../../userDataProfile/common/userDataProfile.js';
+ import { IRemoteSocketFactoryService } from '../../../../platform/remote/common/remoteSocketFactoryService.js';
++import { seclabIsTabAuthority } from '../../extensions/common/seclabRpcFilter.js';
+ 
+ export abstract class AbstractRemoteAgentService extends Disposable implements IRemoteAgentService {
+ 
+@@ -51,6 +52,12 @@
+ 	}
+ 
+ 	getEnvironment(): Promise<IRemoteAgentEnvironment | null> {
++		// seclab: callers read null as "no remote" and fall back to host locations (local history, the
++		// user home). In a tab window a refused or failed environment stays a failure (patch 0059,
++		// review ENV-4).
++		if (seclabIsTabAuthority(this._environmentService.remoteAuthority)) {
++			return this.getRawEnvironment();
++		}
+ 		return this.getRawEnvironment().then(undefined, () => null);
+ 	}
+ 
 diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts
---- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:52:57
-+++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:52:57
-@@ -14,6 +14,8 @@
+--- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:53:15
++++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:53:15
+@@ -14,6 +14,7 @@
  import { revive } from '../../../../base/common/marshalling.js';
  import { IUserDataProfile } from '../../../../platform/userDataProfile/common/userDataProfile.js';
  import { ProtocolConstants } from '../../../../base/parts/ipc/common/ipc.net.js';
-+import { Schemas } from '../../../../base/common/network.js';
-+import { seclabIsTabAuthority, seclabRefuseEnvironment } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabTabUris } from '../../extensions/common/seclabRpcFilter.js';
  
  export interface IGetEnvironmentDataArguments {
  	remoteAuthority: string;
-@@ -51,6 +53,37 @@
- 	reconnectionGraceTime?: number;
- }
- 
-+/**
-+ * seclab: a tab's server names where the window keeps that tab's settings, storage, logs and
-+ * profiles, and the window then reads and writes those files as the tab's own. In a `seclab+`
-+ * window every URI in the reply must be on the tab's own file system (`vscode-remote` on this
-+ * window's authority, which a genuine server's URI transformer always produces); one that isn't,
-+ * such as the host user's settings file, refuses the whole environment and the connection fails
-+ * (patch 0059, review R5-17). Fail closed: anything nested too deep to check counts as foreign.
-+ */
-+function seclabCheckEnvironment(remoteAuthority: string, data: unknown): void {
-+	if (!seclabIsTabAuthority(remoteAuthority)) {
-+		return;
-+	}
-+	const foreign = (v: unknown, depth: number): boolean => {
-+		if (!v || typeof v !== 'object') {
-+			return false;
-+		}
-+		if (depth > 8) {
-+			return true;
-+		}
-+		const u = v as { scheme?: unknown; authority?: unknown; path?: unknown };
-+		if (typeof u.scheme === 'string' && typeof u.path === 'string') {
-+			return u.scheme !== Schemas.vscodeRemote || u.authority !== remoteAuthority;
-+		}
-+		return Object.values(v).some(x => foreign(x, depth + 1));
-+	};
-+	if (foreign(data, 0)) {
-+		seclabRefuseEnvironment(remoteAuthority);
-+		throw new Error('seclab: the tab\'s server named a location outside the tab; its environment is refused');
-+	}
-+}
-+
- export class RemoteExtensionEnvironmentChannelClient {
- 
- 	static async getEnvironmentData(channel: IChannel, remoteAuthority: string, profile: string | undefined): Promise<IRemoteAgentEnvironment> {
-@@ -60,6 +93,7 @@
+@@ -59,7 +60,18 @@
+ 			profile
  		};
  
- 		const data = await channel.call<IRemoteAgentEnvironmentDTO>('getEnvironmentData', args);
-+		seclabCheckEnvironment(remoteAuthority, data);
+-		const data = await channel.call<IRemoteAgentEnvironmentDTO>('getEnvironmentData', args);
++		let data = await channel.call<IRemoteAgentEnvironmentDTO>('getEnvironmentData', args);
++		// seclab: a tab's server names where the window keeps the tab's settings, storage, logs and
++		// profiles. In a tab window each must be on the tab's own file system, or the environment is
++		// refused and the connection fails (patch 0059, reviews R5-17, ENV-1, ENV-2).
++		if (seclabIsTabAuthority(remoteAuthority)) {
++			try {
++				data = seclabTabUris(remoteAuthority, data);
++			} catch (e) {
++				seclabRefuseServerLocation(remoteAuthority, 'environment');
++				throw e;
++			}
++		}
  		const reconnectionGraceTime = (typeof data.reconnectionGraceTime === 'number' && data.reconnectionGraceTime >= 0)
  			? data.reconnectionGraceTime
  			: ProtocolConstants.ReconnectionGraceTime;
+diff -ruN a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts
+--- a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:53:15
++++ b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:53:15
+@@ -18,6 +18,7 @@
+ import { IWorkbenchExtensionManagementService } from '../../extensionManagement/common/extensionManagement.js';
+ import { Mutable } from '../../../../base/common/types.js';
+ import { InstallExtensionSummary } from '../../../../platform/extensionManagement/common/extensionManagement.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabUriOnTab } from '../../extensions/common/seclabRpcFilter.js';
+ 
+ class RemoteExtensionsScannerService implements IRemoteExtensionsScannerService {
+ 
+@@ -53,10 +54,18 @@
+ 						this.environmentService.extensionDevelopmentLocationURI,
+ 						languagePack
+ 					]);
+-					scannedExtensions.forEach((extension) => {
++					// seclab: in a tab window an extension the tab's server lists outside the tab's own
++					// file system is dropped and logged: the window would read its contributions from a
++					// host directory (patch 0059, review ENV-6).
++					const authority = this.environmentService.remoteAuthority;
++					const own = authority && seclabIsTabAuthority(authority) ? scannedExtensions.filter(e => seclabUriOnTab(authority, e.extensionLocation)) : scannedExtensions;
++					if (own.length !== scannedExtensions.length) {
++						seclabRefuseServerLocation(authority!, 'extensions');
++					}
++					own.forEach((extension) => {
+ 						extension.extensionLocation = URI.revive(extension.extensionLocation);
+ 					});
+-					return scannedExtensions;
++					return own;
+ 				},
+ 				[]
+ 			);
+diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts
+--- a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:53:15
++++ b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:53:15
+@@ -12,7 +12,35 @@
+ import { ILogService } from '../../../../platform/log/common/log.js';
+ import { IRemoteAgentEnvironment } from '../../../../platform/remote/common/remoteAgentEnvironment.js';
+ import { IRemoteAgentConnection, IRemoteAgentService } from './remoteAgentService.js';
++import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
++import { Event } from '../../../../base/common/event.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabUriOnTab } from '../../extensions/common/seclabRpcFilter.js';
+ 
++/**
++ * seclab: a tab's server reports file changes by resource; in a tab window one outside the tab's
++ * own file system (a host file) is dropped and logged, so the window never re-reads or prompts on
++ * a host file because the tab said it changed (patch 0059, review ENV-5).
++ */
++function seclabTabWatcherChannel(channel: IChannel, remoteAuthority: string): IChannel {
++	if (!seclabIsTabAuthority(remoteAuthority)) {
++		return channel;
++	}
++	return {
++		call: (command, arg, token) => channel.call(command, arg, token),
++		listen: <T>(event: string, arg?: unknown): Event<T> => event !== 'fileChange' ? channel.listen<T>(event, arg) : (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => {
++			if (Array.isArray(e)) {
++				const own = e.filter(c => seclabUriOnTab(remoteAuthority, (c as { resource?: unknown } | null)?.resource));
++				if (own.length !== e.length) {
++					seclabRefuseServerLocation(remoteAuthority, 'watcher');
++				}
++				listener.call(thisArgs, own as T);
++			} else {
++				listener.call(thisArgs, e);
++			}
++		}, undefined, disposables),
++	};
++}
++
+ export const REMOTE_FILE_SYSTEM_CHANNEL_NAME = 'remoteFilesystem';
+ 
+ export class RemoteFileSystemProviderClient extends DiskFileSystemProviderClient {
+@@ -51,6 +79,6 @@
+ 	}
+ 
+ 	private constructor(remoteAgentEnvironment: IRemoteAgentEnvironment, connection: IRemoteAgentConnection) {
+-		super(connection.getChannel(REMOTE_FILE_SYSTEM_CHANNEL_NAME), { pathCaseSensitive: remoteAgentEnvironment.os === OperatingSystem.Linux });
++		super(seclabTabWatcherChannel(connection.getChannel(REMOTE_FILE_SYSTEM_CHANNEL_NAME), connection.remoteAuthority), { pathCaseSensitive: remoteAgentEnvironment.os === OperatingSystem.Linux });
+ 	}
+ }
+diff -ruN a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts
+--- a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:53:15
++++ b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:53:15
+@@ -16,7 +16,42 @@
+ import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
+ import { UserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfileIpc.js';
+ import { ErrorNoTelemetry } from '../../../../base/common/errors.js';
++import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
++import { Event } from '../../../../base/common/event.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabTabUris } from '../../extensions/common/seclabRpcFilter.js';
+ 
++/**
++ * seclab: the profiles a tab's server reports, in its replies and its change events, name where the
++ * window keeps that tab's settings, extensions and MCP config. In a tab window each location must be
++ * on the tab's own file system: a reply naming another is refused, an event dropped, both logged
++ * (patch 0059, review ENV-3).
++ */
++function seclabTabProfilesChannel(channel: IChannel, remoteAuthority: string): IChannel {
++	if (!seclabIsTabAuthority(remoteAuthority)) {
++		return channel;
++	}
++	const check = <T>(v: T): T => {
++		try {
++			return seclabTabUris(remoteAuthority, v);
++		} catch (e) {
++			seclabRefuseServerLocation(remoteAuthority, 'profiles');
++			throw e;
++		}
++	};
++	return {
++		call: async <T>(command: string, arg?: unknown, token?: Parameters<IChannel['call']>[2]) => check(await channel.call<T>(command, arg, token)),
++		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => {
++			let checked: T;
++			try {
++				checked = check(e);
++			} catch {
++				return;
++			}
++			listener.call(thisArgs, checked);
++		}, undefined, disposables),
++	};
++}
++
+ const associatedRemoteProfilesKey = 'associatedRemoteProfiles';
+ 
+ export const IRemoteUserDataProfilesService = createDecorator<IRemoteUserDataProfilesService>('IRemoteUserDataProfilesService');
+@@ -57,7 +92,7 @@
+ 			return;
+ 		}
+ 
+-		this.remoteUserDataProfilesService = new UserDataProfilesService(environment.profiles.all, environment.profiles.home, connection.getChannel('userDataProfiles'));
++		this.remoteUserDataProfilesService = new UserDataProfilesService(environment.profiles.all, environment.profiles.home, seclabTabProfilesChannel(connection.getChannel('userDataProfiles'), connection.remoteAuthority));
+ 		this._register(this.userDataProfilesService.onDidChangeProfiles(e => this.onDidChangeLocalProfiles(e)));
+ 
+ 		// Associate current local profile with remote profile

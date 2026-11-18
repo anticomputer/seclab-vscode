@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1430 @@
+@@ -0,0 +1,1499 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4768,18 +4768,87 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	});
 +}
 +
++/** Where a tab's server named a location outside the tab (patch 0059). */
++export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions';
++
 +/**
-+ * Record that a tab window refused its server's environment (patch 0059): a URI in the
-+ * `getEnvironmentData` reply was not `vscode-remote` on the tab's own authority, so the window
-+ * would have read or written a host file as the tab's settings, storage or logs. The line
-+ * carries the policy key and a fixed reason only, never the URI the server named.
++ * Record that a tab window refused a location its server named outside the tab (patch 0059). The
++ * line carries the policy key and the fixed site only, never the URI the server named.
 + */
-+export function seclabRefuseEnvironment(remoteAuthority: string): void {
++export function seclabRefuseServerLocation(remoteAuthority: string, site: SeclabServerLocationSite): void {
 +	seclabRecord({
-+		surface: 'data', id: 'data:remote-environment', ref: 'data:remote-environment',
++		surface: 'data', id: `data:server-locations:${site}`, ref: 'data:server-locations',
 +		tabId: seclabResolveTabId(remoteAuthority) ?? 'unparsed',
-+		verdict: 'deny', reason: 'a server environment URI outside the tab', at: Date.now(),
++		verdict: 'deny', reason: `a location outside the tab (${site})`, at: Date.now(),
 +	});
++}
++
++/** Keys a URI's wire form may carry; anything else beside them makes it something else. */
++const SECLAB_URI_KEYS = new Set(['$mid', 'scheme', 'authority', 'path', 'query', 'fragment', 'external', 'fsPath', '_sep']);
++
++/**
++ * `value`, as a tab's server sent it, with every URI in it required to be on the tab's own file
++ * system: `vscode-remote` on `remoteAuthority`, exactly (a genuine server's URI transformer always
++ * makes it so). Throws on any other. Each URI is rebuilt from its components, so a server can't
++ * slip a host string into the `external` or `fsPath` a revived URI would report (review ENV-2).
++ * A URI is a plain object marked `$mid: 1`, or else one with a `scheme`; it may carry nothing but
++ * URI keys, so URI fields set on a container can't make the walk skip it (review ENV-1). Plain
++ * objects and arrays are walked whole; other objects (buffers) pass as they are.
++ */
++export function seclabTabUris<T>(remoteAuthority: string, value: T): T {
++	const foreign = () => new Error('seclab: the tab\'s server named a location outside the tab');
++	const walk = (v: unknown, depth: number): unknown => {
++		if (depth > 32) {
++			throw foreign();
++		}
++		if (Array.isArray(v)) {
++			return v.map(x => walk(x, depth + 1));
++		}
++		if (!v || typeof v !== 'object') {
++			return v;
++		}
++		const proto = Object.getPrototypeOf(v);
++		if (proto !== Object.prototype && proto !== null) {
++			return v;
++		}
++		const o = v as Record<string, unknown>;
++		if (o.$mid === 1 || (o.$mid === undefined && typeof o.scheme === 'string')) {
++			if (Object.keys(o).some(k => !SECLAB_URI_KEYS.has(k)) || o.scheme !== 'vscode-remote' || o.authority !== remoteAuthority
++				|| typeof o.path !== 'string' || (o.query !== undefined && typeof o.query !== 'string') || (o.fragment !== undefined && typeof o.fragment !== 'string')) {
++				throw foreign();
++			}
++			return { $mid: 1, scheme: o.scheme, authority: o.authority, path: o.path, query: o.query ?? '', fragment: o.fragment ?? '' };
++		}
++		const out: Record<string, unknown> = {};
++		for (const k of Object.keys(o)) {
++			if (k !== '__proto__') {
++				out[k] = walk(o[k], depth + 1);
++			}
++		}
++		return out;
++	};
++	return walk(value, 0) as T;
++}
++
++/**
++ * Whether `uri`, as a server sent it (the wire form, before any revive), is a URI on the tab's own
++ * file system. Anything else, a revived URI object included, is not.
++ */
++export function seclabUriOnTab(remoteAuthority: string, uri: unknown): boolean {
++	if (!uri || typeof uri !== 'object' || Array.isArray(uri)) {
++		return false;
++	}
++	const proto = Object.getPrototypeOf(uri);
++	const o = uri as Record<string, unknown>;
++	if ((proto !== Object.prototype && proto !== null) || !(o.$mid === 1 || (o.$mid === undefined && typeof o.scheme === 'string'))) {
++		return false;
++	}
++	try {
++		seclabTabUris(remoteAuthority, uri);
++		return true;
++	} catch {
++		return false;
++	}
 +}
 +
 +/**
