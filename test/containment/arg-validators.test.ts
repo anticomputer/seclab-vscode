@@ -153,6 +153,31 @@ const DEFECTS: Defect[] = [
 		from: "if (k === 'expandPatterns' && v !== false) {", to: 'if (false) {',
 	},
 	{
+		name: 'a hover provider for host files', validator: 'tabHoverProvider',
+		dangerous: [1, [{ $serialized: true, scheme: 'file' }]],
+		from: "if (f.scheme !== undefined && f.scheme !== 'vscode-remote') {", to: 'if (false) {',
+	},
+	{
+		name: 'a completion provider for host files', validator: 'tabCompletionProvider',
+		dangerous: [1, [{ $serialized: true, scheme: 'vscode-userdata' }], ['.'], true, EXT_ID],
+		from: "if (f.scheme !== undefined && f.scheme !== 'vscode-remote') {", to: 'if (false) {',
+	},
+	{
+		name: 'a notebook-type selector field', validator: 'tabHoverProvider',
+		dangerous: [1, [{ $serialized: true, notebookType: 'jupyter-notebook' }]],
+		from: "if (!['$serialized', 'scheme', 'language', 'pattern', 'exclusive', 'isBuiltin'].includes(key)) {", to: 'if (false) {',
+	},
+	{
+		name: 'a RelativePattern selector', validator: 'tabCompletionProvider',
+		dangerous: [1, [{ $serialized: true, pattern: { base: '/Users', pattern: '**' } }], ['.'], true, EXT_ID],
+		from: "if (f[key] !== undefined && (typeof f[key] !== 'string' || (f[key] as string).length > MAX_FILTER_STRING)) {", to: 'if (false) {',
+	},
+	{
+		name: 'a provider claiming to be built in', validator: 'tabHoverProvider',
+		dangerous: [1, [{ $serialized: true, isBuiltin: true }]],
+		from: 'if (f.isBuiltin !== undefined && f.isBuiltin !== false) {', to: 'if (false) {',
+	},
+	{
 		name: 'an absolute include pattern segment', validator: 'tabFileSearch',
 		dangerous: [null, { includePattern: '/seclab-canary/**' }],
 		from: "&& !s.split(',').some(seg => searchPathSegment(seg.trim()));", to: ';',
@@ -352,6 +377,27 @@ test('file search: a pattern may not choose the search roots (round 10 finding 1
 		no(shipped, 'tabFileSearch', [null, { includePattern: p }]);
 	}
 	no(shipped, 'tabFileSearch', [null, { excludePattern: [{ pattern: '/seclab-canary' }] }]);
+});
+
+const SEL = (f: Record<string, unknown> = {}) => [{ $serialized: true, ...f }];
+const COMPLETION = (selector: unknown) => [1, selector, ['.'], true, EXT_ID];
+test('provider selectors: the tab\'s own documents pass, for hover and completion (review on #48)', () => {
+	for (const selector of [SEL(), SEL({ scheme: 'vscode-remote' }), SEL({ language: 'typescript', pattern: '**/*.ts', exclusive: false }), SEL({ isBuiltin: false })]) {
+		ok(shipped, 'tabHoverProvider', [1, selector]);
+		ok(shipped, 'tabCompletionProvider', COMPLETION(selector));
+	}
+});
+test('provider selectors: host schemes, odd fields and non-filters are refused, for hover and completion', () => {
+	const bad: unknown[] = [
+		SEL({ scheme: 'file' }), SEL({ scheme: 'vscode-userdata' }), SEL({ scheme: 'output' }), SEL({ scheme: 'untitled' }), SEL({ scheme: '*' }),
+		SEL({ notebookType: 'jupyter-notebook' }), SEL({ pattern: { base: '/Users', pattern: '**' } }), SEL({ isBuiltin: true }),
+		SEL({ language: 'x'.repeat(10000) }), SEL({ exclusive: 'yes' }), SEL({ unknownKey: 1 }),
+		[{ scheme: 'vscode-remote' }], [], 'typescript', [SEL()[0], { $serialized: true, scheme: 'file' }],
+	];
+	for (const selector of bad) {
+		no(shipped, 'tabHoverProvider', [1, selector]);
+		no(shipped, 'tabCompletionProvider', COMPLETION(selector));
+	}
 });
 
 // --- injected defects ------------------------------------------------------------------------
