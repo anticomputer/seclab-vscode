@@ -37,6 +37,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { browserProbeChecks, heartbeatsContinuous } from './verdict.ts';
 import { beaconPort, beaconSelfHit, editorPid, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
+import { appBuildProblem } from '../../app-build.ts';
 import { report } from '../../containment/assert.ts';
 import { beaconSpawn } from '../runner/marks.ts';
 import { reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
@@ -209,6 +210,12 @@ if (mode === 'switch-build') {
 		console.error(`no app or build-info-app.json for build ${to} at ${app}`);
 		process.exit(2);
 	}
+	// The build this run is asked to test (EDR fetched-app-binding, review FAB2-3).
+	const buildProblem = appBuildProblem(app, { repoRoot, expect: process.env.SECLAB_APP_SHA || undefined });
+	if (buildProblem) {
+		console.error(`refusing: ${buildProblem}`);
+		process.exit(2);
+	}
 	const facts0 = JSON.parse(fs.readFileSync(runFacts, 'utf8'));
 	if (facts0.build === to) {
 		console.error(`switch-build: the run is already on build ${to}; the restore phase must read the OTHER build.`);
@@ -324,6 +331,12 @@ if (mode === 'prepare') {
 	if (!fs.existsSync(app) || !fs.existsSync(buildInfo)) {
 		console.error(`no app or build-info.json for build ${build} at ${app}\n` +
 			'fetch it first: ./seclab fetch macos-agentic-browser <run-id> (for u, run it from .work/ubranch)');
+		process.exit(2);
+	}
+	// The build this run is asked to test (EDR fetched-app-binding, review FAB2-3).
+	const buildProblem = appBuildProblem(app, { repoRoot, expect: process.env.SECLAB_APP_SHA || undefined });
+	if (buildProblem) {
+		console.error(`refusing: ${buildProblem}`);
 		process.exit(2);
 	}
 	if (fs.existsSync(stateDir)) {

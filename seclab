@@ -1257,6 +1257,55 @@ hooks_warn() {
 	[[ -z "$p" ]] || printf 'WARNING: pushes from here may not be gated: %s. Reinstall with main'"'"'s code (AGENTS.md).\n' "$(echo "$p" | paste -sd';' -)" >&2
 }
 
+# git with no inherited GIT_* variable, so HEAD is always this checkout's (reviews FAB-7, FAB2-5).
+git_clean() {
+	local -a u=()
+	local v
+	for v in $(compgen -e); do [[ "$v" == GIT_* ]] && u+=(-u "$v"); done
+	env ${u[@]+"${u[@]}"} git "$@"
+}
+
+# The headless driver's Linux editor is bound to the commit under test like a fetched app: the
+# build info beside its tarball goes beside the extracted editor, and SECLAB_APP_SHA is this
+# checkout's HEAD (review FAB2-6). A local build of a dirty tree records no commit; it runs
+# unbound, with a warning. Sets DRIVER_BIND (docker arguments).
+driver_bind() { # TGZ
+	local info
+	info="$(cd "$(dirname "$1")" && pwd)/build-info.json"
+	DRIVER_BIND=()
+	if [[ -f "$info" && ! -L "$info" ]] && jq -e '(.repoSha | type == "string") and (.targets | test("editor"))' "$info" >/dev/null 2>&1; then
+		DRIVER_BIND=(-v "$info:/build-info.json:ro" -e "SECLAB_APP_SHA=$(git_clean -C "$ROOT" rev-parse HEAD)")
+	else
+		echo "warning: $info doesn't record the commit of an editor build (a dirty tree, or no build info); this run isn't bound to a commit" >&2
+	fi
+}
+
+# Offline: every refusal that needs no network leaves no test build behind, and the release
+# location marked as not fetched (reviews FAB-1, FAB2-1, FAB2-7). Runs against a scratch ROOT.
+fetch_self_test() {
+	local tmp v rc
+	mkdir -p "$ROOT/.work"
+	tmp="$(mktemp -d "$ROOT/.work/fetch-self-test.XXXXXX")"
+	mkdir -p "$tmp/test/builds" && cp "$ROOT/test/builds/variants.json" "$tmp/test/builds/"
+	v="$(jq -r '[keys[] | select(test("^[a-z][a-z0-9-]*$"))][0]' "$tmp/test/builds/variants.json")"
+	stale() { rm -rf "$1"; mkdir -p "$1/seclab-vscode.app/Contents/MacOS"; echo '{}' > "$1/build-info.json"; }
+	for args in "" "x" "1 2"; do
+		stale "$tmp/.work/app-branch"
+		# shellcheck disable=SC2086
+		rc=0; ( ROOT="$tmp"; FETCH_BRANCH_BUILD=1 fetch_macos $args ) >/dev/null 2>&1 || rc=$?
+		[[ $rc -ne 0 && ! -e "$tmp/.work/app-branch" ]] || { echo "fetch self-test: a refused branch fetch ($args) left an earlier build" >&2; rm -rf "$tmp"; exit 1; }
+		stale "$tmp/.work/test-builds/$v"
+		# shellcheck disable=SC2086
+		rc=0; ( ROOT="$tmp"; fetch_test_variant "$v" $args ) >/dev/null 2>&1 || rc=$?
+		[[ $rc -ne 0 && ! -e "$tmp/.work/test-builds/$v" ]] || { echo "fetch self-test: a refused variant fetch ($args) left an earlier build" >&2; rm -rf "$tmp"; exit 1; }
+	done
+	rm -f "$tmp/.work/app-fetch-pending"
+	rc=0; ( ROOT="$tmp"; fetch_macos x ) >/dev/null 2>&1 || rc=$?
+	[[ $rc -ne 0 && -f "$tmp/.work/app-fetch-pending" ]] || { echo "fetch self-test: a refused release fetch left no app-fetch-pending marker" >&2; rm -rf "$tmp"; exit 1; }
+	rm -rf "$tmp"
+	echo "fetch self-test: ok"
+}
+
 fetch_macos() {
 	local run="${1:-}"
 	local dest="$ROOT/.work/app"
@@ -1267,6 +1316,17 @@ fetch_macos() {
 	# so a refused or failed fetch leaves no app there for a later step to take as this run's
 	# (EDR fetched-app-binding). The release location keeps the app in use until a new one verifies.
 	[[ -n "$branch_build" ]] && rm -rf "$dest"
+	# The release app stays usable, but until a fetch verifies, a run doesn't take it for the
+	# build it asked for: test/app-build.ts refuses it while this marker exists (review FAB2-1).
+	local pending="$ROOT/.work/app-fetch-pending"
+	if [[ -z "$branch_build" ]]; then
+		mkdir -p "$ROOT/.work"
+		printf 'run %s\n' "${run:-latest}" > "$pending"
+	fi
+	# Usage is checked only now, so a usage error leaves the same state as any refusal (FAB2-7).
+	if [[ -n "$branch_build" && $# -ne 1 ]] || [[ $# -gt 1 ]]; then
+		usage; exit 2
+	fi
 	if [[ -z "$run" ]]; then
 		# Only builds of main triggered by a push (reviewed code), never dispatch/PR runs.
 		run="$(gh run list -R "$repo" --workflow build-macos.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
@@ -1325,6 +1385,7 @@ fetch_macos() {
 	ditto -x -k "$stage/dl/seclab-vscode-darwin-arm64.zip" "$stage/app"
 	cp "$stage/dl/build-info.json" "$stage/dl/SHA256SUMS" "$stage/app/"
 	rm -rf "$dest" && mv "$stage/app" "$dest"
+	[[ -n "$branch_build" ]] || rm -f "$pending"
 	cat "$dest/build-info.json"
 	echo
 	grep seclab-vscode-darwin-arm64.zip "$dest/SHA256SUMS"
@@ -1350,7 +1411,7 @@ fetch_test_variant() {
 	fi
 	# The run's whole tree (series, product transform, build scripts), not only its hook list, is
 	# code this checkout has: its commit is HEAD or an ancestor (review CCC-3).
-	git -C "$ROOT" merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null \
+	git_clean -C "$ROOT" merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null \
 		|| { echo "refusing run $run: its commit $head_sha ($branch) is not in this checkout's history; check it out first" >&2; exit 1; }
 	mkdir -p "$ROOT/.work"
 	local stage
@@ -1418,13 +1479,21 @@ build_linux() {
 		SECLAB_CFS_NPM_REGISTRY="$("${SECLAB_NODE:-node}" "$ROOT/build/cfs-config.ts" get npmRegistry)" || { echo "build: no CFS config: run ./seclab cfs config" >&2; exit 1; }
 		export SECLAB_CFS_NPM_REGISTRY
 	fi
+	# The commit the build is of: HEAD, only when the tree has no changes, since the build reads the
+	# working tree (review FAB2-2). A dirty tree's build records none.
+	local repo_sha=""
+	if [[ -z "$(git_clean -C "$ROOT" status --porcelain 2>/dev/null)" ]]; then
+		repo_sha="$(git_clean -C "$ROOT" rev-parse HEAD)"
+	else
+		echo "build: the working tree has changes; this build records no commit" >&2
+	fi
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \
 		-v "$vol:/work" \
 		-v "$out:/out" \
 		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC -e SECLAB_NPM_OFFLINE="$offline" -e SECLAB_CFS_NPM_REGISTRY \
 		-e SECLAB_TEST_VARIANT="$variant" -e GITHUB_SHA -e GITHUB_RUN_ID \
-		-e SECLAB_REPO_SHA="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git -C "$ROOT" rev-parse HEAD)" \
+		-e SECLAB_REPO_SHA="$repo_sha" \
 		seclab-builder:local bash /repo/build/linux/build.sh
 }
 
@@ -1535,9 +1604,10 @@ case "${1:-help}" in
 				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
 				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
 				mkdir -p "$ROOT/.work/driver"
+				driver_bind "$tgz"
 				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" \
-					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
-					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/profile* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
+					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" ${DRIVER_BIND[@]+"${DRIVER_BIND[@]}"} seclab-xvfb:local \
+					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/profile* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz && { [ ! -f /build-info.json ] || cp /build-info.json /repo/.work/driver/editor/; } \
 						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/selftest.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
 							--profile /repo/.work/driver/profile --shot /repo/.work/driver/selftest.png -- --no-sandbox' ;;
 			# A folder opened through the CLI never loads in a window; main routes it to the Tab Manager
@@ -1547,9 +1617,10 @@ case "${1:-help}" in
 				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
 				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
 				mkdir -p "$ROOT/.work/driver"
+				driver_bind "$tgz"
 				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" \
-					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
-					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/co* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
+					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" ${DRIVER_BIND[@]+"${DRIVER_BIND[@]}"} seclab-xvfb:local \
+					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/co* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz && { [ ! -f /build-info.json ] || cp /build-info.json /repo/.work/driver/editor/; } \
 						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/cli-open.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
 							--profile /repo/.work/driver/co -- --no-sandbox' ;;
 			# Local-window fixtures (findings m0#3-1, m0#4-1): zipped as VSIXs in the runner container
@@ -1565,9 +1636,11 @@ case "${1:-help}" in
 					touch "$SECLAB_LIVENESS_LOG"
 					live=(-v "$SECLAB_LIVENESS_LOG:/liveness.log" -e SECLAB_LIVENESS_LOG=/liveness.log)
 				fi
+				driver_bind "$tgz"
 				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" "${live[@]}" \
-					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
+					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" ${DRIVER_BIND[@]+"${DRIVER_BIND[@]}"} seclab-xvfb:local \
 					sh -c 'set -e; d=/repo/.work/driver; rm -rf "$d/editor" "$d"/lw* "$d/vsix" && mkdir -p "$d/editor" "$d/vsix" && tar -C "$d/editor" -xzf /editor.tgz
+						[ ! -f /build-info.json ] || cp /build-info.json "$d/editor/"
 						for x in workspace-ext third-party-ui spoofed-isbuiltin spoofed-builtin; do
 							python3 -c "import sys, zipfile, pathlib; src = pathlib.Path(sys.argv[1]); z = zipfile.ZipFile(sys.argv[2], \"w\"); [z.write(p, \"extension/\" + p.relative_to(src).as_posix()) for p in sorted(src.rglob(\"*\")) if p.is_file()]; z.close()" \
 								"test/driver/local-window/$x" "$d/vsix/$x.vsix"
@@ -1646,8 +1719,9 @@ case "${1:-help}" in
 		case "${1:-}" in
 			macos) shift; fetch_macos "$@" ;;
 			# A dispatched build of a non-main branch, for testing unlanded patches. Never released.
-			# Each clears its location before any refusal, usage errors included (review FAB-1).
-			macos-branch) shift; rm -rf "$ROOT/.work/app-branch"; [[ $# -eq 1 ]] || { usage; exit 2; }; FETCH_BRANCH_BUILD=1 fetch_macos "$1" ;;
+			# Each clears its location before any refusal, usage errors included (reviews FAB-1, FAB2-7).
+			macos-branch) shift; FETCH_BRANCH_BUILD=1 fetch_macos "$@" ;;
+			--self-test) fetch_self_test ;;
 			macos-*) v="${1#macos-}"; shift; fetch_test_variant "$v" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;

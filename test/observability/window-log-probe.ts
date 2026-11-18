@@ -23,6 +23,7 @@ import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { DrivenEditor } from '../driver/editor.ts';
 import { checkUserDataDir } from '../harness.ts';
+import { appBuildProblem } from '../app-build.ts';
 
 const args = process.argv.slice(2);
 const opt = (k: string) => (args.indexOf(k) >= 0 ? args[args.indexOf(k) + 1] : undefined);
@@ -37,6 +38,20 @@ if (!appArg || !wanted.every(v => (VARIANTS as readonly string[]).includes(v))) 
 }
 const sourceApp = path.resolve(appArg);
 const repo = path.resolve(import.meta.dirname, '../..');
+// The source app is judged once, by its own location's rule; its altered copies then run as that
+// build's commit rather than being judged by where the copies sit (review FAB2-4).
+{
+	const problem = appBuildProblem(sourceApp, { repoRoot: repo, expect: process.env.SECLAB_APP_SHA || undefined });
+	if (problem) {
+		console.error(`refusing: ${problem}`);
+		process.exit(2);
+	}
+	const info = ['build-info-app.json', 'build-info.json'].map(f => path.join(path.dirname(sourceApp), f)).find(f => fs.existsSync(f));
+	const sha = info ? (JSON.parse(fs.readFileSync(info, 'utf8')) as { repoSha?: string }).repoSha : undefined;
+	if (sha) {
+		process.env.SECLAB_APP_SHA = sha;
+	}
+}
 const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';
 const MARKER_PREFIX = ['seclabRpcFilter', 'Enforcing:'].join('');

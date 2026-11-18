@@ -30,7 +30,8 @@ if [[ -n "$VARIANT" ]]; then
 	# The fetched REH is the commit under test, as its app is (EDR fetched-app-binding, review FAB-8):
 	# SECLAB_APP_SHA when set, else this checkout's HEAD.
 	info="$ROOT/.work/test-builds/$VARIANT/build-info-test-$VARIANT.json"
-	want="${SECLAB_APP_SHA:-$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git -C "$ROOT" rev-parse HEAD)}"
+	for v in $(compgen -e); do [[ "$v" == GIT_* ]] && unset "$v"; done
+	want="${SECLAB_APP_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 	[[ -f "$info" && ! -L "$info" ]] && [[ "$want" =~ ^[0-9a-f]{40}$ ]] \
 		&& jq -e --arg w "$want" '.repoSha == $w' "$info" >/dev/null \
 		|| { echo "refusing: $info doesn't record $want (fetch the build of the commit under test, or set SECLAB_APP_SHA)" >&2; exit 1; }

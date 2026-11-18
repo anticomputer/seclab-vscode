@@ -18,8 +18,11 @@ at launch compared the app's recorded commit with the commit under test.
 ## Decision
 - **Fetch.** `fetch macos-branch` and `fetch macos-<variant>` clear their destination
   (`.work/app-branch`, `.work/test-builds/<variant>`) before checking anything, usage errors
-  included, so a refusal or failure leaves no app there. `fetch macos` keeps the release app (`.work/app`) until a new one
-  verifies: it may be the editor in use, and a failed fetch of a newer build shouldn't remove it.
+  included, so a refusal or failure leaves no app there. `fetch macos` keeps the release app
+  (`.work/app`) until a new one verifies: it may be the editor in use, and a failed fetch of a
+  newer build shouldn't remove it. Instead it writes `.work/app-fetch-pending` first and removes
+  it only when the new app is in place; while it exists, runs refuse the release app.
+  `./seclab fetch --self-test` (CI) checks every refusal that needs no network.
 - **Launch.** `test/app-build.ts` checks every launch: `launchEditorInBackground`
   (`test/harness.ts`, behind `test/window.ts launch` and the probes that print its line), the
   headless driver (`test/driver/editor.ts`), and `test/driver/local-window.ts` before it runs the
@@ -33,13 +36,23 @@ at launch compared the app's recorded commit with the commit under test.
     itself, not a symlink there).
   A test build (build info with `testBuild`) runs only from `.work/test-builds/`, whatever
   `SECLAB_APP_SHA` says. Paths are compared canonically, and git runs with no inherited
-  `GIT_*` variables. A macOS app with no build info is refused. A Linux editor this checkout built
+  `GIT_*` variables. A macOS app with no build info is refused.
+  "This checkout" is the one the app was fetched into: the checkout running the harness, or one
+  nested in its `.work` (an A/B run's baseline worktree, whose HEAD is the baseline commit).
+- **Agentic runs.** `test/agentic/runner/runner.ts` and `test/agentic/browser/run.ts` refuse a
+  wrong build at prepare, and the runner's "ran the requested build" check passes only if the
+  window was launched from that build's app and its build info still names the prepared commit. A Linux editor this checkout built
   (`./seclab build linux editor`, the driver's container runs) has none and isn't checked.
 - The check runs before the focus watcher or anything else starts, so a refusal launches nothing.
 - **Test REH.** `./seclab image oci --test-variant V` builds a tab image only from a REH whose
   `build-info-test-V.json` records the commit under test (the same rule). A local Linux build
   records the host checkout's HEAD as `repoSha` (no `runId`), since git inside the build
-  container can't read a worktree's HEAD.
+  container can't read a worktree's HEAD. Only a clean tree's build records a commit (the build
+  reads the working tree); `runId` is recorded only for CI builds.
+- **Linux driver.** `./seclab test driver|cli-open|local-window` put the build info beside the
+  tarball next to the extracted editor and pass this checkout's HEAD as `SECLAB_APP_SHA`, so a
+  stale tarball is refused. A build info whose targets lack the editor (a later REH-only build)
+  is refused. A dirty tree's build, which records no commit, runs unbound with a warning.
 
 ## Proof
 - `test/app-build.test.ts` (unit): a stale branch build (an ancestor commit) is refused and the
@@ -53,13 +66,16 @@ at launch compared the app's recorded commit with the commit under test.
   `.work/app-branch` absent, as did usage errors (no run id, an empty one, two) for the branch and
   a variant; `test/window.ts launch` and `test/driver/shot.ts` each refused the stale app with
   exit 1 and started no process; `image oci --test-variant` refused a REH whose build info names
-  another commit.
+  another commit. A fake Linux editor tarball whose build info names an old commit was refused
+  inside the driver's container before the editor started.
 
 ## Limits
 - The build info is bound to the directory, not to the bundle's bytes: an app edited in place,
   or a stale bundle beside a fresh build info, passes. Binding needs a digest of the extracted
   bundle recorded at fetch time (review FAB-5, deferred). The check-to-launch window is unguarded.
-- The release app is any build of a main commit, not necessarily the newest.
+- The release app is any build of a main commit, not necessarily the newest; a fetch that
+  didn't complete is caught by its marker.
+- A dirty tree's local Linux build isn't bound to a commit.
 
 ## Consequences
 - A run from a branch checkout that tests a build of another commit (a newer main build, or a
