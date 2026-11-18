@@ -16532,7 +16532,7 @@
 			"component": "rpc-filter/tools/check_drift.py check_log_trust",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"commit": "aaf3ebbbb852",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_a_log_method_the_inventory_lost_fails"
@@ -16547,7 +16547,7 @@
 			"component": "rpc-filter/tools/lint_probes.py",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"commit": "aaf3ebbbb852",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_code_after_a_block_comment_is_linted"
@@ -16562,7 +16562,7 @@
 			"component": "test/containment/check-probes.ts, rpc-filter/probes/expectations.json",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"commit": "aaf3ebbbb852",
 			"test": {
 				"file": "test/containment/check-probes.test.ts",
 				"name": "a probe run only by its own harness is not judged without that selection, and is required with it"
@@ -16577,7 +16577,7 @@
 			"component": "proof harnesses (host-terminal.ts, reh-push.ts)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"commit": "aaf3ebbbb852",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "each harness reaps before it wipes and tears down on a signal"
@@ -16592,7 +16592,7 @@
 			"component": "proof harnesses, test/containment/teardown.ts exitOnSignals",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"commit": "aaf3ebbbb852",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "SIGINT and SIGTERM reach the exit handler"
@@ -16607,7 +16607,7 @@
 			"component": "test/containment/teardown.ts reapPreviousRun",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:e459e5c300dec4a8fb8b109a0a2a6c18dd2b748a",
+			"commit": "155406e145c4",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
@@ -16622,7 +16622,7 @@
 			"component": "test/containment/teardown.ts runLeftovers",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:acc63be12cda5f1a0928670758f0e43a705a2d9e",
+			"commit": "89efd7b96ff1",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
@@ -16637,7 +16637,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:aee6225e21c61a26b60d6e6fa7e54ba122496e68",
+			"commit": "47189138ddec",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_regex_ending_in_slashes_is_not_a_comment"
@@ -16652,7 +16652,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _regex_end",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:9ee7143714e7821ad08e15f20a07b9b0692747b4",
+			"commit": "e6a0a32f5e2d",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_regex_ending_in_slashes_is_not_a_comment"
@@ -16667,7 +16667,7 @@
 			"component": "test/containment/check-probes.ts runner waiver",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:c19144e35004f7939338d14bcacb0e3f63f3510d",
+			"commit": "6813c38db203",
 			"test": {
 				"file": "test/containment/check-probes.test.ts",
 				"name": "a probe run only by its own harness is not judged without that selection, and is required with it"
@@ -16682,7 +16682,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:92744b62a48973c6f76f06db4de95531eab3d2c5",
+			"commit": "f4573ce9e810",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
@@ -16697,7 +16697,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"commit": "a732d190f1bd",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_misread_slash_cannot_move_a_string_boundary"
@@ -16712,7 +16712,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"commit": "a732d190f1bd",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_nested_templates_keep_their_boundaries"
@@ -16727,7 +16727,7 @@
 			"component": "rpc-filter/tools/lint_probes.py main",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"commit": "a732d190f1bd",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_code_line_starting_with_a_star_is_linted"
@@ -16742,7 +16742,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:05e88dc75f104e00236cda983d9af49a727885aa",
+			"commit": "f0c0fa0c5362",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_property_names_and_contextual_words"
@@ -16757,7 +16757,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823",
+			"commit": "3cf5a70bd655",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_property_names_and_contextual_words"
@@ -16772,7 +16772,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823",
+			"commit": "3cf5a70bd655",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_an_html_like_comment_fails_closed"
@@ -16787,7 +16787,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae",
+			"commit": "eb8f2b1bb813",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_identifier_escapes_and_non_ascii_code_fail_closed"
@@ -16802,7 +16802,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae",
+			"commit": "eb8f2b1bb813",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_hashbang_line_is_a_comment"
@@ -16817,7 +16817,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:139c6de1faed74efe79e6be8b405ec09d8eb74af",
+			"commit": "3935e564d20a",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
@@ -16832,7 +16832,7 @@
 			"component": "rpc-filter/tools/lint_probes.py main",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:cbf7c638be8743b8ddc01b5441b0afe409763f61",
+			"commit": "7b6a42ef8055",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_only_javascript_line_terminators_end_a_comment"
@@ -16847,7 +16847,7 @@
 			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:cbf7c638be8743b8ddc01b5441b0afe409763f61",
+			"commit": "7b6a42ef8055",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_number_member_is_not_a_spread"
@@ -16862,7 +16862,7 @@
 			"component": "rpc-filter/tools/lint_probes.py main",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4",
+			"commit": "808b1a2dd854",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_literal_line_separator_fails_closed"
@@ -16877,7 +16877,7 @@
 			"component": "rpc-filter/tools/lint_probes.py main",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4",
+			"commit": "808b1a2dd854",
 			"test": {
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_shell_payload_is_not_scanned_as_javascript"
@@ -16888,7 +16888,7 @@
 			"round": "Findings",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e",
+			"commit": "e204f230f660",
 			"severity": "low",
 			"anchor": "PH-1",
 			"summary": "Four probe harnesses copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it.",
@@ -16900,7 +16900,7 @@
 			"round": "Findings",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e",
+			"commit": "e204f230f660",
 			"severity": "low",
 			"anchor": "PH-2",
 			"summary": "Four probe harnesses read the arm back from the tab's workspace unguarded, so a tab could end the check before its teardown gate.",
@@ -16912,7 +16912,7 @@
 			"round": "Findings",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e",
+			"commit": "e204f230f660",
 			"severity": "low",
 			"anchor": "PH-3",
 			"summary": "Four probe harnesses ran sbx exec without a timeout, so a FIFO at the report path stalled the check forever.",
@@ -16924,7 +16924,7 @@
 			"round": "Findings",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e",
+			"commit": "e204f230f660",
 			"severity": "low",
 			"anchor": "PH-4",
 			"summary": "Four probe harnesses ran regexes on tab-controlled report values before their type checks, so a crafted object threw before the teardown gate.",
@@ -16939,7 +16939,7 @@
 			"round": "Findings",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e",
+			"commit": "e204f230f660",
 			"severity": "low",
 			"anchor": "PH-5",
 			"summary": "Five probe run manifests didn't list their generated directories, so the teardown gate left them in .work.",
@@ -16954,7 +16954,7 @@
 			"round": "Copilot review (PR #45)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"commit": "4272dedfffb4",
 			"anchor": "PH-6",
 			"severity": "low",
 			"summary": "The bounded sbx exec still returned stdout produced before a timeout or failure, so a FIFO could emit a report and then stall.",
@@ -16966,7 +16966,7 @@
 			"round": "Copilot review (PR #45)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"commit": "4272dedfffb4",
 			"anchor": "PH-7",
 			"severity": "low",
 			"summary": "With the host arm file missing, a report with no arm passed the run-provenance check in three probes.",
@@ -16978,7 +16978,7 @@
 			"round": "Copilot review (PR #45)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"commit": "4272dedfffb4",
 			"anchor": "PH-8",
 			"severity": "info",
 			"summary": "check --measure judged only schema and focus assertions, so the new self-test was ignored there.",
@@ -16990,7 +16990,7 @@
 			"round": "Copilot review (PR #45)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"commit": "4272dedfffb4",
 			"anchor": "PH-9",
 			"severity": "low",
 			"summary": "docsync printed the tab's hijack counters and strings unvalidated, so a crafted value threw before the teardown gate.",
@@ -17005,7 +17005,7 @@
 			"round": "Copilot review (PR #45)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"commit": "4272dedfffb4",
 			"anchor": "PH-10",
 			"severity": "info",
 			"summary": "docsync's hostile self-test failed the scheme check first, so the hash's type check went unexercised.",
@@ -17024,7 +17024,7 @@
 			"severity": "low",
 			"summary": "Clearing stdout on a failed read also dropped docsync's tab logs, so a canary already emitted could vanish and the absence checks pass on missing evidence.",
 			"status": "fixed",
-			"commit": "patch:8cbaf3f21161e53601280f24ab3d760f61d40d41",
+			"commit": "24cae48498c0",
 			"test": {
 				"file": "test/docsync/probe.ts",
 				"name": "control: the tab-side logs were collected (no timeout or failure)"
@@ -17039,7 +17039,7 @@
 			"severity": "low",
 			"summary": "docsync's summary sorted tab-made scheme counters with the default sort, which stringified them, so a crafted counter threw before the teardown gate.",
 			"status": "fixed",
-			"commit": "patch:02b6d44c3b825edb06e4d754462469d2009ef618",
+			"commit": "83f5937b125f",
 			"test": {
 				"file": "test/docsync/probe.ts",
 				"name": "the report schema check passes nothing the summary cannot print (PH-12)"
@@ -17050,7 +17050,7 @@
 			"round": "Copilot review (PR #45, fourth pass)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:1eb2091895d21904444f369421b794ecb0d2db66",
+			"commit": "5831c83c515f",
 			"anchor": "PH-13",
 			"severity": "low",
 			"summary": "docsync's log collection ended in a forced success, so a failed read still counted as collected and the absence checks could pass without the extension-host logs.",
@@ -17065,7 +17065,7 @@
 			"round": "Copilot review (PR #45, fourth pass)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:1eb2091895d21904444f369421b794ecb0d2db66",
+			"commit": "5831c83c515f",
 			"anchor": "PH-14",
 			"severity": "info",
 			"summary": "check --measure dropped the log-collection control from its verdict.",
