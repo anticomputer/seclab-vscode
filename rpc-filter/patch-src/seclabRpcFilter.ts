@@ -1112,6 +1112,8 @@ export interface SeclabMarkdown {
 
 /** The start of `command:<id>`; its `?<args>` query is scanned by seclabCommandLinks. */
 const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)/gi;
+/** What precedes a link destination: `](` or `]:` with optional space and `<`, or a bare `<`. */
+const SECLAB_DESTINATION_BEFORE = /(?:\]\(\s*<?|\]:\s*<?|<)$/;
 
 /**
  * Rewrite every `command:<id>?<args>` in `value`. The query is JSON that encodeURIComponent
@@ -1120,11 +1122,18 @@ const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)/gi;
  * in an angle-bracket destination, only at its `>`.
  * A pattern that stopped at `'` or the first `)` cut the arguments short (PR review on #48).
  */
-function seclabCommandLinks(value: string, rewrite: (rawId: string, query: string | undefined) => string): string {
+function seclabCommandLinks(value: string, rewrite: (rawId: string, query: string | undefined) => string, onlyDestinations = false): string {
 	let out = '';
 	let last = 0;
 	SECLAB_COMMAND_LINK.lastIndex = 0;
 	for (let m = SECLAB_COMMAND_LINK.exec(value); m; m = SECLAB_COMMAND_LINK.exec(value)) {
+		// Only where `command:` starts a link destination: after `](`, `<` (an angle destination
+		// or autolink) or `]:` (a reference definition). Elsewhere (a URL's path, a label, prose)
+		// it is text and stays as written (PR review on #48); the re-lex check in seclabOutsideCode
+		// sends anything this misses to the path that rewrites every occurrence.
+		if (onlyDestinations && !SECLAB_DESTINATION_BEFORE.test(value.slice(Math.max(0, m.index - 64), m.index))) {
+			continue;
+		}
 		let end = SECLAB_COMMAND_LINK.lastIndex;
 		let query: string | undefined;
 		// In an angle-bracket destination (`[x](<command:…>)`) the query runs to the `>`: a `)` in
@@ -1332,7 +1341,7 @@ export function seclabFromTab(
 						return link('', []);
 					}
 					return link(id, args);
-				}));
+				}, keepLinks));
 			// Anything the link rewrite missed stays inert: only the token command is enabled. HTML
 			// is off and every tag opener is escaped above, so no <img>, <a> or <span> block reaches
 			// the renderer (a trusted string would otherwise pass `<span …>` blocks through).

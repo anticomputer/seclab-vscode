@@ -347,6 +347,24 @@ test('response: a URI autolink stays a link, and a command autolink runs the tok
 	assert.doesNotMatch(s.markdown({ value: '<img src="https://example.test/a.png">' }).value, OPENS_IMAGE_OR_TAG);
 });
 
+test('response: only link destinations named command: are rewritten (review on #48)', async () => {
+	const ran: unknown[] = [];
+	const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ran.push([id, args]); return 'ok'; });
+	for (const value of [
+		'[docs](https://example.test/command:reference)',
+		'use command:pub.ext.own when you need it',
+		'[command:pub.ext.own](https://example.test/)',
+	]) {
+		assert.equal(s.markdown({ value }).value, value);
+	}
+	// A reference definition is a destination too: rewritten, and it runs the tab's command.
+	const out = s.markdown({ value: '[run][r]\n\n[r]: command:pub.ext.own?%5B1%5D' }).value;
+	const m = out.match(/\[r\]: (command:_seclab\.tabCommand\?\S+)$/);
+	assert.ok(m, out);
+	await run(tokenOf(m[1]));
+	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
+});
+
 test('response: code in tab markdown is shown as written; everything else is still escaped (review on #48)', () => {
 	const s = F.seclabFromTab(AUTH, async () => undefined);
 	const fence = '```typescript\nfunction f(): Promise<Result> { return ![x](https://example.test/c.png); }\n```\n';
@@ -530,6 +548,7 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['every tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (true) {'],
 		['no tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (false) {'],
 		['autolinks are escaped', '|| SECLAB_AUTOLINK.test(text.slice(i))) ? lt', '|| false) ? lt'],
+		['every command: is rewritten', 'if (onlyDestinations && !SECLAB_DESTINATION_BEFORE.test(', 'if (false && !SECLAB_DESTINATION_BEFORE.test('],
 		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],
