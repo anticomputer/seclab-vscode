@@ -105,7 +105,9 @@ sbx stop "$B" >/dev/null
 if [[ "$TAG" == seclab-tab:b-* ]]; then
 	# The tag's lease for clean-host, before the tag exists (see build-images.sh).
 	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
-	mkdir -p "$lease" && date +%s > "$lease/$TAG"
+	# Separate commands: under set -e a failing `mkdir` in an && list wouldn't stop the build.
+	mkdir -p "$lease"
+	date +%s > "$lease/$TAG"
 fi
 sbx template save "$B" "$TAG"
 # The pre-mount secret scanner tabd runs before any mount (built from pinned gitleaks source).

@@ -59,6 +59,26 @@ export function perBuildLive(name: string, createdMs: number, leaseMs: number | 
 	const from = Math.max(Number.isFinite(createdMs) ? createdMs : 0, leaseMs ?? 0);
 	return /^seclab-tab(-oci)?:b-/.test(name) && nowMs - from < 7 * 24 * 3_600_000;
 }
+/** sbx's template store is separate from Docker's: its per-build tab templates (seclab-tab:b-NAME)
+ *  with whether each is live under the same week-from-lease rule; every other template is ignored
+ *  (Copilot review on PR 25). */
+export function sbxPerBuildTemplates(json: string, lease: (name: string) => number | undefined, nowMs: number): Array<{ name: string; live: boolean }> {
+	let list: unknown;
+	try {
+		list = JSON.parse(json);
+	} catch {
+		return [];
+	}
+	const out: Array<{ name: string; live: boolean }> = [];
+	for (const t of Array.isArray(list) ? list as Array<{ repository?: unknown; tag?: unknown; created_at?: unknown }> : []) {
+		const name = `${String(t.repository ?? '').replace(/^docker\.io\/library\//, '')}:${String(t.tag ?? '')}`;
+		if (/^seclab-tab:b-[A-Za-z0-9._-]+$/.test(name)) {
+			out.push({ name, live: perBuildLive(name, Date.parse(String(t.created_at ?? '')), lease(name), nowMs) });
+		}
+	}
+	return out;
+}
+
 /** The lease the build scripts wrote for a tag, in the clone's shared git dir (all worktrees). */
 function imageLease(name: string): number | undefined {
 	const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
@@ -141,6 +161,26 @@ if (args.has('--self-test')) {
 		const leaseAt = text.indexOf('date +%s > "$lease/$TAG"'), publishAt = text.indexOf(publish);
 		if (leaseAt < 0 || publishAt < 0 || leaseAt > publishAt) {
 			bad.push(`${file}: the per-build lease isn't written before the tag is published`);
+		}
+		// Not inside an && list, whose failure set -e wouldn't stop on.
+		if (/&&[^\n]*\$lease|\$lease[^\n]*&&/.test(text)) {
+			bad.push(`${file}: a lease step is in an && list, which set -e doesn't stop on`);
+		}
+	}
+	// sbx templates: only seclab-tab:b-* is ours to expire, by the same rule.
+	{
+		const d = 24 * 3_600_000, t0 = Date.parse('2026-11-17T00:00:00Z');
+		const json = JSON.stringify([
+			{ repository: 'docker.io/library/seclab-tab', tag: 'b-old', created_at: '2026-11-01T00:00:00Z' },
+			{ repository: 'docker.io/library/seclab-tab', tag: 'b-leased', created_at: '2026-11-01T00:00:00Z' },
+			{ repository: 'docker.io/library/seclab-tab', tag: 'b-new', created_at: '2026-11-16T00:00:00Z' },
+			{ repository: 'docker.io/library/seclab-tab', tag: 'local', created_at: '2026-01-01T00:00:00Z' },
+			{ repository: 'docker.io/docker/sandbox-templates', tag: 'b-x', created_at: '2026-01-01T00:00:00Z' },
+		]);
+		const got = JSON.stringify(sbxPerBuildTemplates(json, n => n === 'seclab-tab:b-leased' ? t0 - d : undefined, t0));
+		const want = JSON.stringify([{ name: 'seclab-tab:b-old', live: false }, { name: 'seclab-tab:b-leased', live: true }, { name: 'seclab-tab:b-new', live: true }]);
+		if (got !== want) {
+			bad.push(`sbx per-build templates: got ${got}`);
 		}
 	}
 	// Per-build tags: a week from the later of creation and lease, so a cached (old) image tagged
@@ -479,6 +519,18 @@ for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 		del: () => ok('docker', ['image', 'rm', n]),
 	});
 }
+// sbx templates, a store of their own: a proof build's per-build template expires like its OCI
+// twin; --caches removes the live ones too.
+const tpl = run(SBX, ['template', 'ls', '--json']);
+if (!tpl.error && tpl.status === 0) {
+	for (const t of sbxPerBuildTemplates(tpl.stdout, imageLease, Date.now())) {
+		const remove = t.live ? args.has('--caches') : true;
+		items.push({
+			kind: 'sbx template', name: `${t.name}${t.live ? '' : ' (superseded)'}`, state: '', remove, why: remove ? '' : 'a proof build from the last week (use --caches)',
+			del: () => ok(SBX, ['template', 'rm', t.name]),
+		});
+	}
+}
 // Containers not named seclab-* but created from an image in the dependency register or one of
 // our own images: possibly an ad-hoc command's leftover (AGENTS.md naming rule). Reported only,
 // never removed: whoever created it must verify.
@@ -627,7 +679,7 @@ for (const [p, f] of fixtureRoots) {
 // ---- report / apply ------------------------------------------------------------------------
 // --superseded-images (builds call it after tagging): remove only superseded images, nothing else.
 if (args.has('--superseded-images')) {
-	const gone = items.filter(i => i.kind === 'image' && i.name.endsWith(' (superseded)'));
+	const gone = items.filter(i => (i.kind === 'image' || i.kind === 'sbx template') && i.name.endsWith(' (superseded)'));
 	for (const it of gone) {
 		console.log(`${it.del() ? 'removed' : 'FAILED '} image ${it.name}`);
 	}

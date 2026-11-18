@@ -41,7 +41,9 @@ if [[ -n "$PERBUILD" ]]; then
 	# never sees it unleased (Copilot review on PR 25): a cached build reuses an older image, so its
 	# creation time isn't when this proof tag was made.
 	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
-	mkdir -p "$lease" && date +%s > "$lease/$TAG"
+	# Separate commands: under set -e a failing `mkdir` in an && list wouldn't stop the build.
+	mkdir -p "$lease"
+	date +%s > "$lease/$TAG"
 fi
 docker build -q -t "$TAG" -f "$ROOT/sandbox/oci/Dockerfile.tab" "$CTX"
 if [[ -n "$VARIANT" ]]; then
