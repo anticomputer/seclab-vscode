@@ -19855,6 +19855,259 @@
 				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
 				"quote": "R17-6 is deferred."
 			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-1",
+			"round": "Round RJG",
+			"severity": "high",
+			"summary": "A required job runs code the PR controls, so a PR can gut a job and it still concludes success.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "owner",
+			"rationale": "Accepted by the project owner (2026-11-17) with two compensating controls: landing verify re-runs the old main's validators over the merged tree, and the coordinator reviews every PR touching the workflows, seclab or build/ before it is armed."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-2",
+			"round": "Round RJG",
+			"severity": "high",
+			"summary": "The gate judged only the latest run of each required workflow, so a job skipped on the PR run passed when it ran on push.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "gate script RJG-2: lint ran on push but was skipped on the PR run"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-3",
+			"round": "Round RJG",
+			"severity": "medium",
+			"summary": "The EDR understated the residual and overstated what landing verify refuses.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"gap": "A record correction; nothing to run."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-4",
+			"round": "Round RJG",
+			"severity": "medium",
+			"summary": "The gate invariants matched block style only, so a flow-style uses step or a commented pair list passed.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "RJG-4 a flow-style uses step"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-5",
+			"round": "Round RJG",
+			"severity": "medium",
+			"summary": "landing verify used its own checkout's list unchecked and put pairs into an API path and jq unvalidated.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"gap": "The checkout and pair checks guard the live API path; no test drives landing verify against the API."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-6",
+			"round": "Round RJG2",
+			"severity": "medium",
+			"summary": "The run list was read unpaginated, so other runs for the commit could page the PR run out of view.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "gate script RJG-6"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-7",
+			"round": "Round RJG2",
+			"severity": "medium",
+			"summary": "The forged-status residual named only statuses: write, not actions: write cancelling the gate.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"gap": "A record correction; nothing to run."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-8",
+			"round": "Round RJG2",
+			"severity": "medium",
+			"summary": "Nothing constrained the gate script or extra steps.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "RJG-8 an extra step"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-9",
+			"round": "Round RJG2",
+			"severity": "medium",
+			"summary": "An empty required list, or a checkout on another branch, made landing verify check nothing.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"gap": "The list and ancestry checks guard the live API path; no test drives landing verify against the API."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-10",
+			"round": "Round RJG3",
+			"severity": "high",
+			"summary": "A merged validator replaced by a symlink made its re-validation step run the link target and pass.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"test": {
+				"file": "seclab",
+				"name": "a merged validator symlink passed this main's validators (RJG-10)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-11",
+			"round": "Round RJG3",
+			"severity": "medium",
+			"summary": "The overlay wrote the old main's files through a merged symlink, outside the worktree.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"test": {
+				"file": "seclab",
+				"name": "the overlay wrote through a merged symlink (RJG-11)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-12",
+			"round": "Round RJG3",
+			"severity": "medium",
+			"summary": "The overlay undo list came from the merged tree, so it could remove files outside the worktree.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"test": {
+				"file": "seclab",
+				"name": "a merged tree tracking .work passed (RJG-12)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-13",
+			"round": "Round RJG3",
+			"severity": "low",
+			"summary": "A later change could re-date a liveness pending entry and postpone its expiry indefinitely.",
+			"component": "liveness pending subjects (build/liveness/liveness.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "RJG-13 a re-dated pending entry passed"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-14",
+			"round": "Round RJG3",
+			"severity": "info",
+			"summary": "The overlay path check admitted absolute paths.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"test": {
+				"file": "seclab",
+				"name": "the overlay accepted the path"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-15",
+			"round": "Round RJG4",
+			"severity": "medium",
+			"summary": "The .work refusal was case-sensitive, so a .Work symlink redirected scratch writes on a case-insensitive host.",
+			"component": "landing verify re-validation (seclab landing_revalidate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:a6eb7ada44b07274e6d7eb8dc73608e176b34192",
+			"test": {
+				"file": "seclab",
+				"name": "a merged .Work symlink passed (RJG-15)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-16",
+			"round": "Round RJG4",
+			"severity": "info",
+			"summary": "A liveness pending entry can be re-added after its subject is removed in an earlier change.",
+			"component": "liveness pending subjects (build/liveness/liveness.ts)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "It takes a visible two-change sequence; for this gate it also needs the gate file removed or renamed, which the required-checks validator refuses.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
+				"quote": "Reaching it takes a visible two-change sequence"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-17",
+			"round": "Round RJG5",
+			"severity": "info",
+			"summary": "The .work listing was piped into grep -q, which can fail open under pipefail for a large listing.",
+			"component": "landing verify re-validation (seclab landing_revalidate)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:a6eb7ada44b07274e6d7eb8dc73608e176b34192",
+			"gap": "Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test."
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-18",
+			"round": "Round RJG5",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
+				"quote": "None found in any round."
+			}
 		}
 	]
 }

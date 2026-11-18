@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 252 | 413 | 52 | 822 |
+| fixed | 14 | 93 | 258 | 414 | 53 | 832 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 185 | 71 | 320 |
-| accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
+| fixed-untested | 0 | 5 | 63 | 185 | 72 | 325 |
+| accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
-| false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 348 | 697 | 185 | 1351 |
+| false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
+| **all** | 16 | 108 | 358 | 698 | 189 | 1369 |
 
 ## Baseline: open high and critical findings
 
@@ -205,6 +205,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 
 | Finding | Sev | Status | Component | Summary | Gap or disposition |
 |---|---|---|---|---|---|
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-1** | high | accepted-residual | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | A required job runs code the PR controls, so a PR can gut a job and it still concludes success. | accepted by the project owner (owner-acceptances.md): Accepted by the project owner (2026-11-17) with two compensating controls: landing verify re-runs the old main's validators over the merged tree, and the coordinator reviews every PR touching the workflows, seclab or build/ before it is armed. |
 | [20261104-ci-hardening](20261104-ci-hardening.md) **CI-1** | medium | fixed-untested | ci workflows / fetch provenance | Attestation proved only "built from main", not that the SHA passed the gates; v* tags could attest any commit. | build-macos is main-push-only and fetch_macos requires the unit/lint/docs check runs on the exact SHA, but nothing executes or asserts that path: no test covers the check-run gate, the main-only trigger or the --source-ref pin. |
 | [20261104-fixture-safety](20261104-fixture-safety.md) **FS-1** | medium | fixed-untested | rogue extension fixture | Run on the host, the rogue extension would have written the developer's real env values, access tokens and settings into evidence. | Values are recorded only when \`remoteName === 'seclab' &amp;&amp; SECLAB_TAB === '1'\`, but no suite runs the rogue extension on the host, so the \`ranOnHost\` branch is never exercised; removing the gate would not fail any test. |
 | [20261104-fixture-safety](20261104-fixture-safety.md) **SS-1** | medium | fixed-untested | clean-host | clean-host's fixture sweep treated any \`.seclab/\` dir under \`.work/\` as stale, so \`--apply\` could delete tracked fixtures in a nested checkout. | Deletion is now limited to roots marked by \`materialiseFixture\`, run.json \`workspaces\` or exact legacy paths, and never descends into a \`.git\` tree, but \`clean-host --self-test\` pins only name patterns; nothing exercises the root classification. |
@@ -230,6 +231,10 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-21** | medium | fixed-untested | Level B check (test/containment) | The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets. | Wording; the digest test covers detection on both drivers. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-3** | medium | fixed-untested | Level B check (test/containment) | The gap text claimed Level A covers a host run of fsmonitor. | Wording only. |
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-5** | medium | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | The validator was dragged into the token-holding verify-runs mount. | ./seclab lint mounts enforces the one-file mount on every push. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-3** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | The EDR understated the residual and overstated what landing verify refuses. | A record correction; nothing to run. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-5** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | landing verify used its own checkout's list unchecked and put pairs into an API path and jq unvalidated. | The checkout and pair checks guard the live API path; no test drives landing verify against the API. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-7** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | The forged-status residual named only statuses: write, not actions: write cancelling the gate. | A record correction; nothing to run. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-9** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | An empty required list, or a checkout on another branch, made landing verify check nothing. | The list and ancestry checks guard the live API path; no test drives landing verify against the API. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-F** | low | fixed-untested | campaign fixture teardown | Planted inert files were left in the host checkout when the run used KEEP=1. | \`disarmCampaign\` is called unconditionally in \`cleanup()\` (test/containment/run.ts), but nothing runs the suite with KEEP=1 to prove the planted .git/.envrc are gone. |
@@ -415,6 +420,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-19** | info | fixed-untested | Level B check (test/containment) | A dead field pointed inside the pinned directory. | A removed field. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-9** | info | fixed-untested | Level B check (test/containment) | The sbx host-evidence row rested on an unstated premise. | The premise proved false and the row was removed (FXF-20). |
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-23** | info | accepted-residual | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-16** | info | accepted-residual | liveness pending subjects (build/liveness/liveness.ts) | A liveness pending entry can be re-added after its subject is removed in an earlier change. | accepted by an agent: It takes a visible two-change sequence; for this gate it also needs the gate file removed or renamed, which the required-checks validator refuses. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-17** | info | fixed-untested | landing verify re-validation (seclab landing_revalidate) | The .work listing was piped into grep -q, which can fail open under pipefail for a large listing. | Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test. |
 
 ### RPC follow-ups
 
@@ -2386,6 +2393,29 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR-22 | low | fixed | A quote after a bracket inside a plain scalar read as an open value. | 0c9c31b7 · `build/check-required-checks.ts` "a plain-scalar command holding a quoted bracket" |
 | CR-23 | info | accepted-residual | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 | CR-24 | low | fixed | A lone-quote plain label and JSON inside a single-quoted value failed lint. | 858bdff7 · `build/check-required-checks.ts` "JSON with a permissions key inside a single-quoted value" |
+
+### [20261117-required-jobs-gate](20261117-required-jobs-gate.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| RJG-1 | high | accepted-residual | A required job runs code the PR controls, so a PR can gut a job and it still concludes success. | accepted by the project owner (owner-acceptances.md): Accepted by the project owner (2026-11-17) with two compensating controls: landing verify re-runs the old main's validators over the merged tree, and the coordinator reviews every PR touching the workflows, seclab or build/ before it is armed. |
+| RJG-2 | high | fixed | The gate judged only the latest run of each required workflow, so a job skipped on the PR run passed when it ran on push. | patch:81bad4a97589002a1a7d89c558be4e2c95181459 · `build/check-required-checks.ts` "gate script RJG-2: lint ran on push but was skipped on the PR run" |
+| RJG-3 | medium | fixed-untested | The EDR understated the residual and overstated what landing verify refuses. | A record correction; nothing to run. |
+| RJG-4 | medium | fixed | The gate invariants matched block style only, so a flow-style uses step or a commented pair list passed. | patch:81bad4a97589002a1a7d89c558be4e2c95181459 · `build/check-required-checks.ts` "RJG-4 a flow-style uses step" |
+| RJG-5 | medium | fixed-untested | landing verify used its own checkout's list unchecked and put pairs into an API path and jq unvalidated. | The checkout and pair checks guard the live API path; no test drives landing verify against the API. |
+| RJG-6 | medium | fixed | The run list was read unpaginated, so other runs for the commit could page the PR run out of view. | patch:6d5969053dd30eb7742bce91536a0e271338017f · `build/check-required-checks.ts` "gate script RJG-6" |
+| RJG-7 | medium | fixed-untested | The forged-status residual named only statuses: write, not actions: write cancelling the gate. | A record correction; nothing to run. |
+| RJG-8 | medium | fixed | Nothing constrained the gate script or extra steps. | patch:6d5969053dd30eb7742bce91536a0e271338017f · `build/check-required-checks.ts` "RJG-8 an extra step" |
+| RJG-9 | medium | fixed-untested | An empty required list, or a checkout on another branch, made landing verify check nothing. | The list and ancestry checks guard the live API path; no test drives landing verify against the API. |
+| RJG-10 | high | fixed | A merged validator replaced by a symlink made its re-validation step run the link target and pass. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "a merged validator symlink passed this main's validators (RJG-10)" |
+| RJG-11 | medium | fixed | The overlay wrote the old main's files through a merged symlink, outside the worktree. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "the overlay wrote through a merged symlink (RJG-11)" |
+| RJG-12 | medium | fixed | The overlay undo list came from the merged tree, so it could remove files outside the worktree. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "a merged tree tracking .work passed (RJG-12)" |
+| RJG-13 | low | fixed | A later change could re-date a liveness pending entry and postpone its expiry indefinitely. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `build/liveness/liveness.ts` "RJG-13 a re-dated pending entry passed" |
+| RJG-14 | info | fixed | The overlay path check admitted absolute paths. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "the overlay accepted the path" |
+| RJG-15 | medium | fixed | The .work refusal was case-sensitive, so a .Work symlink redirected scratch writes on a case-insensitive host. | patch:a6eb7ada44b07274e6d7eb8dc73608e176b34192 · `seclab` "a merged .Work symlink passed (RJG-15)" |
+| RJG-16 | info | accepted-residual | A liveness pending entry can be re-added after its subject is removed in an earlier change. | accepted by an agent: It takes a visible two-change sequence; for this gate it also needs the gate file removed or renamed, which the required-checks validator refuses. |
+| RJG-17 | info | fixed-untested | The .work listing was piped into grep -q, which can fail open under pipefail for a large listing. | Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test. |
+| RJG-18 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 
