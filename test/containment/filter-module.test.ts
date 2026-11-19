@@ -69,56 +69,91 @@ const AUTH = `seclab+${TAB}`;
 const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 
-/** A code line with its `//` comment removed, quotes respected (so `vscode-remote://` stays). */
+/** A code line with its comments removed, quotes respected (so `vscode-remote://` stays). */
 function stripComment(line: string): string {
 	let quote = '';
+	let out = '';
 	for (let i = 0; i < line.length; i++) {
 		const c = line[i];
 		if (quote) {
+			out += c;
 			if (c === '\\') {
-				i++;
+				out += line[++i] ?? '';
 			} else if (c === quote) {
 				quote = '';
 			}
 		} else if (c === '\'' || c === '"' || c === '`') {
 			quote = c;
+			out += c;
 		} else if (c === '/' && line[i + 1] === '/') {
-			return line.slice(0, i);
+			return out;
+		} else if (c === '/' && line[i + 1] === '*') {
+			const close = line.indexOf('*/', i + 2);
+			if (close < 0) {
+				return out;
+			}
+			i = close + 1;
+		} else {
+			out += c;
 		}
 	}
-	return line;
+	return out;
 }
+
+/** What one file's added lines declare: constants holding a tab prefix, and lower-cased variables. */
+interface TabTestContext { prefixes: Set<string>; lowered: Set<string> }
+const COMPARING = /\.(startsWith|endsWith|includes|indexOf|lastIndexOf|localeCompare|match|search|test|has|equalsTo|notEqualsTo|isEqualTo)\(\s*(`[^`]*)?$/;
 
 /**
  * Why `code` tests a tab authority or remote name in a way the filter's `/^seclab\+/i` wouldn't
- * agree with, or undefined. Every `seclab` regex literal must be anchored and case-insensitive;
- * every `seclab+`/`seclab` string or SECLAB_*AUTHORITY_PREFIX used in a test must be compared
- * by `.toLowerCase().startsWith(...)` and nothing else (review SRCH3-14, TA-1).
+ * agree with, or undefined. A `seclab+`/`seclab$` regex literal must be anchored and
+ * case-insensitive; a `seclab+`/`seclab` string, or a constant holding one, may be compared only
+ * by a lower-cased `startsWith`, never by `==`, `case`, `new RegExp` without `i`, or another
+ * comparing call. Building a string, slicing by the prefix's length or logging is not a test
+ * (review SRCH3-14, TA-1, TA-3, TA-4). Line-local: a call and its argument on different lines,
+ * object keys and computed comparisons are outside what it can read (EDR, Consequences).
  */
-function caseSensitiveTest(code: string): string | undefined {
-	// Regex literals, read with string contents blanked, where an expression can start.
+function caseSensitiveTest(code: string, ctx: TabTestContext = { prefixes: new Set(), lowered: new Set() }): string | undefined {
 	const unquoted = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g, (_q, q: string, body: string) => q + ' '.repeat(body.length) + q);
-	for (const m of unquoted.matchAll(/(?:^|[(,=:!&|?{};]|\breturn)\s*\/((?:\\.|[^/\\\n])*seclab(?:\\.|[^/\\\n])*)\/([a-z]*)/g)) {
+	for (const m of unquoted.matchAll(/(?:^|[(,=:!&|?{};[]|=>|\breturn|\bcase)\s*\/((?:\\.|[^/\\\n])*seclab(?:\\\+|\$)(?:\\.|[^/\\\n])*)\/([a-z]*)/gi)) {
 		if (!m[2].includes('i') || !m[1].startsWith('^')) {
 			return `regex /${m[1]}/${m[2]} is not anchored and case-insensitive`;
 		}
 	}
-	const tokens = /(['"`])(?:vscode-remote:\/\/)?seclab(?:\\?\+)?\1|`vscode-remote:\/\/\$\{SECLAB_\w*AUTHORITY_PREFIX\}`|\bSECLAB_\w*AUTHORITY_PREFIX\b/g;
+	const names = [...ctx.prefixes].map(n => n.replace(/\$/g, '\\$')).join('|');
+	const tokens = new RegExp(`(['"\`])\\^?(?:vscode-remote:\\/\\/)?seclab(?:\\\\{0,2}\\+|\\$)?\\1|\`vscode-remote:\\/\\/\\$\\{\\w+\\}\`|\\bSECLAB_\\w*AUTHORITY_PREFIX\\b${names ? `|\\b(?:${names})\\b` : ''}`, 'gi');
 	for (const m of code.matchAll(tokens)) {
-		const before = code.slice(0, m.index);
-		const after = code.slice(m.index + m[0].length);
-		if (/\bconst\s+SECLAB_\w*AUTHORITY_PREFIX\s*=\s*$/.test(before) || /^SECLAB_/.test(m[0]) && /\bconst\s+$/.test(before)) {
+		if (m[0].startsWith('`vscode-remote://${') && !/SECLAB_\w*AUTHORITY_PREFIX/.test(m[0]) && ![...ctx.prefixes].some(n => m[0].includes(`{${n}}`))) {
 			continue;
 		}
-		const call = /\.(\w+)\(\s*$/.exec(before);
+		const before = code.slice(0, m.index);
+		const after = code.slice(m.index + m[0].length);
+		if (/\bconst\s+\w+\s*(:\s*\w+\s*)?=\s*$/.test(before) || /\bconst\s+$/.test(before) || /^\s*(:\s*\w+\s*)?=[^=]/.test(after)) {
+			continue;
+		}
+		if (/\+\s*$/.test(before) || /^\s*\+/.test(after) || /^\.length\b/.test(after) || /\.(slice|substring|substr)\(\s*$/.test(before)) {
+			continue;
+		}
+		if (/\bnew\s+RegExp\(\s*$/.test(before)) {
+			if (!m[0].slice(1).startsWith('^') || !/^\s*,\s*(['"`])[a-z]*i[a-z]*\1/.test(after)) {
+				return `new RegExp(${m[0]}) is not anchored and case-insensitive`;
+			}
+			continue;
+		}
+		if (/\bcase\s+$/.test(before)) {
+			return `${m[0]} is a case label`;
+		}
+		const call = COMPARING.exec(before);
 		if (call) {
-			if (call[1] === 'startsWith' && /\.toLowerCase\(\)\.startsWith\(\s*$/.test(before) && /^\s*\)/.test(after)) {
+			const receiver = before.slice(0, call.index);
+			const loweredVar = [...ctx.lowered].some(v => new RegExp(`\\b${v}$`).test(receiver));
+			if (call[1] === 'startsWith' && (/\.toLowerCase\(\)$/.test(receiver) || loweredVar) && /^\s*`?\s*\)/.test(after)) {
 				continue;
 			}
 			return `${m[0]} is passed to .${call[1]}(...) without a lower-cased startsWith`;
 		}
-		if (/[!=]=\s*$/.test(before) || /^\s*[!=]=/.test(after)) {
-			return `${m[0]} is compared with == or !=`;
+		if (/^\s*\]\s*\.\s*(includes|indexOf)\(/.test(after) || /[!=]=\s*$/.test(before) || /^\s*[!=]=/.test(after)) {
+			return `${m[0]} is compared with == or !=, or by array membership`;
 		}
 	}
 	return undefined;
@@ -136,16 +171,27 @@ function caseSensitiveTabTests(patches: Array<[string, string]>): string[] {
 	const found: string[] = [];
 	sections.forEach(([name, secs], i) => {
 		for (const [file, lines] of secs) {
-			for (const line of lines.filter(l => l.startsWith('+') && !l.startsWith('+++'))) {
-				if (/^\s*(\*|\/\*)/.test(line.slice(1))) {
-					continue;
+			const added = lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).map(l => l.slice(1));
+			const code = added.filter(l => !/^\s*(\*|\/\*)/.test(l)).map(stripComment);
+			const ctx: TabTestContext = { prefixes: new Set(), lowered: new Set() };
+			for (const c of code) {
+				const alias = /\bconst\s+(\w+)\s*(?::\s*\w+\s*)?=\s*(['"`])(?:vscode-remote:\/\/)?seclab\+?\2/i.exec(c);
+				if (alias && !/^SECLAB_\w*AUTHORITY_PREFIX$/.test(alias[1])) {
+					ctx.prefixes.add(alias[1]);
 				}
-				const why = caseSensitiveTest(stripComment(line.slice(1)));
-				const removedLater = sections.slice(i + 1).some(([, later]) => later.some(([f, ls]) => f === file && ls.includes(`-${line.slice(1)}`)));
+				const lowered = /\b(?:const|let)\s+(\w+)\s*(?::\s*\w+\s*)?=\s*[^;]*\.toLowerCase\(\)\s*;?\s*$/.exec(c);
+				if (lowered) {
+					ctx.lowered.add(lowered[1]);
+				}
+			}
+			code.forEach((c, j) => {
+				const why = caseSensitiveTest(c, ctx);
+				const raw = added.filter(l => !/^\s*(\*|\/\*)/.test(l))[j];
+				const removedLater = sections.slice(i + 1).some(([, later]) => later.some(([f, ls]) => f === file && ls.includes(`-${raw}`)));
 				if (why && !removedLater) {
 					found.push(`${name} ${file}: ${why}`);
 				}
-			}
+			});
 		}
 	});
 	return found;
@@ -162,16 +208,23 @@ test("every seclab+ tab test the series ships is case-insensitive, as the filter
 		'x.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)', "identity.startsWith('vscode-remote://seclab+')",
 		'ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/).negate()', "a.indexOf('seclab+') === 0", "a.includes('seclab+')",
 		'/seclab\\+/i.test(a)', "a.startsWith('seclab+', 0)", "a.startsWith('seclab')", "x.toLowerCase().startsWith(y) && a.startsWith('seclab+')",
-		"a.endsWith('seclab+')", "a.toLowerCase().includes('seclab+')"];
+		"a.endsWith('seclab+')", "a.toLowerCase().includes('seclab+')",
+		"const SECLAB_TAB_PREFIX = 'seclab+';\n+return typeof a === 'string' && a.startsWith(SECLAB_TAB_PREFIX);", "switch (remoteName) { case 'seclab': return true; }",
+		"const re = new RegExp('^seclab\\\\+');", 'const isTab = (a: string) => /^seclab\\+/.test(a);', 'const all = [/^seclab\\+/, /x/];', "a.startsWith('SECLAB+')",
+		"if (['seclab'].includes(name)) {"];
 	for (const bad of BAD) {
 		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`]]).length, 1, `not caught: ${bad}`);
-		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/f.ts b/src/f.ts\n-${bad}`]]).length, 0, `a later removal not honoured: ${bad}`);
-		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/g.ts b/src/g.ts\n-${bad}`]]).length, 1, `a removal from another file excused it: ${bad}`);
+		const removed = bad.split('\n+').map(l => `-${l}`).join('\n');
+		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/f.ts b/src/f.ts\n${removed}`]]).length, 0, `a later removal not honoured: ${bad}`);
+		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/g.ts b/src/g.ts\n${removed}`]]).length, 1, `a removal from another file excused it: ${bad}`);
 	}
 	const GOOD = ["return a.toLowerCase().startsWith('seclab+');", 'if (!/^seclab\\+/i.test(x)) {', ' * a `seclab+` window', "// startsWith('seclab+')",
 		'return typeof a === \'string\' && a.toLowerCase().startsWith(SECLAB_AUTHORITY_PREFIX);', "export const SECLAB_AUTHORITY_PREFIX = 'seclab+';",
 		'x.toLowerCase().startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)', 'ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate()',
-		'const authority = `seclab+${tabId}`;', "mark(`code/seclab/guarded/${name}`);", "return seclabIsTabAuthority(a); // was a.startsWith('seclab+')"];
+		'const authority = `seclab+${tabId}`;', "mark(`code/seclab/guarded/${name}`);", "return seclabIsTabAuthority(a); // was a.startsWith('seclab+')",
+		'return authority.slice(SECLAB_AUTHORITY_PREFIX.length);', "const lowered = authority.toLowerCase();\n+return lowered.startsWith(SECLAB_AUTHORITY_PREFIX);",
+		"this._logService.trace('seclab', msg); /* seclab+ tab */", "name.replace(/seclab-/g, '')", "args.push('seclab+' + tabId);",
+		"const re = new RegExp('^seclab\\\\+', 'i');", 'const isTab = (a: string) => /^seclab\\+/i.test(a);'];
 	for (const good of GOOD) {
 		assert.deepEqual(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${good}`]]), [], `flagged: ${good}`);
 	}
