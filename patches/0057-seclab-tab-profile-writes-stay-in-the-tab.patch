@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:44:07
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:44:07
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:59:40
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:59:40
 @@ -20,6 +20,9 @@
  import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
  import { hasKey, isString } from '../../../../base/common/types.js';
@@ -103,8 +103,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.t
  			onKeyMods: mods => keyMods = mods
  		};
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:44:07
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:44:07
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:40
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:40
 @@ -259,7 +259,8 @@
  
  	async registerContributedProfile(args: IRegisterContributedProfileArgs): Promise<void> {
@@ -127,8 +127,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts 
  	}
  
 diff -ruN a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts
---- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:44:07
-+++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:44:07
+--- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:59:40
++++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:59:40
 @@ -34,6 +34,10 @@
  import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
  import type { IHoverAction } from '../../../../../base/browser/ui/hover/hover.js';

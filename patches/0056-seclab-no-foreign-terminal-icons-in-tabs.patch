@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:44:06
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:44:06
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:59:40
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:59:40
 @@ -18,13 +18,13 @@
  import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
  import { debounce } from '../../../../base/common/decorators.js';
@@ -17,7 +17,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverSer
  import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
  
  export interface IProfileContextProvider {
-@@ -183,11 +183,16 @@
+@@ -184,11 +184,16 @@
  		if (ThemeIcon.isThemeIcon(icon)) {
  			return icon;
  		}
