@@ -1247,7 +1247,8 @@ export function seclabTabUri<T>(remoteAuthority: string, uri: T): T | undefined 
  * argument is exactly the mistake being avoided.
  */
 export function seclabResolveTabId(authority: string): string | undefined {
-	const m = authority.match(/^seclab\+([\w.-]+)$/);
+	// The prefix in any case, as `seclabIsTabAuthority` accepts it; the id as written (PR review on #68).
+	const m = authority.match(/^seclab\+([\w.-]+)$/i);
 	return m ? m[1] : undefined;
 }
 
