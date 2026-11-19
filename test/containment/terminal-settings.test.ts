@@ -160,7 +160,7 @@ const SETTINGS: Record<string, Layers> = {
 	'terminal.integrated.detectLocale': { defaultValue: 'auto', userLocalValue: 'on' },
 	'terminal.integrated.shellIntegration.enabled': { defaultValue: true, userLocalValue: false },
 	'terminal.integrated.suggest.enabled': { defaultValue: false, userLocalValue: true },
-	'terminal.integrated.windowsUseConptyDll': { defaultValue: false, userLocalValue: true },
+	'terminal.integrated.windowsUseConptyDll': { defaultValue: true, userLocalValue: false },
 	// Upstream merges arrays by replacing, so the host user's list is the effective one when the tab sets none.
 	'terminal.integrated.allowedLinkSchemes': { defaultValue: ['file', 'http', 'https'], userLocalValue: [`host${HOST}`] },
 };
@@ -210,6 +210,7 @@ interface Observed {
 	hover: string;
 	folderCwd: unknown;
 	contributedWrite: number | undefined;
+	contributedValue: unknown;
 	schemeWrites: Array<{ key: string; value: unknown; target: number | undefined }>;
 }
 
@@ -228,7 +229,8 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 
 	// RemoteTerminalChannelClient.createProcess
 	const createProcess = method(src.channel, 'createProcess', {
-		ConfigurationResolverExpression: { parse: () => ({ resolved: () => [] }) },
+		// R5-26: a resolution, if the window runs one, yields a host setting's value.
+		ConfigurationResolverExpression: { parse: () => ({ resolved: () => resolved ? [[{ inner: 'config:terminal.integrated.cwd' }, { value: HOST }]] : [] }) },
 		EditorResourceAccessor: { getOriginalUri: (e: { resource?: unknown } | undefined) => e?.resource },
 		SideBySideEditor: { PRIMARY: 1 }, Schemas,
 		serializeEnvironmentVariableCollection: (m: Map<string, unknown>) => [...m.entries()],
@@ -242,13 +244,14 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		hash: (v: unknown) => JSON.stringify(v).length,
 	});
 	let sent: Observed['createProcess'] | undefined;
+	let resolved = false;
 	const terminalConfig = Object.fromEntries(['terminal.integrated.env.windows', 'terminal.integrated.env.osx', 'terminal.integrated.env.linux', 'terminal.integrated.cwd', 'terminal.integrated.detectLocale'].map(k => [k, cfg.getValue(k)]));
 	const hostFolder = workspace.folders.find(f => f.uri.scheme === 'file') ?? workspace.folders[0];
 	await createProcess!.call({
 		_remoteAuthority: authority,
 		_configurationService: cfg,
 		_workspaceContextService: { getWorkspaceFolder: () => hostFolder, getWorkspace: () => workspace },
-		_resolverService: { resolveAsync: async () => { } },
+		_resolverService: { resolveAsync: async () => { resolved = true; } },
 		_logService: { error: () => { } },
 		_environmentVariableService: { getMergedCollection: () => ({ collections: new Map() }) },
 		_remoteAuthorityResolverService: { resolveAuthority: async () => ({ options: {} }) },
@@ -447,16 +450,23 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	})!(workspace.folders[0], cfg, { resolveAsync: async (_f: unknown, v: string) => v })) as { cwd: unknown }).cwd;
 	// R5-25: an extension registering a contributed profile from a tab window.
 	let contributedWrite: number | undefined;
-	await method(src.profiles, 'registerContributedProfile', { ConfigurationTarget, TerminalSettingPrefix: { Profiles: 'terminal.integrated.profiles.' }, seclabIsTabWindow: h.seclabIsTabWindow })!.call({
-		getPlatformKey: async () => 'linux', _environmentService: { remoteAuthority: authority },
-		_configurationService: { getValue: () => ({}), updateValue: async (_k: string, _v: unknown, target: number) => { contributedWrite = target; } },
-	}, { extensionIdentifier: 'tab.ext', id: 'p', title: 'p', options: {} });
+	let contributedValue: unknown;
+	const contributed: Record<string, unknown> = {
+		getPlatformKey: async () => 'linux', _environmentService: { remoteAuthority: authority }, _seclabWorkspace: { getWorkspace: () => workspace },
+		_configurationService: { ...cfg, updateValue: async (_k: string, v: unknown, target: number) => { contributedWrite = target; contributedValue = structuredClone(v); } },
+	};
+	const contributedSetting = method(src.profiles, '_seclabSetting', { seclabIsTabWindow: h.seclabIsTabWindow, seclabTabSetting: h.seclabTabSetting });
+	if (contributedSetting) {
+		contributed._seclabSetting = contributedSetting;
+	}
+	await method(src.profiles, 'registerContributedProfile', { ConfigurationTarget, TerminalSettingPrefix: { Profiles: 'terminal.integrated.profiles.' }, seclabIsTabWindow: h.seclabIsTabWindow })!.call(
+		contributed, { extensionIdentifier: 'tab.ext', id: 'p', title: 'p', options: {} });
 
 	assert.ok(sent, 'createProcess sent nothing');
 	return {
 		createProcess: sent!, getProfiles, automation, agentHost, collections: [...merged.collections.keys()].sort(), localDefaultProfile,
 		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection,
-		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, schemeWrites,
+		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, contributedValue, schemeWrites,
 	};
 }
 
@@ -480,7 +490,7 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 		}
 	}
 	const opts = o.createProcess.options as { shellIntegration?: { enabled?: unknown; suggestEnabled?: unknown }; windowsUseConptyDll?: unknown } | undefined;
-	if (c['terminal.integrated.detectLocale'] === 'on' || opts?.shellIntegration?.enabled === false || opts?.shellIntegration?.suggestEnabled === true || opts?.windowsUseConptyDll === true) {
+	if (c['terminal.integrated.detectLocale'] === 'on' || opts?.shellIntegration?.enabled === false || opts?.shellIntegration?.suggestEnabled === true || opts?.windowsUseConptyDll === false) {
 		out.push('host process switches');
 	}
 	if (sees(o.folderCwd)) {
@@ -488,6 +498,12 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 	}
 	if (o.contributedWrite === 2) {
 		out.push('contributed profile written to host settings');
+	}
+	if (sees(o.contributedValue)) {
+		out.push('host profiles copied into a contributed profile write');
+	}
+	if (sees(o.createProcess.resolvedVariables)) {
+		out.push('host settings resolved for the tab');
 	}
 	if (sees(o.getProfiles[0])) {
 		out.push('getProfiles profiles');
@@ -565,7 +581,7 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 	return out;
 }
 const EVERY_LEAK = ['active file: host file', 'active file: another tab file', 'terminal.integrated.env.linux', 'terminal.integrated.env.osx', 'terminal.integrated.env.windows',
-	'terminal.integrated.cwd', 'host process switches', 'host cwd in a folder\'s launch', 'contributed profile written to host settings', 'getProfiles profiles', 'getProfiles default profile', 'automation profile', 'agent host profile', 'host collection', 'another host collection',
+	'terminal.integrated.cwd', 'host process switches', 'host cwd in a folder\'s launch', 'contributed profile written to host settings', 'host profiles copied into a contributed profile write', 'getProfiles profiles', 'getProfiles default profile', 'automation profile', 'agent host profile', 'host collection', 'another host collection',
 	'tab profile to the host extension host', 'tab deletes a host collection', 'tab collection to the host extension host',
 	'host default profile picks a REH profile', 'host default profile picks a contributed profile', 'foreign profile icon', 'automation profile without a connection',
 	'REH profile written to host settings', 'markdown image in a profile description', 'foreign workspace id on detach',
@@ -596,8 +612,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await leaks(sources(true), TAB.replace('seclab', 'SecLab')), []);
 		const filter = readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
 		const filterTest = /\nconst SECLAB_AUTHORITY = (\/.*\/\w*);/.exec(filter)![1];
-		const ours = /\/\^seclab\\\+\/\w*/.exec(sources(true).helper)![0];
-		assert.equal(ours, filterTest, 'the terminal helper\'s tab test is the filter module\'s');
+		// Every inlined copy too, in each patched file (review R5-28).
+		for (const [key, text] of Object.entries(sources(true))) {
+			for (const m of text.matchAll(/\/\^seclab\\\+\/\w*/g)) {
+				assert.equal(m[0], filterTest, `${key}: a tab test that isn't the filter module's`);
+			}
+		}
 	}],
 	['a tab keeps its own terminal settings and the defaults', async () => {
 		const o = await observe(sources(true), TAB, remoteFile(TAB));
@@ -694,6 +714,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 			const found = await leaks(sources(true, patches), TAB);
 			assert.ok(found.includes(leak), `mutant not caught by its own leak (${leak}): ${name}; found ${JSON.stringify(found)}`);
 		}
+		// R5-26: the resolution guard in another case lets a mixed-case tab's launch resolve host settings.
+		const guard = mutant(OURS[0], 'if (!/^seclab\\+/i.test(this._remoteAuthority)) {', 'if (!/^seclab\\+/.test(this._remoteAuthority)) {');
+		assert.ok((await leaks(sources(true, guard), TAB.replace('seclab', 'SecLab'))).includes('host settings resolved for the tab'), 'mutant not caught: a case-sensitive resolution guard');
+		// R5-27: a contributed profile write starting from the merged profiles.
+		const merged = mutant(OURS[4], "const profilesConfig = this._seclabSetting(`${TerminalSettingPrefix.Profiles}${platformKey}`) ?? {};", "const profilesConfig = this._configurationService.getValue(`${TerminalSettingPrefix.Profiles}${platformKey}`);");
+		assert.ok((await leaks(sources(true, merged), TAB)).includes('host profiles copied into a contributed profile write'), 'mutant not caught: a contributed write from the merged profiles');
 	}],
 ];
 
