@@ -2,6 +2,7 @@
 // build, driven headlessly.
 //
 //   node test/containment/search-probe.ts before|after <user-data-dir> --app <test app.app>
+//   node test/containment/search-probe.ts excludes-baseline|excludes-patched <user-data-dir> --app <test app.app>
 //
 // The tab image is seclab-tab-oci:test-containment, built from the same run's REH.
 //
@@ -17,6 +18,15 @@
 // Positive control in both modes: the probe extension ran (its marker exists) and the window
 // opened the workspace's README from the explorer's own listing, so a search that found
 // nothing is search, not a window that never loaded.
+//
+// The excludes modes (patch 0060, review SRCH-3) run on builds with the search restoration, so their
+// search expectations are after's. The host user settings also exclude two canary files by name,
+// one through files.exclude, one through search.exclude, and the tab's own workspace settings
+// exclude a third. The extension records whether the host patterns reach the tab's configuration
+// and whether findFiles returns the files they exclude; Quick Open looks for the search.exclude one.
+// excludes-baseline (main): the host patterns are in the tab's configuration and its searches
+// exclude both files. excludes-patched: neither pattern reaches the tab, and both files are found.
+// In both, the tab's own exclude holds (the control).
 //
 // Inert (EDR fixture safety): no network target; the only typing goes to the window's Quick
 // Open and Search inputs; the extension writes one marker in its own workspace; teardown stops
@@ -37,8 +47,9 @@ const IMAGE = 'seclab-tab-oci:test-containment';
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
 const appArg = argv[argv.indexOf('--app') + 1];
-if ((mode !== 'before' && mode !== 'after') || !userDataArg || !argv.includes('--app') || !appArg) {
-	console.error('usage: search-probe.ts before|after <user-data-dir> --app <test app.app>');
+const MODES = ['before', 'after', 'excludes-baseline', 'excludes-patched'];
+if (!MODES.includes(mode) || !userDataArg || !argv.includes('--app') || !appArg) {
+	console.error(`usage: search-probe.ts ${MODES.join('|')} <user-data-dir> --app <test app.app>`);
 	process.exit(2);
 }
 const app = path.resolve(appArg);
@@ -70,6 +81,15 @@ const token = `seclabsearch${id}`;
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\n`);
 fs.writeFileSync(path.join(ws, 'README.md'), 'search-probe workspace\n');
 fs.writeFileSync(path.join(ws, 'sub', needle), `the token is ${token}\n`);
+// Patch 0060 (SRCH-3): files the host user's excludes name, and one the tab's own settings exclude.
+const hostFilesExcluded = `seclabcanary_hx${id}.txt`;
+const hostSearchExcluded = `seclabcanary_hs${id}.txt`;
+const tabExcluded = `seclab-tabexcl-${id}.txt`;
+for (const f of [hostFilesExcluded, hostSearchExcluded, tabExcluded]) {
+	fs.writeFileSync(path.join(ws, 'sub', f), 'excluded by a setting\n');
+}
+fs.mkdirSync(path.join(ws, '.vscode'));
+fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({ 'files.exclude': { [`**/${tabExcluded}`]: true } }, null, '\t'));
 writeSnapshot(base);
 writeManifest(base, { driver: 'oci', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws] });
 let ed: DrivenEditor | undefined;
@@ -88,6 +108,8 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'workbench.welcomePage.experimentalOnboarding': false,
 	'workbench.startupEditor': 'none',
 	'workbench.tips.enabled': false,
+	'files.exclude': { [`**/${hostFilesExcluded}`]: true },
+	'search.exclude': { [`**/${hostSearchExcluded}`]: true },
 }, null, '\t'));
 
 // Package the probe (vsce in a container, no network) and install it into the tab.
@@ -140,6 +162,10 @@ try {
 		results.findFilesReturned = f.returned === true;
 		results.findFilesCount = typeof f.count === 'number' ? f.count : -1;
 		results.findFilesOwnAuthority = f.ownAuthority === true;
+		const g = f as Record<string, unknown>;
+		for (const k of ['configHostFilesExclude', 'configHostSearchExclude', 'configTabExclude', 'excludesReturned', 'foundHostFilesExcluded', 'foundTabExcluded']) {
+			results[k] = g[k] === true;
+		}
 	}
 
 	const quickInputOpen = `document.querySelector('.quick-input-widget') && getComputedStyle(document.querySelector('.quick-input-widget')).display !== 'none'`;
@@ -154,6 +180,20 @@ try {
 		results.quickOpenTyped = await e.evaluate<boolean>(`(document.querySelector('.quick-input-widget input')?.value ?? '').endsWith(${JSON.stringify(needle)})`);
 		results.quickOpenFound = await waitFor(async () => await e.evaluate<boolean>(`[...document.querySelectorAll('.quick-input-widget .quick-input-list .monaco-list-row')].some(r => (r.getAttribute('aria-label') || r.textContent || '').includes(${JSON.stringify(needle)}))`).catch(() => false), 30_000);
 		await e.key('Escape');
+	}
+
+	// 2b. Patch 0060: Quick Open for the file the host user's search.exclude names. A search that
+	// finds nothing waits out its bound, so this one is judged after the needle's was found.
+	if (mode.startsWith('excludes-')) {
+		await e.command('Go to File');
+		await e.waitFor(quickInputOpen);
+		await sleep(1000);
+		if (await inQuickInput()) {
+			await e.type(hostSearchExcluded);
+			results.quickOpenExcludedTyped = await e.evaluate<boolean>(`(document.querySelector('.quick-input-widget input')?.value ?? '').endsWith(${JSON.stringify(hostSearchExcluded)})`);
+			results.quickOpenFoundHostSearchExcluded = await waitFor(async () => await e.evaluate<boolean>(`[...document.querySelectorAll('.quick-input-widget .quick-input-list .monaco-list-row')].some(r => (r.getAttribute('aria-label') || r.textContent || '').includes(${JSON.stringify(hostSearchExcluded)}))`).catch(() => false), 30_000);
+			await e.key('Escape');
+		}
 	}
 
 	// 3. The Search view for the token.
@@ -186,12 +226,23 @@ console.log(JSON.stringify(results));
 c('control', results.explorerListed === true, 'positive control: the window lists the tab\'s workspace');
 c('control', results.probeRan === true, 'positive control: the probe extension ran in the tab and recorded its search');
 c('control', results.quickOpenTyped === true && results.searchViewTyped === true, 'positive control: both searches were typed into their inputs');
-if (mode === 'after') {
+if (mode !== 'before') {
 	c('findFiles', results.findFilesReturned === true && Number(results.findFilesCount) === 1, 'after: findFiles in the tab returned the needle', `count ${results.findFilesCount}`);
 	c('findFiles', results.findFilesOwnAuthority === true, 'after: every findFiles result is in this tab\'s own workspace folder');
 	c('quickOpen', results.quickOpenFound === true, 'after: Quick Open in the window finds the needle');
 	c('searchView', results.searchViewFound === true, 'after: the Search view finds the needle\'s token');
 	c('policy', results.fileProviderAllowed === true && results.textProviderAllowed === true, 'after: the decision log holds both provider registrations as allowed');
+	if (mode.startsWith('excludes-')) {
+		const patched = mode === 'excludes-patched';
+		c('control', results.excludesReturned === true && results.quickOpenExcludedTyped === true, 'positive control: the excludes search returned and the excluded name was typed');
+		c('control', results.configTabExclude === true && results.foundTabExcluded !== true, 'positive control: the tab\'s own workspace exclude reaches it and holds');
+		c('config', patched ? results.configHostFilesExclude !== true && results.configHostSearchExclude !== true : results.configHostFilesExclude === true && results.configHostSearchExclude === true,
+			patched ? 'patched: the host user\'s exclude patterns are not in the tab\'s configuration' : 'baseline: the host user\'s exclude patterns are in the tab\'s configuration');
+		c('query', patched ? results.foundHostFilesExcluded === true : results.foundHostFilesExcluded !== true,
+			patched ? 'patched: findFiles returns the file the host user\'s files.exclude names' : 'baseline: the host user\'s files.exclude hides its file from findFiles in the tab');
+		c('query', patched ? results.quickOpenFoundHostSearchExcluded === true : results.quickOpenFoundHostSearchExcluded !== true,
+			patched ? 'patched: Quick Open finds the file the host user\'s search.exclude names' : 'baseline: the host user\'s search.exclude hides its file from Quick Open');
+	}
 } else {
 	c('findFiles', results.findFilesReturned !== true, 'before: findFiles in the tab never returned (provider registration denied)');
 	c('quickOpen', results.quickOpenFound !== true, 'before: Quick Open finds no needle');
