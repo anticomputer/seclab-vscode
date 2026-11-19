@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1667 @@
+@@ -0,0 +1,1674 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4912,7 +4912,14 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	}
 +	const skip: SeclabSkip = (owner, key) => seclabUnrevivedManifest(owner, key)
 +		|| ((key === 'env' || key === 'headers') && owner[owner.length - 1] === 'config' && seclabUnrevivedManifest(owner.slice(0, -1), 'manifest') ? 'strings' : false);
-+	const checked = seclabTabServerChannel(channel, remoteAuthority, 'mcp-management', skip);
++	// Install and update events lose any gallery entry, which the window takes only from its own
++	// gallery and whose configuration names variables freely, `path` included (PR review on #66).
++	const noSource = (e: unknown): unknown => Array.isArray(e) ? e.map(noSource) : e && typeof e === 'object' && Object.hasOwn(e, 'source') ? { ...e, source: undefined } : e;
++	const sourceless: IChannel = {
++		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => channel.call<T>(command, arg, token),
++		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => listener.call(thisArgs, noSource(e) as T), undefined, disposables),
++	};
++	const checked = seclabTabServerChannel(sourceless, remoteAuthority, 'mcp-management', skip);
 +	const server = (v: unknown): unknown => {
 +		if (!v || typeof v !== 'object' || Array.isArray(v)) {
 +			return v;
