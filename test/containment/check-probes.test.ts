@@ -282,15 +282,19 @@ const tests: Array<[string, () => void]> = [
 		const id = 'ai-remote-agent-host-dial';
 		const spec = { required: true, runner: 'reh-push', surface: 'client-push', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', patchedOutcome: 'succeeded', why: 'synthetic', noUnpatchedBaseline: 'synthetic: the control stands in' };
 		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, [id]: spec }, rehProbes: { 'reh-onexecutecommand-windowopen': { required: false, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
-		const result = (facts: Record<string, unknown>) => ({ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { hostDialled: false, tabDialledClaimed: false, tabListenerLive: true, controlDialled: true, gateRefusals: 2, ...facts } });
+		const result = (facts: Record<string, unknown>) => ({ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { hostDialled: false, tabDialledClaimed: false, tabListenerLiveClaimed: true, controlDialled: true, gateRefusals: 2, ...facts } });
 		const judge = (h: unknown, opts: { mode?: 'patched' | 'unpatched'; reh?: unknown } = {}) => run({ mode: opts.mode ?? 'patched', expectations: exp, rpc: { results: [] }, reh: opts.reh ?? { results: [] }, harness: h, args: ['--only', id] });
 		const good = judge({ results: [result({})] });
 		assert.equal(good.status, 0, good.out.split('\n').filter(l => /\bFAIL\b|exit|Error/.test(l)).join(' | ') || good.out.slice(-600));
-		for (const bad of [{ controlDialled: false }, { hostDialled: true }, { tabListenerLive: false }, { gateRefusals: 0 }, { gateRefusals: '2' }, { hostDialled: undefined }]) {
+		for (const bad of [{ controlDialled: false }, { hostDialled: true }, { gateRefusals: 0 }, { gateRefusals: '2' }, { hostDialled: undefined }]) {
 			assert.ok(failed(judge({ results: [result(bad)] }).out, /ai-remote-agent-host-dial patched predicate holds/), JSON.stringify(bad));
 		}
-		// A claim from inside the tab is reported, never judged (AID-3).
-		assert.equal(judge({ results: [result({ tabDialledClaimed: true })] }).status, 0);
+		// Claims from inside the tab are reported, never judged (AID-3, AID-5).
+		assert.equal(judge({ results: [result({ tabDialledClaimed: true, tabListenerLiveClaimed: false })] }).status, 0);
+		// Every payload's fault channel is kept wherever it is written (AID-6).
+		const unarmed = { id: 'harness', policyRef: 'harness', outcome: 'error', error: 'not-armed' };
+		const fault = run({ expectations: { ...exp, rehProbes: { ...exp.rehProbes, harness: { required: false, policyRef: 'harness', why: 'synthetic', status: 'not-implemented' } } }, rpc: { results: [unarmed] }, reh: { results: [unarmed] }, harness: { results: [result({})] }, args: ['--only', id] });
+		assert.doesNotMatch(fault.out, /names harness|harness is recorded twice/, fault.out);
 		// Its record is required when it is selected, and the rogue extension's is not.
 		assert.ok(failed(judge(undefined).out, /harness-measured evidence present/));
 		// The tab's own REH record can't stand in for the host's measurement, nor add a second result (AID-1).
@@ -338,15 +342,52 @@ const MUTANTS: Array<[string, string, string]> = [
 	['the push probes\' baseline predicate is gutted', "'reh-onexecutecommand-manageextensions': r => fact(r, 'ran') === true ? null", "'reh-onexecutecommand-manageextensions': r => true ? null"],
 	['a waived probe\'s recorded result is still judged', '		results.delete(id);\n', ''],
 	['the resolve-variables baseline predicate is gutted', "tokens(r).length > 0 ? null : 'the host environment canary", "true ? null : 'the host environment canary"],
+	['a record may carry another record\'s probe', 'if (owner && owner !== file) {', 'if (false) {'],
+	['an id may be recorded twice', '		if (results.has(r.id)) {', '		if (false) {'],
+	['a waived probe needs no reason', "if (mode === 'unpatched' && typeof spec.noUnpatchedBaseline === 'string') {", "if (mode === 'unpatched') {"],
+	['the dial control is not required', "fact(r, 'controlDialled') !== true ? 'the control window never dialled", "false ? 'the control window never dialled"],
 ];
 const source = fs.readFileSync(CHECKER_SOURCE, 'utf8');
 // Mutants live in a scratch mirror of the checker's import closure (same relative layout), so
 // the suite runs on a read-only checkout.
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const mirror = fs.mkdtempSync(path.join(process.env.SECLAB_SCRATCH ?? os.tmpdir(), 'seclab-check-probes-mutants-'));
-for (const rel of ['test/containment/beacon.ts', 'test/containment/state-db.ts', 'test/containment/assert.ts', 'test/harness.ts', 'rpc-filter/policy/coverage.json']) {
+// The closure is followed from the checker's own relative imports, so a new import can't leave
+// every mutant crashing (and so "caught") before it reads any evidence (PR review, AID-4).
+const closure = new Set<string>(['rpc-filter/policy/coverage.json']);
+for (const queue = ['test/containment/check-probes.ts']; queue.length;) {
+	const rel = queue.pop()!;
+	for (const m of fs.readFileSync(path.join(repoRoot, rel), 'utf8').matchAll(/^import\b[^;]*?from\s+'(\.{1,2}\/[^']+)'/gm)) {
+		const dep = path.relative(repoRoot, path.resolve(repoRoot, path.dirname(rel), m[1]));
+		if (!closure.has(dep)) {
+			closure.add(dep);
+			queue.push(dep);
+		}
+	}
+}
+for (const rel of closure) {
 	fs.mkdirSync(path.dirname(path.join(mirror, rel)), { recursive: true });
 	fs.copyFileSync(path.join(repoRoot, rel), path.join(mirror, rel));
+}
+// Control: the unmutated checker in the mirror passes every case, or no mutant result means anything.
+{
+	const copy = path.join(mirror, 'test', 'containment', 'check-probes.ts');
+	fs.writeFileSync(copy, source);
+	CHECKER = copy;
+	const broken: string[] = [];
+	try {
+		for (const [name, fn] of tests.slice(1)) {
+			try { fn(); } catch { broken.push(name); }
+		}
+	} finally {
+		CHECKER = CHECKER_SOURCE;
+	}
+	if (broken.length) {
+		failures++;
+		console.error(`FAIL control: the unmutated checker fails in the mirror, so no mutant result means anything: ${broken.join('; ')}`);
+	} else {
+		console.log('ok   control: the unmutated checker passes in the mirror');
+	}
 }
 for (const [what, from, to] of MUTANTS) {
 	if (!source.includes(from)) {

@@ -173,7 +173,8 @@ const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = '') => checks.push({ vector, ok, name, detail });
 
 // ------------------------------------------------------------------ run
-// Host-verified: the tab-side listener answered this run's liveness request before anything dialled.
+// Whether the tab-side listener's log showed this run's liveness request. The log is in the tab's
+// own workspace, so this is the tab's claim, reported and never judged (PR review, AID-5).
 let tabListenerLive = false;
 try {
 	beacon = spawn(process.execPath, beaconArgv, { stdio: 'ignore' });
@@ -346,9 +347,10 @@ const gateRefusals = (() => {
 // The dial as a judged probe (ai-remote-agent-host-dial): what the run measured, facts only.
 fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ results: [{
 	id: 'ai-remote-agent-host-dial', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', outcome: 'succeeded',
-	// tabDialledClaimed comes from a log inside the tab's own workspace, so it is reported and
-	// never judged; everything judged is measured on the host (PR review, AID-3).
-	facts: { hostDialled, tabDialledClaimed: tabDialled, tabListenerLive, controlDialled, gateRefusals },
+	// The *Claimed facts come from a log inside the tab's own workspace, so they are reported and
+	// never judged; what is judged is read on the host: its listener, the empty window's dial and
+	// the gate log (PR review, AID-3, AID-5).
+	facts: { hostDialled, tabDialledClaimed: tabDialled, tabListenerLiveClaimed: tabListenerLive, controlDialled, gateRefusals },
 }] }, null, '\t'));
 const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
 	'--only', JUDGED.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],

@@ -148,10 +148,14 @@ const results = new Map<string, Result>();
 /** The one record a registered probe's result may come from (undefined: not registered). */
 function recordFor(id: string): string | undefined {
 	const probes = expectations.probes as Record<string, { runner?: unknown }>;
-	if (id in (expectations.rehProbes as Record<string, unknown>) && id !== 'note') {
+	// `harness` is the fault channel every payload may write (never armed, unreadable targets).
+	if (id === 'harness' || id === 'note') {
+		return undefined;
+	}
+	if (Object.hasOwn(expectations.rehProbes as object, id)) {
 		return 'reh-probes.json';
 	}
-	if (id in probes && id !== 'note') {
+	if (Object.hasOwn(probes, id)) {
 		return typeof probes[id]?.runner === 'string' ? 'harness-probes.json' : 'rpc-probes.json';
 	}
 	return undefined;
@@ -173,7 +177,9 @@ function load(file: string, label: string, required: boolean): void {
 			continue;
 		}
 		if (results.has(r.id)) {
-			c('probes', false, `${r.id} is recorded twice`, file);
+			if (r.id !== 'harness') {
+				c('probes', false, `${r.id} is recorded twice`, file);
+			}
 			continue;
 		}
 		results.set(r.id, r);
@@ -276,7 +282,6 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	// refusal, and the same kind of entry in an empty window does dial (the positive control).
 	'ai-remote-agent-host-dial': r =>
 		fact(r, 'controlDialled') !== true ? 'the control window never dialled, so a quiet listener proves nothing'
-			: fact(r, 'tabListenerLive') !== true ? 'the tab-side listener was never shown live'
 			: fact(r, 'hostDialled') !== false ? 'the tab window dialled the agent host the tab named, from the host'
 			: typeof fact(r, 'gateRefusals') !== 'number' || (fact(r, 'gateRefusals') as number) < 1 ? 'no refusal in the gate log' : null,
 	'auth-get-session': r => {
