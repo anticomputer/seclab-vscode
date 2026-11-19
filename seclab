@@ -2350,13 +2350,22 @@ case "${1:-help}" in
 				docker run --rm --network none -e SECLAB_WORKBENCH_SRC=/up/vs/workbench -v "$up/src/vs:/up/vs:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/reh-environment.test.ts ;;
 			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
 			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
+			# Patch 0060: the host user's files.exclude and search.exclude never reach a tab (SRCH-3).
+			search-excludes)
+				up="${SECLAB_UPSTREAM:-${RUNNER_TEMP:+$RUNNER_TEMP/upstream/vscode}}"
+				up="${up:-$ROOT/.work/upstream/vscode}"
+				if [ ! -d "$up/src/vs/workbench" ]; then
+					echo "seclab test search-excludes: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
+					exit 1
+				fi
+				docker run --rm --network none -e SECLAB_UPSTREAM_SRC=/up/vs -v "$up/src/vs:/up/vs:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/search-excludes.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
 			push-refusal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/push-refusal.test.ts ;;
 			# RPC filter: the shipped decision-log line formatter always writes JSON that parses.
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split reh-environment; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split reh-environment search-excludes; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;
