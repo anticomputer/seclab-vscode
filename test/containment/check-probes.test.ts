@@ -219,7 +219,7 @@ const tests: Array<[string, () => void]> = [
 		} };
 		const reh = (settings: Record<string, unknown>, scan: Record<string, unknown>) => ({ results: [
 			{ id: 'reh-terminal-host-settings', policyRef: 'data:remoteterminal-host-settings', outcome: 'succeeded', facts: { sawGetProfiles: true, sawCreateProcess: true, canaryTokens: [], ...settings } },
-			{ id: 'reh-exthost-terminal-profile', policyRef: 'data:exthost-terminal-default-profile', outcome: 'succeeded', facts: { extensionHosts: 1, scannedMb: 300, sawControl: true, canaryTokens: [], ...scan } },
+			{ id: 'reh-exthost-terminal-profile', policyRef: 'data:exthost-terminal-default-profile', outcome: 'succeeded', facts: { extensionHosts: 1, scannedMb: 300, unreadKb: 0, unreadRegions: 0, sawControl: true, canaryTokens: [], ...scan } },
 		] });
 		const hostSettings = { canaryTokens: ['seclabcanary_TERMINALENV_1', 'seclabcanary_TERMINALPROFILES_1'] };
 		const hostAutomation = { canaryTokens: ['seclabcanary_TERMINALAUTOMATI_1'] };
@@ -233,6 +233,10 @@ const tests: Array<[string, () => void]> = [
 		// A scan that never found the default profile's control canary proves nothing on either build (R5-4).
 		assert.ok(failed(run({ expectations: exp, reh: reh({}, { sawControl: false }) }).out, /reh-exthost-terminal-profile patched predicate holds/));
 		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(hostSettings, { ...hostAutomation, sawControl: false }) }).out, /reh-exthost-terminal-profile shows the escape itself/));
+		// A scan that couldn't read part of the extension host's memory proves no containment (PR #70 review).
+		for (const unread of [1, undefined, '0', null]) {
+			assert.ok(failed(run({ expectations: exp, reh: reh({}, { unreadRegions: unread }) }).out, /reh-exthost-terminal-profile patched predicate holds/), `unreadRegions ${JSON.stringify(unread)}`);
+		}
 	}],
 	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {
 		const spec = { required: true, runner: 'reh-push', policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };

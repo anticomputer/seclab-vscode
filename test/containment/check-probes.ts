@@ -284,9 +284,11 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	'reh-terminal-host-settings': r =>
 		fact(r, 'sawGetProfiles') !== true || fact(r, 'sawCreateProcess') !== true ? 'the window never sent getProfiles and createProcess'
 			: tokens(r).length > 0 ? 'a host terminal setting\'s canary reached the REH' : null,
-	// The scan found the default profile's control canary, and nothing the host user set.
+	// The scan read every writable region, found the default profile's control canary, and nothing
+	// the host user set (a skipped region could hold it: PR #70 review).
 	'reh-exthost-terminal-profile': r =>
-		fact(r, 'sawControl') !== true ? 'the scan did not find the default profile\'s control canary, so it proves nothing'
+		fact(r, 'unreadRegions') !== 0 ? 'the scan could not read part of the extension host\'s memory, so it proves nothing'
+			: fact(r, 'sawControl') !== true ? 'the scan did not find the default profile\'s control canary, so it proves nothing'
 			: tokens(r).length > 0 ? 'a host terminal setting\'s canary is in the tab\'s extension host' : null,
 };
 
