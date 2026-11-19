@@ -112,8 +112,9 @@ test('a build is exec-safe only if its bootstrap carries the policy mark; Linux 
 });
 
 test('SECLAB_TAB_IMAGE: only our tab images, and only the kind the driver runs', () => {
-	assert.equal(tabImageProblem('seclab-tab:b-1453-dcd3ad6', 'sbx'), undefined);
-	assert.equal(tabImageProblem('seclab-tab-oci:b-1453-dcd3ad6', 'oci'), undefined);
+	// A tag no build produces (the builders refuse _), so no real image is ever named here.
+	assert.equal(tabImageProblem('seclab-tab:b-fixture_only', 'sbx'), undefined);
+	assert.equal(tabImageProblem('seclab-tab-oci:b-fixture_only', 'oci'), undefined);
 	assert.equal(tabImageProblem('seclab-tab-oci:test-containment', 'oci'), undefined);
 	assert.match(tabImageProblem('seclab-tab-oci:b-x', 'sbx') ?? '', /not a sbx tab image/);
 	assert.match(tabImageProblem('seclab-tab:b-x', 'oci') ?? '', /not a oci tab image/);

@@ -146,5 +146,14 @@ must stay blocked; it is closed unmerged. `landing verify` on its head must refu
   PR 54 reads BLOCKED through the API. Its `docs` job fails as well: the `ci: run` block's
   `./seclab lint workflows` rejects the constant `if: false` (actionlint), a second layer.
 - **On main itself** the gate leaves the merged commit pending (push runs only), as designed.
-- **A normal PR** gets `success`: the PR recording this proof. A normal PR must get `success`. The
+- **A normal PR** gets `success`: the PR recording this proof.
+- **The gate alone blocks (2026-11-19).** With `required-jobs-ran` a required check, proof PR 54
+  was given `if: false` on `docs` as well as `lint` and rebased onto main 09e7a219 (head
+  ec5c5518). Every other required check passed or was skipped (unit success, lint skipped, docs
+  skipped, patch-build success). Gate run 44427326029 (`workflow_run`, main's copy) posted
+  `required-jobs-ran` failure (`unit:success lint:skipped docs:skipped patch-build:success`), and
+  the API read PR 54 as BLOCKED. It was closed unmerged.
+- **`landing verify`'s first run (2026-11-19).** `./seclab landing verify 09e7a219`, run from the
+  pre-merge main a60349cb, passed: the four required jobs succeeded, the old main's eleven
+  validators passed the merged tree, and owner acceptances were unchanged. A normal PR must get `success`. The
 runs are recorded below once the gate is on main.
