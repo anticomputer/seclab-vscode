@@ -1111,7 +1111,14 @@ export function seclabTabMcpChannel(channel: IChannel, remoteAuthority: string):
 	}
 	const skip: SeclabSkip = (owner, key) => seclabUnrevivedManifest(owner, key)
 		|| ((key === 'env' || key === 'headers') && owner[owner.length - 1] === 'config' && seclabUnrevivedManifest(owner.slice(0, -1), 'manifest') ? 'strings' : false);
-	const checked = seclabTabServerChannel(channel, remoteAuthority, 'mcp-management', skip);
+	// Install and update events lose any gallery entry, which the window takes only from its own
+	// gallery and whose configuration names variables freely, `path` included (PR review on #66).
+	const noSource = (e: unknown): unknown => Array.isArray(e) ? e.map(noSource) : e && typeof e === 'object' && Object.hasOwn(e, 'source') ? { ...e, source: undefined } : e;
+	const sourceless: IChannel = {
+		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => channel.call<T>(command, arg, token),
+		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => listener.call(thisArgs, noSource(e) as T), undefined, disposables),
+	};
+	const checked = seclabTabServerChannel(sourceless, remoteAuthority, 'mcp-management', skip);
 	const server = (v: unknown): unknown => {
 		if (!v || typeof v !== 'object' || Array.isArray(v)) {
 			return v;
