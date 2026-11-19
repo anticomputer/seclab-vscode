@@ -59,3 +59,7 @@
 # Fork build: main-process routing (ADR route-folder-opens-in-main): no window ever loads a local
 # folder or workspace; the Tab Manager opens it as a sandboxed tab.
 0041-route-local-folder-opens-to-tabs.patch
+# 0060: the host user's files.exclude and search.exclude stay on the host; a tab's search uses the
+# defaults and the tab's own workspace settings (review SRCH-3; project owner, 2026-11-18). After
+# 0036, whose configuration snapshot it extends.
+0060-seclab-no-host-search-excludes-in-tabs.patch
