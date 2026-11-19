@@ -22350,13 +22350,13 @@
 			"round": "patches 0053-0058 round 9",
 			"severity": "medium",
 			"summary": "The window installed the host user's `terminal.integrated.autoReplies` prompts and replies on every terminal backend, the tab's REH included, at start and on every change.",
-			"component": "patches 0053-0058: terminal settings in tab windows",
+			"component": "patch 0061: terminal auto replies from tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:fbbcdf991616cf5ef4d5883e2f310b0b10d38b11",
+			"commit": "3e192b1aadef29be61186e917f1320f3d92da1fe",
 			"test": {
-				"file": "test/containment/terminal-settings.test.ts",
-				"name": "a tab gets none of the host terminal settings"
+				"file": "test/containment/auto-replies.test.ts",
+				"name": "a tab window installs no auto reply on the shared local pty host"
 			}
 		}
 	]

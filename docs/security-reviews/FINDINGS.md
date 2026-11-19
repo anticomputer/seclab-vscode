@@ -2651,7 +2651,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | R5-28 | low | fixed-untested | The suite didn't model the window's resolution, and pinned only the helper's tab test to the filter module's. | A test correction; nothing to test. |
 | R5-29 | low | fixed | The tab-layer helper returned a configuration model's own object when one layer set the key, so the contributed-profile write edited the window's defaults in place. | patch:9e8fa0be8fcad588e793f0360b232b29b69b2d27 · `test/containment/terminal-settings.test.ts` "a contributed profile write leaves the window's defaults unchanged" |
 | R5-30 | low | fixed | The launch's \`useShellEnvironment\`, which reaches the REH, was filled from the host user's \`terminal.integrated.inheritEnv\`. | patch:2443676bb54a419e58da816063a1337ba9fce083 · `test/containment/terminal-settings.test.ts` "a tab gets none of the host terminal settings" |
-| R5-31 | medium | fixed | The window installed the host user's \`terminal.integrated.autoReplies\` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | patch:fbbcdf991616cf5ef4d5883e2f310b0b10d38b11 · `test/containment/terminal-settings.test.ts` "a tab gets none of the host terminal settings" |
+| R5-31 | medium | fixed | The window installed the host user's \`terminal.integrated.autoReplies\` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | 3e192b1aadef29be61186e917f1320f3d92da1fe · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 
