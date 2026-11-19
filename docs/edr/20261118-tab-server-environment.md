@@ -45,8 +45,10 @@ It applies to the `getEnvironmentData` reply (a foreign location refuses the env
 stays a failure rather than reading as "no remote"), the `userDataProfiles`, `logger`, `extensions`
 and `mcpManagement` channels' replies (refused) and events (dropped), MCP discovery, file change
 events and scanned extensions. Where a location is kept, the rebuilt value is used. Install events
-from the tab lose any gallery entry; MCP servers from the tab lose their icon and links, which the
-renderer would load as given.
+from the tab lose any gallery entry, extension and MCP alike (an MCP gallery entry names its
+configuration's variables freely, which read as URIs; PR review on #66), and an
+`installGalleryExtensions` reply does too; MCP servers from the tab lose their icon and links,
+which the renderer would load as given.
 
 **2. A tab window doesn't change the host's extensions.** In a tab window which extensions an
 action reaches, and their manifests, are the tab's server's to say. Review rounds 4 to 8 each found

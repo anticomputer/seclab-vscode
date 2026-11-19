@@ -195,7 +195,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
   module); none may be left out, and local history doesn't fall back to the host's. That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
-  management channels' replies and events (URI-shaped values; MCP servers also lose their icon and links), MCP discovery, file change events and scanned extensions. Install events from the
+  management channels' replies and events (URI-shaped values; MCP servers also lose their icon and links, and extension and MCP install events and `installGalleryExtensions` replies their gallery entry), MCP discovery, file change events and scanned extensions. Install events from the
   tab lose any gallery entry; the host never installs a package from the tab's file system or from
   the tab's workspace folders, nor any extension a tab names from the gallery ("Install Locally",
   "Install Remote Extensions Locally", or an update or uninstall a tab language-pack manifest fans
