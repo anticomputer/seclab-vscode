@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts b/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts
---- a/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts	2026-11-16 15:58:11
-+++ b/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts	2026-11-16 15:58:11
+--- a/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts	2026-11-19 05:07:28
++++ b/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts	2026-11-19 05:07:28
 @@ -8,7 +8,7 @@
  import { URI } from '../../../../base/common/uri.js';
  import { MenuId, MenuRegistry, IMenuItem } from '../../../../platform/actions/common/actions.js';
@@ -17,19 +17,19 @@ diff -ruN a/src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.c
 +		// seclab: a `file:` resource is a host folder; a tab window opens no terminal there.
  		const shouldShowIntegratedOnLocal = ContextKeyExpr.and(
 -			ResourceContextKey.Scheme.isEqualTo(Schemas.file),
-+			ResourceContextKey.Scheme.isEqualTo(Schemas.file), RemoteNameContext.notEqualsTo('seclab'),
++			ResourceContextKey.Scheme.isEqualTo(Schemas.file), ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate(),
  			ContextKeyExpr.or(ContextKeyExpr.equals('config.terminal.explorerKind', 'integrated'), ContextKeyExpr.equals('config.terminal.explorerKind', 'both')));
  
  
  		const shouldShowExternalKindOnLocal = ContextKeyExpr.and(
 -			ResourceContextKey.Scheme.isEqualTo(Schemas.file),
-+			ResourceContextKey.Scheme.isEqualTo(Schemas.file), RemoteNameContext.notEqualsTo('seclab'),
++			ResourceContextKey.Scheme.isEqualTo(Schemas.file), ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate(),
  			ContextKeyExpr.or(ContextKeyExpr.equals('config.terminal.explorerKind', 'external'), ContextKeyExpr.equals('config.terminal.explorerKind', 'both')));
  
  		this._openInIntegratedTerminalMenuItem = {
 diff -ruN a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts b/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts
---- a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts	2026-11-16 14:52:54
-+++ b/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts	2026-11-16 15:58:11
+--- a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts	2026-11-19 05:07:19
++++ b/src/vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution.ts	2026-11-19 05:07:19
 @@ -23,16 +23,22 @@
  import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
  import { ILabelService } from '../../../../platform/label/common/label.js';
@@ -46,7 +46,7 @@ diff -ruN a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalT
  	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyC,
 -	when: ContextKeyExpr.and(TerminalContextKeys.notFocus, IsSessionsWindowContext.negate()),
 +	// seclab: an external terminal is a host shell; a tab window offers none (remoteName `seclab`).
-+	when: ContextKeyExpr.and(TerminalContextKeys.notFocus, IsSessionsWindowContext.negate(), RemoteNameContext.notEqualsTo('seclab')),
++	when: ContextKeyExpr.and(TerminalContextKeys.notFocus, IsSessionsWindowContext.negate(), ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate()),
  	weight: KeybindingWeight.WorkbenchContrib,
  	handler: async (accessor) => {
 +		if (seclabIsTabAuthority(accessor.get(IWorkbenchEnvironmentService)?.remoteAuthority)) {
@@ -61,7 +61,7 @@ diff -ruN a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalT
  		title: nls.localize2('globalConsoleAction', "Open New External Terminal")
 -	}
 +	},
-+	when: RemoteNameContext.notEqualsTo('seclab')
++	when: ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate()
  });
  
  export class ExternalTerminalContribution implements IWorkbenchContribution {

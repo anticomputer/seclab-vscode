@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
---- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-10 12:12:28
-+++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-10 12:12:47
-@@ -329,6 +329,67 @@
+--- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-19 05:06:11
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-19 05:06:11
+@@ -329,6 +329,68 @@
  	timeoutTimer: Timeout;
  }
  
@@ -42,7 +42,8 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
 +		: (ctx && typeof ctx === 'object' && typeof (ctx as { remoteAuthority?: unknown }).remoteAuthority === 'string')
 +			? (ctx as { remoteAuthority: string }).remoteAuthority
 +			: '';
-+	return a.startsWith('seclab+');
++	// In any case, as the RPC filter's tab test (review SRCH3-14).
++	return a.toLowerCase().startsWith('seclab+');
 +}
 +
 +/**
@@ -69,7 +70,7 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
  export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
  
  	private channels = new Map<string, IServerChannel<TContext>>();
-@@ -345,7 +406,38 @@
+@@ -345,7 +407,38 @@
  	}
  
  	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
