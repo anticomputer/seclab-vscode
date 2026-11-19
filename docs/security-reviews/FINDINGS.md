@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 101 | 307 | 477 | 61 | 960 |
+| fixed | 14 | 101 | 307 | 477 | 62 | 961 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 198 | 82 | 348 |
+| fixed-untested | 0 | 5 | 63 | 199 | 82 | 349 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
-| deferred | 2 | 1 | 13 | 14 | 4 | 34 |
+| deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 118 | 405 | 775 | 209 | 1525 |
+| **all** | 18 | 118 | 405 | 776 | 209 | 1526 |
 
 ## Baseline: open high and critical findings
 
@@ -515,6 +515,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-33** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-4** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The extension-host scan could read an empty scan as containment, and its control canary was token-shaped, so the tab's secret gate refused the workspace. | A probe correction, shown by both runtime runs; nothing further to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-6** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The suite didn't record collections, options or the active file, nor the application and policy layers. | A test correction; nothing to test. |
+| [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-1** | low | fixed-untested | patches: tab authority tests | The series-wide guard matched a short list of shapes, stripped \`//\` inside strings, excused a line removed from any file, and read \`patches/series\` differently from the build. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-1** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against. | A build correction, shown by patch-build's typecheck of upstream's own tests. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-2** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The runtime harness was outside the harness-hygiene lint. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-3** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
@@ -541,7 +542,6 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH2-2** | info | accepted-residual | search responses (patch 0051) | A tab's search error text (shown as plain text in the Search view input) and stats (sampled telemetry) pass unsanitised; neither carries a command, link or markup. | accepted by an agent: UI spoofing only: the error renders as plain text and stats go to sampled telemetry; neither can run a command, open a link or fetch, and policy.json already lists ui-spoofing as the residual impact of the search registrations. |
 | [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH2-3** | info | fixed-untested | search review record, register | The review record called SRCH-6 fixed while the register had it fixed-untested, and SRCH-3's summary still named extraFileResources. | Record corrections; nothing to test. |
 | [20261118-host-search-excludes](20261118-host-search-excludes.md) **SRCH3-10** | info | accepted-residual | patch 0060: host exclude and watcher settings in tabs | Exclude defaults that host-installed extensions contribute, \`files.encoding\`, the ignore-file and symlink switches, and \`editor.wordSeparators\` still follow the host in a tab's query. | accepted by an agent: Defaults a host extension ships aren't the user's files; the rest are low-entropy switches and encodings that name no file. |
-| [20261118-host-search-excludes](20261118-host-search-excludes.md) **SRCH3-14** | info | deferred | patch 0060: host exclude and watcher settings in tabs | Seven \`seclab+\` prefix tests outside 0060 (in \`ipc.ts\`, \`mainThreadConfiguration.ts\`, \`seclabDocumentOrigin.ts\`, \`seclabFixedSettings.ts\`, \`seclabAhpGateCheck.ts\`, \`seclabChatSessions.ts\`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority. | follow-up: Centralise every \`seclab+\` prefix test on \`seclabIsTabAuthority\` in a follow-up across the patches that own them (rpc session). |
 | [20261118-host-search-excludes](20261118-host-search-excludes.md) **SRCH3-9** | info | fixed-untested | patch 0060: host exclude and watcher settings in tabs | The oracle case passed whatever the chokepoint did, and the structural guard read a fixed list of files. | A test correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-37** | info | fixed-untested | patch 0059: tab server locations and host extension management | The host channel's authority came from the connection. | A record, harness or test-fixture correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-43** | info | fixed-untested | patch 0059: tab server locations and host extension management | ARCHITECTURE §4.8 misstated some losses. | A record, harness or test-fixture correction; nothing to test. |
@@ -2530,7 +2530,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | SRCH3-10 | info | accepted-residual | Exclude defaults that host-installed extensions contribute, \`files.encoding\`, the ignore-file and symlink switches, and \`editor.wordSeparators\` still follow the host in a tab's query. | accepted by an agent: Defaults a host extension ships aren't the user's files; the rest are low-entropy switches and encodings that name no file. |
 | SRCH3-11 | medium | fixed | The sessions empty-file search walks a folder's directories skipping excluded ones, and a tab sees which it is asked to resolve; it was wrongly exempted as local-only. | patch:155dc26f24afa78c24f13bd42531c35390620c3a · `test/containment/search-excludes.test.ts` "a tab gets none of the host user's patterns and keeps its own" |
 | SRCH3-12 | low | fixed-untested | The guard missed namespace imports of search's module and files a patch makes callers. | A test correction; nothing to test. |
-| SRCH3-14 | info | deferred | Seven \`seclab+\` prefix tests outside 0060 (in \`ipc.ts\`, \`mainThreadConfiguration.ts\`, \`seclabDocumentOrigin.ts\`, \`seclabFixedSettings.ts\`, \`seclabAhpGateCheck.ts\`, \`seclabChatSessions.ts\`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority. | follow-up: Centralise every \`seclab+\` prefix test on \`seclabIsTabAuthority\` in a follow-up across the patches that own them (rpc session). |
+| SRCH3-14 | info | fixed | Seven \`seclab+\` prefix tests outside 0060 (in \`ipc.ts\`, \`mainThreadConfiguration.ts\`, \`seclabDocumentOrigin.ts\`, \`seclabFixedSettings.ts\`, \`seclabAhpGateCheck.ts\`, \`seclabChatSessions.ts\`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority. | patch:383358d93770adb56a3d9ae3f11fff999de6b010 · `test/containment/filter-module.test.ts` "every seclab+ tab test the series ships is case-insensitive, as the filter's (SRCH3-14)" |
 | SRCH3-15 | low | fixed-untested | The guard read upstream's files only, not those the series' patches create. | A test correction; nothing to test. |
 | SRCH3-13 | low | fixed | Round 3's case fix was local to 0060; the filter module's tab test stayed case-sensitive for its other callers. | patch:155dc26f24afa78c24f13bd42531c35390620c3a · `test/containment/search-excludes.test.ts` "a window that is not a tab's keeps upstream's settings" |
 | PR68-1 | low | fixed | With the tab test case-insensitive (SRCH3-13), the tab id parser still took only a lowercase prefix, so a mixed-case tab authority was a tab whose filter and storage partition couldn't be derived (both threw). | patch:2875a0c3e31a2ce524ef5a2030c00f9f47e85619 · `test/containment/filter-module.test.ts` "attachment fails closed: unparseable tab throws, unknown remote is deny-all, local is unfiltered" |
@@ -2659,6 +2659,12 @@ Every other commit the register cites is on main's history, or on the branch its
 | R5-33 | low | fixed-untested | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 | PR70-4 | medium | fixed | The extension-host scan skipped a region on a thrown or short read and still judged containment if the control canary turned up elsewhere, so a host canary in the skipped region would go unseen. | patch:9b3558b82cbdef100028d97c5cd24a7205d48636 · `test/containment/check-probes.test.ts` "the terminal settings and extension-host scan probes need their canaries on a baseline and a control after the patches" |
 | PR70-5 | medium | fixed | The extension-host scan dropped a canary that a word byte followed in memory, since it took the greedy canary run and then rejected it as too long. | patch:9d1014d78929ef0c0c0dad65e93ff54c4507d3ac · `test/containment/check-probes.test.ts` "the extension-host scan keeps a canary whatever byte follows it in memory" |
+
+### [20261119-tab-authority-case](20261119-tab-authority-case.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| TA-1 | low | fixed-untested | The series-wide guard matched a short list of shapes, stripped \`//\` inside strings, excused a line removed from any file, and read \`patches/series\` differently from the build. | A test correction; nothing to test. |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 

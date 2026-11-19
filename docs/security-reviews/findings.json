@@ -21764,8 +21764,12 @@
 			"summary": "Seven `seclab+` prefix tests outside 0060 (in `ipc.ts`, `mainThreadConfiguration.ts`, `seclabDocumentOrigin.ts`, `seclabFixedSettings.ts`, `seclabAhpGateCheck.ts`, `seclabChatSessions.ts`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority.",
 			"component": "patch 0060: host exclude and watcher settings in tabs",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "Centralise every `seclab+` prefix test on `seclabIsTabAuthority` in a follow-up across the patches that own them (rpc session)."
+			"status": "fixed",
+			"commit": "patch:383358d93770adb56a3d9ae3f11fff999de6b010",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "every seclab+ tab test the series ships is case-insensitive, as the filter's (SRCH3-14)"
+			}
 		},
 		{
 			"record": "20261118-host-search-excludes.md",
@@ -22444,6 +22448,17 @@
 				"file": "test/containment/check-probes.test.ts",
 				"name": "the extension-host scan keeps a canary whatever byte follows it in memory"
 			}
+		},
+		{
+			"record": "20261119-tab-authority-case.md",
+			"anchor": "TA-1",
+			"round": "SRCH3-14 round 1",
+			"severity": "low",
+			"summary": "The series-wide guard matched a short list of shapes, stripped `//` inside strings, excused a line removed from any file, and read `patches/series` differently from the build.",
+			"component": "patches: tab authority tests",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
