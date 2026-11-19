@@ -16,7 +16,8 @@ let nextConnection = 1;
 
 /** True for a `seclab+<tab>` remote authority. */
 export function isSeclabAuthority(authority: string | undefined): boolean {
-	return typeof authority === 'string' && authority.startsWith(SECLAB_AUTHORITY_PREFIX);
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	return typeof authority === 'string' && authority.toLowerCase().startsWith(SECLAB_AUTHORITY_PREFIX);
 }
 
 /** Marks this window as a seclab tab window: from now on every agent-host transport in it
@@ -76,7 +77,7 @@ function connectionEvent(rule: string, connection: number, priority: SeclabAhpEv
 
 /** The invariant. Throws for an ungated transport in a seclab tab window. */
 export function seclabAhpCheckTransport(identity: unknown, transport: object): void {
-	const tabIdentity = typeof identity === 'string' && identity.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`);
+	const tabIdentity = typeof identity === 'string' && identity.toLowerCase().startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`);
 	if (!sink && !tabIdentity) {
 		return;
 	}

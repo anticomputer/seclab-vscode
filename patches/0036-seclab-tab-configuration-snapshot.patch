@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/workbench/api/browser/mainThreadConfiguration.ts
---- a/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-09 19:23:22
-+++ b/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-13 23:21:43
-@@ -11,38 +11,105 @@
+--- a/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-19 05:06:11
++++ b/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-19 05:06:11
+@@ -11,38 +11,106 @@
  import { MainThreadConfigurationShape, MainContext, ExtHostContext, IConfigurationInitData } from '../common/extHost.protocol.js';
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
  import { ConfigurationTarget, IConfigurationService, IConfigurationOverrides } from '../../../platform/configuration/common/configuration.js';
@@ -10,6 +10,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
 +import { IExtensionService } from '../../services/extensions/common/extensions.js';
 +import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
 +import { seclabIsFiltered } from './seclabDocumentOrigin.js';
++import { seclabIsTabAuthority } from '../../services/extensions/common/seclabRpcFilter.js';
 +import { SeclabTabConfiguration, seclabSendWithheld, seclabSetWithheldSink, seclabTabConfiguration, seclabTabConfigurationChange, seclabWithheldSink } from './seclabConfigurationSnapshot.js';
 +import { SECLAB_SETTINGS_WITHHELD_MARKER } from './seclabWithhold.js';
  
@@ -36,7 +37,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
 +		this._seclabFiltered = seclabIsFiltered(extHostContext, _environmentService.remoteAuthority);
 +		// In a tab window, the local host (the Tab Manager's) receives "setting withheld" reports.
 +		this._seclabSink = undefined;
-+		if (extHostContext.extensionHostKind === ExtensionHostKind.LocalProcess && _environmentService.remoteAuthority?.startsWith('seclab+')) {
++		if (extHostContext.extensionHostKind === ExtensionHostKind.LocalProcess && seclabIsTabAuthority(_environmentService.remoteAuthority)) {
 +			this._seclabSink = extHostContext.getProxy(ExtHostContext.ExtHostCommands);
 +			seclabSetWithheldSink(this._seclabSink);
 +		}

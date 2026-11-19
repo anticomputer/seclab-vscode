@@ -259,9 +259,9 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadFileSystem.ts b/src/vs/workbe
  
  	$unregisterProvider(handle: number): void {
 diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
---- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 17:13:00
-@@ -0,0 +1,143 @@
+--- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1969-12-31 19:00:00
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-19 05:06:11
+@@ -0,0 +1,144 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: which text models belong to a tab's extension host (patch 0035, EDR
 + *  document-sync-provenance). In a `seclab+` window a non-local extension host is sent a model only
@@ -280,6 +280,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +import { IFileService, IFileSystemProvider } from '../../../platform/files/common/files.js';
 +import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 +import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
++import { seclabIsTabAuthority } from '../../services/extensions/common/seclabRpcFilter.js';
 +import { ITextFileService } from '../../services/textfile/common/textfiles.js';
 +import { TextFileEditorModel } from '../../services/textfile/common/textFileEditorModel.js';
 +import { CellUri } from '../../contrib/notebook/common/notebookCommon.js';
@@ -310,7 +311,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +}
 +
 +export function seclabIsFiltered(ctx: IExtHostContext, windowAuthority: string | undefined): boolean {
-+	return ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && !!windowAuthority?.startsWith('seclab+');
++	return ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && seclabIsTabAuthority(windowAuthority);
 +}
 +
 +/** Called right after this host's content provider created `model`. */
@@ -332,7 +333,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +export function seclabProviderWrite(ctx: IExtHostContext, model: ITextModel, write: () => void): void {
 +	const o = seclabOrigin(ctx);
 +	// `filtered` is set by MainThreadDocumentsAndEditors; a tab's remote host also fails closed without it.
-+	const filtered = o.filtered || (ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && !!ctx.remoteAuthority?.startsWith('seclab+'));
++	const filtered = o.filtered || (ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && seclabIsTabAuthority(ctx.remoteAuthority));
 +	if (filtered && !o.models.has(model)) {
 +		return;
 +	}

@@ -52,7 +52,8 @@ import type { SeclabAhpEvent } from './seclabAhpPolicy.js';
 export const SECLAB_CHAT_AUTHORITY_PREFIX = 'seclab+';
 
 function isSeclabAuthority(authority: string | undefined): boolean {
-	return typeof authority === 'string' && authority.startsWith(SECLAB_CHAT_AUTHORITY_PREFIX);
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	return typeof authority === 'string' && authority.toLowerCase().startsWith(SECLAB_CHAT_AUTHORITY_PREFIX);
 }
 
 /** Just the part of `IAgentHostConnectionsService` this predicate needs, so it can be tested. */

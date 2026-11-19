@@ -136,7 +136,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabChatSessions.ts
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,130 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode patch 0018: in a `seclab+` window, no chat request is dispatched for a session
 + *  other than this window's own agent-host session. A SECOND LAYER behind patch 0009.
@@ -191,7 +191,8 @@ index 0000000..0000000
 +export const SECLAB_CHAT_AUTHORITY_PREFIX = 'seclab+';
 +
 +function isSeclabAuthority(authority: string | undefined): boolean {
-+	return typeof authority === 'string' && authority.startsWith(SECLAB_CHAT_AUTHORITY_PREFIX);
++	// In any case, as the RPC filter's tab test (review SRCH3-14).
++	return typeof authority === 'string' && authority.toLowerCase().startsWith(SECLAB_CHAT_AUTHORITY_PREFIX);
 +}
 +
 +/** Just the part of `IAgentHostConnectionsService` this predicate needs, so it can be tested. */

@@ -63,7 +63,8 @@ export const SECLAB_TAB_AUTHORITY_PREFIX = 'seclab+';
 
 /** Whether this window is a seclab tab window, from its remote authority. */
 export function isSeclabTabAuthority(authority: string | undefined): boolean {
-	return typeof authority === 'string' && authority.startsWith(SECLAB_TAB_AUTHORITY_PREFIX);
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	return typeof authority === 'string' && authority.toLowerCase().startsWith(SECLAB_TAB_AUTHORITY_PREFIX);
 }
 
 /** The fixed value for an exact setting id in a tab window, or `undefined` when none is. */
