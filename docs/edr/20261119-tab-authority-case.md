@@ -35,6 +35,10 @@ window's authority, so this was a consistency gap, not a reachable escape.
   agentic gate suites; each fails on main's patches and passes here. 0006's tab test is evaluated
   from the shipped patch, not a copy.
 - **Build:** the changed files typecheck with the whole series applied.
+- **Runtime:** `test/containment/reh-push.ts patched` on the branch's containment build (run
+  44506121908, `efc90fce`): 30/30 and 14/14, with 0015's gate logging its refusal of the tab's
+  agent-host transport and the control window dialling; clean teardown. Lower-case authorities
+  behave as before; nothing lets a tab choose a mixed-case one to test at runtime.
 
 ## Consequences
 - A new tab test in a patch must be case-insensitive, or the rpc-filter suite fails, for the
