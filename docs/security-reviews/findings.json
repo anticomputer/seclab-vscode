@@ -503,7 +503,7 @@
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "the terminal default profile and environment collections; patches 0053 to 0058"
 			},
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -14575,7 +14575,7 @@
 			"component": "remote terminal backend (remoteTerminalBackend.createProcess, getProfiles)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -14590,7 +14590,7 @@
 			"component": "remote terminal channel (remoteTerminalChannel.createProcess)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -14650,7 +14650,7 @@
 			"component": "terminal default profile push (MainThreadTerminalService._updateDefaultProfile)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -21921,7 +21921,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -21936,7 +21936,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -21951,7 +21951,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -21966,7 +21966,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:a453599464b06afe6dcf7eb7b29c41e5f2543f83",
+			"commit": "patch:fd858176810632db9713c23a0607889c4a090a76",
 			"gap": "A probe correction, shown by both runtime runs; nothing further to test."
 		},
 		{
@@ -21978,7 +21978,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab keeps its own terminal settings and the defaults"
@@ -21993,7 +21993,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:ba50e2eebc74d9bd517b3956126a597149046409",
+			"commit": "patch:da21abdceba0576a0bd563955cd6db1f95132785",
 			"gap": "A test correction; nothing to test."
 		},
 		{
@@ -22016,7 +22016,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22031,7 +22031,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22046,7 +22046,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22061,7 +22061,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22076,7 +22076,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22091,7 +22091,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22106,7 +22106,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22126,7 +22126,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
@@ -22141,7 +22141,7 @@
 			"component": "patches 0053-0058: terminal settings in tab windows",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"commit": "patch:20bd317de27395c66f3303f221ad7fc1fd5d3afa",
 			"test": {
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab gets none of the host terminal settings"
