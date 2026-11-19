@@ -5708,7 +5708,7 @@
 			"component": "containment probes (trusted AI surface)",
 			"owner": "rpc",
 			"status": "open",
-			"gap": "On the branch the six ai-* probes are honestly downgraded to required: false with status not-implemented and a blocked_on reason, and the ai-setting: refs now link by prefix, but test/containment/rogue-extension/ai-probes.js still has zero importers, so the entire trusted-AI surface is unmeasured and the branch can go green with it unmeasured. No follow-up names an owner or milestone for implementing them."
+			"gap": "Five of the six ai-* probes are still not-implemented. ai-remote-agent-host-dial is judged from reh-push's own record (review 20261119-ai-dial-probe.md); the rest need the host-side fake model and a build without 0009 and 0010 (coordinator plan, 2026-11-19)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
@@ -22503,6 +22503,81 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-1",
+			"round": "round 1",
+			"severity": "high",
+			"summary": "The tab-written REH record could carry the dial probe's id and replace the host's measurement, so the tab chose the verdict.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:a14139d9a00e747cc46a3dae02a3820c95827f54",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the tab's REH record can't stand in for the host's dial measurement"
+			},
+			"preFix": "patch:2f016e81f1163170c7f44950ec2bd02c4636de33",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261119-ai-dial-probe.md",
+				"quote": "On the reviewed commit (36c5d921) the case \"the tab's REH record can't stand in for the host's dial measurement\" fails: the forged record passed the dial."
+			}
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-2",
+			"round": "round 1",
+			"severity": "medium",
+			"summary": "The probe's unpatched predicate couldn't be met: every build ships patch 0015, so no baseline dials.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test or record correction; nothing to test."
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-3",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "Whether the tab dialled was read from a log in the tab's own workspace and judged.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test or record correction; nothing to test."
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-4",
+			"round": "round 2",
+			"severity": "medium",
+			"summary": "The checker suite's mutation gate was vacuous: its mirror lacked a module the harness imports, so every mutant crashed and counted as caught.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test or record correction; nothing to test."
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-5",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "The tab listener's liveness, also read from the tab's log, was judged.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test or record correction; nothing to test."
+		},
+		{
+			"record": "20261119-ai-dial-probe.md",
+			"anchor": "AID-6",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "The record rule rejected the fault channel every payload writes, losing the never-armed diagnosis.",
+			"component": "probes: ai-remote-agent-host-dial",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test or record correction; nothing to test."
 		}
 	]
 }

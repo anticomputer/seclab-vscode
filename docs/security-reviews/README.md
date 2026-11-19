@@ -184,6 +184,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-18 | [the host user's search and watcher excludes stay on the host (patch 0060)](20261118-host-search-excludes.md) | see record | see record |
 | 2026-11-18 | [a tab's server names no host location (patch 0059)](20261118-tab-server-environment.md) | patch 0059 and its filter-module helpers (seclabTabUris, seclabTabServerChannel, | see record |
 | 2026-11-18 | [a tab window sends its tab no host terminal settings (patches 0053-0058)](20261118-tab-terminal-settings.md) | see record | see record |
+| 2026-11-19 | [the agent-host dial as a judged probe (ai-remote-agent-host-dial)](20261119-ai-dial-probe.md) | see record | see record |
 | 2026-11-19 | [every tab test agrees with the RPC filter's (SRCH3-14)](20261119-tab-authority-case.md) | see record | see record |
 | 2026-11-19 | [no tab auto reply on the shared local pty host (patch 0061)](20261119-tab-auto-replies.md) | see record | see record |
 <!-- index:end -->
