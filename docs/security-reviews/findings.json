@@ -21549,6 +21549,21 @@
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes none of them, and logs each refusal"
 			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-8",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "A gallery MCP server's configuration names its variables freely, so one named `path` in an install or update event's gallery entry read as a URI, and the window dropped the whole event.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:537e61283a85f4626757d5f9fbdfbeab839ee92a",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
 		}
 	]
 }
