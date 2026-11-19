@@ -656,8 +656,8 @@ visible losses, not bugs:
   only `resource` and a non-empty `results` list, every resource and result `uri` checked the
   same way, previews bounded (`tabTextMatches`). Patch 0051 makes the provider's completion
   messages untrusted plain text, so a link in them runs no command (SRCH-2), and drops open
-  editors outside the tab's file system from the query it is sent. The host's
-  `files.exclude`/`search.exclude` globs still reach it (SRCH-3, open). `$unregisterProvider`
+  editors outside the tab's file system from the query it is sent, and patch 0060 drops every
+  exclude pattern the host's settings set (SRCH-3; [EDR](edr/20261118-host-search-excludes.md)). `$unregisterProvider`
   reaches only this host's own providers. `workspace.findFiles`, Quick Open file search and the
   Search view return again ([EDR](edr/20261117-search-in-tabs.md)).
 

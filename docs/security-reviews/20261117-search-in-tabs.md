@@ -87,3 +87,9 @@ more matching lines than `tabTextMatches` accepts had its whole batch refused, a
 missing without a warning. Patch 0052 splits a file's matches at that bound in the extension host,
 and the window merges them. `search-split.test.ts` runs upstream's own collector on such a file,
 unpatched as the control and patched, with a mutant.
+
+## Addendum (2026-11-18)
+SRCH-3 is closed by patch 0060: the project owner decided on 2026-11-18 that the host user's
+search-exclude settings don't reach a tab, and 0060 takes them, and the watcher and read-only
+patterns, from the tab's own settings ([review](20261118-host-search-excludes.md),
+[EDR](../edr/20261118-host-search-excludes.md)).
