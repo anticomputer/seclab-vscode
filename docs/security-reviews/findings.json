@@ -21534,6 +21534,21 @@
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes none of them, and logs each refusal"
 			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-69",
+			"round": "patch 0059 round 19",
+			"severity": "info",
+			"summary": "With the server's install replies transformed, an `installGalleryExtensions` reply reached the window with any gallery entry the tab's server named, which the install events already lose; nothing reads it today.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ab185fba584776a6fa593cc30188c2c931b8d570",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
 		}
 	]
 }

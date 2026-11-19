@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 285 | 453 | 60 | 910 |
+| fixed | 14 | 98 | 285 | 453 | 61 | 911 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 186 | 80 | 334 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 385 | 741 | 204 | 1463 |
+| **all** | 18 | 115 | 385 | 741 | 205 | 1464 |
 
 ## Baseline: open high and critical findings
 
@@ -2583,6 +2583,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PR66-5 | low | fixed | Upstream's MCP server sent install and metadata-update replies untransformed, so a tab window refused them after the change had been written. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes a genuine server unchanged" |
 | PR66-6 | low | fixed | The runtime check read the environment probe's served count with \`Number\`, so a malformed count read as NaN and passed. | patch:d38517782b7d01e823a18546a442e681ed44a680 · `test/containment/check-probes.test.ts` "the environment probe needs the lie served and the canary on a baseline, and a logged refusal after patch 0059" |
 | PR66-7 | low | fixed | An update the tab's server reported queued a bare id for removal, which removed a running host extension sharing the id from the tab window. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-69 | info | fixed | With the server's install replies transformed, an \`installGalleryExtensions\` reply reached the window with any gallery entry the tab's server named, which the install events already lose; nothing reads it today. | patch:ab185fba584776a6fa593cc30188c2c931b8d570 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
