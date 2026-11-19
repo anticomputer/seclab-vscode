@@ -161,6 +161,7 @@ const SETTINGS: Record<string, Layers> = {
 	'terminal.integrated.shellIntegration.enabled': { defaultValue: true, userLocalValue: false },
 	'terminal.integrated.suggest.enabled': { defaultValue: false, userLocalValue: true },
 	'terminal.integrated.windowsUseConptyDll': { defaultValue: true, userLocalValue: false },
+	'terminal.integrated.inheritEnv': { defaultValue: true, userLocalValue: false },
 	// Upstream merges arrays by replacing, so the host user's list is the effective one when the tab sets none.
 	'terminal.integrated.allowedLinkSchemes': { defaultValue: ['file', 'http', 'https'], userLocalValue: [`host${HOST}`] },
 };
@@ -204,6 +205,7 @@ interface Observed {
 	foreignIcon: unknown;
 	ownIcon: unknown;
 	noConnection: unknown;
+	inheritEnv: unknown;
 	profileWrites: Array<{ key: string; value: unknown; target: number }>;
 	descriptions: string[];
 	detachSent: unknown[] | undefined;
@@ -316,6 +318,12 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	const agentHost = method(src.resolver, '_getUnresolvedAgentHostShellProfile', deps)!.call(self, { os: 3 });
 	// The window's connection can't be null in a remote window today; the check must not rest on it (R5-13).
 	const noConnection = method(src.resolver, '_getUnresolvedAutomationShellProfile', deps)!.call({ ...self, _remoteAgentService: { getConnection: () => null } }, { os: 3 });
+	// R5-30: resolveShellLaunchConfig fills useShellEnvironment, which goes to the REH in createProcess.
+	const launch: { useShellEnvironment?: unknown } = {};
+	await method(src.resolver, 'resolveShellLaunchConfig', {
+		...deps, generatedProfileName: 'Generated', TerminalSettingId: { TabsDefaultColor: 'terminal.integrated.tabs.defaultColor', InheritEnv: 'terminal.integrated.inheritEnv' },
+	})!.call({ ...self, getDefaultProfile: async () => ({ path: 'bash', args: [], profileName: 'bash' }), getDefaultIcon: () => 'terminal' }, launch, { remoteAuthority: authority, os: 3 });
+	const inheritEnv = launch.useShellEnvironment;
 	// R5-9: a profile's image icon becomes a CSS url() the window fetches.
 	const URI = {
 		isUri: (u: unknown) => isMap(u) && (u as { $uri?: boolean }).$uri === true,
@@ -465,7 +473,7 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	assert.ok(sent, 'createProcess sent nothing');
 	return {
 		createProcess: sent!, getProfiles, automation, agentHost, collections: [...merged.collections.keys()].sort(), localDefaultProfile,
-		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection,
+		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection, inheritEnv,
 		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, contributedValue, schemeWrites,
 	};
 }
@@ -490,7 +498,7 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 		}
 	}
 	const opts = o.createProcess.options as { shellIntegration?: { enabled?: unknown; suggestEnabled?: unknown }; windowsUseConptyDll?: unknown } | undefined;
-	if (c['terminal.integrated.detectLocale'] === 'on' || opts?.shellIntegration?.enabled === false || opts?.shellIntegration?.suggestEnabled === true || opts?.windowsUseConptyDll === false) {
+	if (c['terminal.integrated.detectLocale'] === 'on' || opts?.shellIntegration?.enabled === false || opts?.shellIntegration?.suggestEnabled === true || opts?.windowsUseConptyDll === false || o.inheritEnv === false) {
 		out.push('host process switches');
 	}
 	if (sees(o.folderCwd)) {
@@ -641,6 +649,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual({ ...o.createProcess.configuration['terminal.integrated.env.linux'] as object }, { TAB_VAR: 'tab-remote', TAB_WS: 'tab-ws' });
 		assert.equal(o.createProcess.configuration['terminal.integrated.cwd'], '');
 		assert.equal(o.createProcess.configuration['terminal.integrated.detectLocale'], 'auto');
+		assert.equal(o.inheritEnv, true);
 		const profiles = o.getProfiles[0] as Record<string, Record<string, unknown>>;
 		assert.deepEqual(Object.keys(profiles).sort(), ['bash', 'tabp']);
 		// Upstream merges maps recursively: a tab's partial override keeps the default's path (R5-5).
@@ -725,6 +734,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['profile text as markdown', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return String(value);'), 'markdown image in a profile description'],
 			['profile text keeps links', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return escapeMarkdownSyntaxTokens(String(value));'), 'link or forged line in a profile description'],
 			['hover status as markdown', mutant(OURS[5], 'const text = (s: string) => seclabTab ? escapeUntrustedMarkdown(s) : s;', 'const text = (s: string) => s;'), 'markdown image in the terminal hover'],
+			['inheritEnv from the host', mutant(OURS[0], '+			shellLaunchConfig.useShellEnvironment = this._seclabProfileSetting(TerminalSettingId.InheritEnv) as boolean | undefined;', '+			shellLaunchConfig.useShellEnvironment = this._configurationService.getValue(TerminalSettingId.InheritEnv) as boolean | undefined;'), 'host process switches'],
 			['process switches from the host', mutant(OURS[0], "windowsUseConptyDll: tab<boolean>('terminal.integrated.windowsUseConptyDll') === true,", "windowsUseConptyDll: options.windowsUseConptyDll,"), 'host process switches'],
 			['folder cwd from the host', mutant(OURS[0], "? seclabCwd.workspaceFolderValue ?? seclabCwd.userRemoteValue ?? seclabCwd.defaultValue", "? configurationService.getValue(TerminalSettingId.Cwd, { resource: folder.uri })"), 'host cwd in a folder\'s launch'],
 			['contributed profile to host settings', mutant(OURS[4], '? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER);', '? ConfigurationTarget.USER : ConfigurationTarget.USER);'), 'contributed profile written to host settings'],
