@@ -234,8 +234,21 @@ function snapshotKeys(patch: string, contents: Record<string, unknown>, hostValu
 // Each key's host value has only boolean leaves and keys without a scheme or `@`, as 0036's text rule lets through.
 const HOST_LAYER: Record<string, unknown> = { ...Object.fromEntries(SNAPSHOT_KEYS.map(k => [k, { '**/seclabcanary_snap1/**': true }])), 'files.watcherInclude': [], 'editor.tabSize': 4 };
 
-/** Every non-test TypeScript file under the pinned src/vs, relative to it. */
-const ALL_FILES = (readdirSync(SRC!, { recursive: true }) as string[]).filter(f => f.endsWith('.ts') && !f.endsWith('.d.ts') && !/(^|\/)test\//.test(f));
+/** The new files each shipped patch creates, by path relative to src/vs (review SRCH3-15). */
+const SERIES = readFileSync(join(REPO, 'patches', 'series'), 'utf8').split('\n').map(l => l.trim()).filter(l => l.endsWith('.patch'));
+const PATCH_CREATED = new Map<string, string>();
+for (const name of SERIES) {
+	const text = patchFile(name);
+	for (const sec of text.split(/^(?=diff -ruN )/m).slice(1)) {
+		const m = / b\/src\/vs\/(\S+\.ts)$/.exec(sec.split('\n')[0]);
+		if (m && sec.includes('\n@@ -0,0 ')) {
+			PATCH_CREATED.set(m[1], text);
+		}
+	}
+}
+const isSource = (f: string) => f.endsWith('.ts') && !f.endsWith('.d.ts') && !/(^|\/)test\//.test(f);
+/** Every non-test TypeScript file under the pinned src/vs and every one a patch creates, relative to src/vs. */
+const ALL_FILES = [...new Set([...(readdirSync(SRC!, { recursive: true }) as string[]), ...PATCH_CREATED.keys()])].filter(isSource);
 
 /**
  * Callers of search's `getExcludes` that only filter locally, with why; every other caller builds
@@ -264,9 +277,11 @@ const WRAPPED = /seclabWithTabExcludes\((?:this\.)?(\w+), ([\w.]+), (?:this\.)?\
 function unwrappedCalls(patch: string): string[] {
 	const out: string[] = [];
 	for (const f of ALL_FILES) {
-		const upstream = readFileSync(join(SRC!, f), 'utf8');
+		const made = PATCH_CREATED.get(f);
+		const upstream = made !== undefined ? created(made, f) ?? '' : readFileSync(join(SRC!, f), 'utf8');
 		// The patched source, so a file a patch makes a caller is scanned too.
-		const patched = f.endsWith('search/common/search.ts') ? '' : (upstream.includes('getExcludes') || upstream.includes('watcherExclude') ? source(f, patch) ?? '' : '');
+		const patched = f.endsWith('search/common/search.ts') ? '' : made !== undefined && !created(patch, f) ? upstream
+			: (upstream.includes('getExcludes') || upstream.includes('watcherExclude') ? source(f, patch) ?? '' : '');
 		if (IMPORTS_SEARCH.test(patched) && CALLS_GET_EXCLUDES.test(patched) && !LOCAL_ONLY[f]) {
 			const src = patched;
 			const reads = src.split('getValue<ISearchConfiguration>({ resource').length - 1;
@@ -318,6 +333,8 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 	['a tab gets none of the host user\'s patterns and keeps its own', async () => {
 		// On a tree without 0060 this reports every leak.
 		assert.deepEqual(await leaks(P0060), []);
+		// The guard reads the files patches create as well as upstream's.
+		assert.ok(ALL_FILES.includes(SNAPSHOT) && ALL_FILES.includes('workbench/services/extensions/common/seclabRpcFilter.ts'), 'patch-created files are scanned');
 		// The defaults (a default the host turned off keeps its default), the tab's remote user
 		// settings and the folder's own settings stay; a workspace file's settings don't.
 		const own = ['**/.git', '**/folder-files', '**/node_modules', '**/remote-files'];
