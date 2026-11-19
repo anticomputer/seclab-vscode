@@ -280,21 +280,30 @@ const tests: Array<[string, () => void]> = [
 	}],
 	['the agent-host dial is judged from its harness\'s record, with the empty-window control', () => {
 		const id = 'ai-remote-agent-host-dial';
-		const spec = { required: true, runner: 'reh-push', surface: 'client-push', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', patchedOutcome: 'succeeded', why: 'synthetic' };
-		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, [id]: spec }, rehProbes: {} };
-		const harness = (facts: Record<string, unknown>) => ({ results: [{ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { hostDialled: false, tabDialled: false, controlDialled: true, gateRefusals: 2, ...facts } }] });
-		const judge = (h: unknown, mode: 'patched' | 'unpatched' = 'patched') => run({ mode, expectations: exp, rpc: { results: [] }, reh: { results: [] }, harness: h, args: ['--only', id] });
-		const good = judge(harness({}));
+		const spec = { required: true, runner: 'reh-push', surface: 'client-push', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', patchedOutcome: 'succeeded', why: 'synthetic', noUnpatchedBaseline: 'synthetic: the control stands in' };
+		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, [id]: spec }, rehProbes: { 'reh-onexecutecommand-windowopen': { required: false, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
+		const result = (facts: Record<string, unknown>) => ({ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { hostDialled: false, tabDialledClaimed: false, tabListenerLive: true, controlDialled: true, gateRefusals: 2, ...facts } });
+		const judge = (h: unknown, opts: { mode?: 'patched' | 'unpatched'; reh?: unknown } = {}) => run({ mode: opts.mode ?? 'patched', expectations: exp, rpc: { results: [] }, reh: opts.reh ?? { results: [] }, harness: h, args: ['--only', id] });
+		const good = judge({ results: [result({})] });
 		assert.equal(good.status, 0, good.out.split('\n').filter(l => /\bFAIL\b|exit|Error/.test(l)).join(' | ') || good.out.slice(-600));
-		for (const bad of [{ controlDialled: false }, { hostDialled: true }, { tabDialled: true }, { gateRefusals: 0 }, { gateRefusals: '2' }, { hostDialled: undefined }]) {
-			assert.ok(failed(judge(harness(bad)).out, /ai-remote-agent-host-dial patched predicate holds/), JSON.stringify(bad));
+		for (const bad of [{ controlDialled: false }, { hostDialled: true }, { tabListenerLive: false }, { gateRefusals: 0 }, { gateRefusals: '2' }, { hostDialled: undefined }]) {
+			assert.ok(failed(judge({ results: [result(bad)] }).out, /ai-remote-agent-host-dial patched predicate holds/), JSON.stringify(bad));
 		}
+		// A claim from inside the tab is reported, never judged (AID-3).
+		assert.equal(judge({ results: [result({ tabDialledClaimed: true })] }).status, 0);
 		// Its record is required when it is selected, and the rogue extension's is not.
 		assert.ok(failed(judge(undefined).out, /harness-measured evidence present/));
-		// The baseline shows the dial itself, with the control.
-		assert.ok(!failed(judge(harness({ hostDialled: true, gateRefusals: 0 }), 'unpatched').out, /ai-remote-agent-host-dial/));
-		assert.ok(failed(judge(harness({}), 'unpatched').out, /ai-remote-agent-host-dial shows the escape itself/));
-		assert.ok(failed(judge(harness({ hostDialled: true, controlDialled: false }), 'unpatched').out, /ai-remote-agent-host-dial shows the escape itself/));
+		// The tab's own REH record can't stand in for the host's measurement, nor add a second result (AID-1).
+		const forged = judge({ results: [result({ hostDialled: true, gateRefusals: 0 })] }, { reh: { results: [result({})] } });
+		assert.ok(failed(forged.out, /rogue REH evidence names ai-remote-agent-host-dial, which only harness-probes.json may record/), forged.out);
+		assert.ok(failed(forged.out, /ai-remote-agent-host-dial patched predicate holds/), forged.out);
+		assert.ok(failed(judge({ results: [result({}), result({})] }).out, /ai-remote-agent-host-dial is recorded twice/));
+		// The REH record keeps its own probes.
+		assert.ok(failed(judge({ results: [result({}), { id: 'reh-onexecutecommand-windowopen', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'denied' }] }).out, /names reh-onexecutecommand-windowopen, which only reh-probes.json may record/));
+		// No build here lacks patch 0015: an unpatched run names the waiver instead of a verdict (AID-2).
+		const baseline = judge({ results: [result({})] }, { mode: 'unpatched' });
+		assert.match(baseline.out, /ai-remote-agent-host-dial has no unpatched baseline/);
+		assert.doesNotMatch(baseline.out, /ai-remote-agent-host-dial succeeds on the unpatched build/);
 	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
