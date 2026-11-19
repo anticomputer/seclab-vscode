@@ -46,6 +46,7 @@ const FILES = {
 	helper: 'workbench/contrib/terminal/common/seclabTabTerminalSettings.ts',
 	tooltip: 'workbench/contrib/terminal/browser/terminalTooltip.ts',
 	links: 'workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts',
+	actions: 'workbench/contrib/terminal/browser/terminalActions.ts',
 } as const;
 type Key = keyof typeof FILES;
 const OURS = ['0053-seclab-no-host-terminal-settings-for-tabs.patch', '0054-seclab-tab-own-terminal-env-collections.patch', '0055-seclab-no-host-file-path-to-tab-terminals.patch', '0056-seclab-no-foreign-terminal-icons-in-tabs.patch',
@@ -155,7 +156,11 @@ const SETTINGS: Record<string, Layers> = {
 	'terminal.integrated.defaultProfile.linux': { defaultValue: null, userLocalValue: 'hostp' },
 	'terminal.integrated.automationProfile.linux': { defaultValue: null, userLocalValue: { path: '/bin/sh', args: [HOST] } },
 	'terminal.integrated.agentHostProfile.linux': { defaultValue: null, policyValue: { path: '/bin/sh', args: [HOST] } },
-	'terminal.integrated.detectLocale': { defaultValue: 'auto' },
+	// R5-23: switches the process options carry; the host user's values differ from the defaults.
+	'terminal.integrated.detectLocale': { defaultValue: 'auto', userLocalValue: 'on' },
+	'terminal.integrated.shellIntegration.enabled': { defaultValue: true, userLocalValue: false },
+	'terminal.integrated.suggest.enabled': { defaultValue: false, userLocalValue: true },
+	'terminal.integrated.windowsUseConptyDll': { defaultValue: false, userLocalValue: true },
 	// Upstream merges arrays by replacing, so the host user's list is the effective one when the tab sets none.
 	'terminal.integrated.allowedLinkSchemes': { defaultValue: ['file', 'http', 'https'], userLocalValue: [`host${HOST}`] },
 };
@@ -173,6 +178,7 @@ const config = (settings: Record<string, Layers>) => ({
 			.filter(v => v !== undefined).reduce(deepMerge, undefined);
 	},
 });
+const FILTER_TAB = new Function(`return ${/\nconst SECLAB_AUTHORITY = (\/.*\/\w*);/.exec(readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8'))![1]};`)() as RegExp;
 const TAB = 'seclab+tab1';
 const sees = (v: unknown) => JSON.stringify(v ?? null).includes(HOST);
 const uri = (scheme: string, authority: string, p: string) => ({ scheme, authority, path: p, fsPath: p });
@@ -202,6 +208,8 @@ interface Observed {
 	descriptions: string[];
 	detachSent: unknown[] | undefined;
 	hover: string;
+	folderCwd: unknown;
+	contributedWrite: number | undefined;
 	schemeWrites: Array<{ key: string; value: unknown; target: number | undefined }>;
 }
 
@@ -215,7 +223,8 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	const cfg = config(settings);
 	const workspace = WORKSPACES[kind](authority);
 	const Schemas = { file: 'file', vscodeUserData: 'vscode-userdata', vscodeRemote: 'vscode-remote' };
-	const seclabIsTabAuthority = (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a);
+	// The filter module's own test, from this tree.
+	const seclabIsTabAuthority = (a: unknown) => typeof a === 'string' && FILTER_TAB.test(a);
 
 	// RemoteTerminalChannelClient.createProcess
 	const createProcess = method(src.channel, 'createProcess', {
@@ -248,7 +257,12 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		_labelService: { getWorkspaceLabel: () => kind === 'hostFile' ? HOST : 'w' },
 		_channel: { call: async (_c: string, args: Observed['createProcess']) => { sent = args; return {}; } },
 		_seclabWorkspaceId: seclabWorkspaceId,
-	}, { executable: '/bin/sh' }, terminalConfig, hostFolder.uri, { environmentVariableCollections: undefined, workspaceFolder: hostFolder }, false, 80, 24, '11', 3);
+	}, { executable: '/bin/sh' }, terminalConfig, hostFolder.uri, {
+		environmentVariableCollections: undefined, workspaceFolder: hostFolder,
+		// As upstream's process manager builds them: the merged values, the host user's included.
+		shellIntegration: { enabled: cfg.getValue('terminal.integrated.shellIntegration.enabled'), suggestEnabled: cfg.getValue('terminal.integrated.suggest.enabled'), nonce: 'n' },
+		windowsUseConptyDll: cfg.getValue('terminal.integrated.windowsUseConptyDll'),
+	}, false, 80, 24, '11', 3);
 
 	// TerminalProfileService._detectProfiles
 	const detect = method(src.profiles, '_detectProfiles', {
@@ -403,7 +417,8 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		StorageScope: { APPLICATION: -1 }, StorageTarget: { USER: 0 }, TerminalStorageKeys: { TabsShowDetailed: 'k' },
 	};
 	const getShellProcessTooltip = method(src.tooltip, 'getShellProcessTooltip', tooltipDeps)!;
-	const term = { remoteAuthority: authority, title: `bash ${IMG}`, processId: 7, statusList: { statuses: [] }, shellLaunchConfig: { executable: `/bin/sh${IMG}`, args: [IMG] } };
+	// R5-24: a status whose text is a launch error the tab's server sent, and an icon id it chose.
+	const term = { remoteAuthority: authority, title: `bash ${IMG}`, processId: 7, statusList: { statuses: [{ id: 's', tooltip: `exit ${IMG}`, icon: { id: `x) ${IMG} $(y` } }] }, shellLaunchConfig: { executable: `/bin/sh${IMG}`, args: [IMG] } };
 	// Its return type is an object literal, which the slicer would take for the body.
 	const tooltipSrc = src.tooltip.replace('): { content: MarkdownString; actions: IHoverAction[] } {', ') {');
 	const hover = (method(tooltipSrc, 'getInstanceHoverInfo', { ...tooltipDeps, getShellProcessTooltip })!(term, { get: () => '1', store: () => { } }) as { content: { value: string } }).content.value;
@@ -424,11 +439,24 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		_instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: (id: string) => id === 'env' ? { remoteAuthority: authority } : { getWorkspace: () => workspace } }) },
 	}, 'tabchosen', { config: { allowedLinkSchemes: cfg.getValue('terminal.integrated.allowedLinkSchemes') } }, () => { });
 
+	// R5-22: a new terminal's cwd for a folder, as the window resolves it before the launch.
+	const folderCwd = ((await method(src.actions, 'resolveWorkspaceFolderCwd', {
+		TerminalSettingId: { Cwd: 'terminal.integrated.cwd' }, isString: (v: unknown) => typeof v === 'string', Schemas, seclabIsTabWindow: h.seclabIsTabWindow,
+		isAbsolute: (p: string) => p.startsWith('/'), ConfigurationResolverExpression: { VARIABLE_LHS: '${' },
+		URI: { from: (u: object) => u, joinPath: (u: { path: string }, p: string) => ({ ...u, path: `${u.path}/${p}` }) },
+	})!(workspace.folders[0], cfg, { resolveAsync: async (_f: unknown, v: string) => v })) as { cwd: unknown }).cwd;
+	// R5-25: an extension registering a contributed profile from a tab window.
+	let contributedWrite: number | undefined;
+	await method(src.profiles, 'registerContributedProfile', { ConfigurationTarget, TerminalSettingPrefix: { Profiles: 'terminal.integrated.profiles.' }, seclabIsTabWindow: h.seclabIsTabWindow })!.call({
+		getPlatformKey: async () => 'linux', _environmentService: { remoteAuthority: authority },
+		_configurationService: { getValue: () => ({}), updateValue: async (_k: string, _v: unknown, target: number) => { contributedWrite = target; } },
+	}, { extensionIdentifier: 'tab.ext', id: 'p', title: 'p', options: {} });
+
 	assert.ok(sent, 'createProcess sent nothing');
 	return {
 		createProcess: sent!, getProfiles, automation, agentHost, collections: [...merged.collections.keys()].sort(), localDefaultProfile,
 		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection,
-		profileWrites, descriptions, detachSent, hover, schemeWrites,
+		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, schemeWrites,
 	};
 }
 
@@ -450,6 +478,16 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 		if (sees(c[k])) {
 			out.push(k);
 		}
+	}
+	const opts = o.createProcess.options as { shellIntegration?: { enabled?: unknown; suggestEnabled?: unknown }; windowsUseConptyDll?: unknown } | undefined;
+	if (c['terminal.integrated.detectLocale'] === 'on' || opts?.shellIntegration?.enabled === false || opts?.shellIntegration?.suggestEnabled === true || opts?.windowsUseConptyDll === true) {
+		out.push('host process switches');
+	}
+	if (sees(o.folderCwd)) {
+		out.push('host cwd in a folder\'s launch');
+	}
+	if (o.contributedWrite === 2) {
+		out.push('contributed profile written to host settings');
 	}
 	if (sees(o.getProfiles[0])) {
 		out.push('getProfiles profiles');
@@ -527,7 +565,7 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 	return out;
 }
 const EVERY_LEAK = ['active file: host file', 'active file: another tab file', 'terminal.integrated.env.linux', 'terminal.integrated.env.osx', 'terminal.integrated.env.windows',
-	'terminal.integrated.cwd', 'getProfiles profiles', 'getProfiles default profile', 'automation profile', 'agent host profile', 'host collection', 'another host collection',
+	'terminal.integrated.cwd', 'host process switches', 'host cwd in a folder\'s launch', 'contributed profile written to host settings', 'getProfiles profiles', 'getProfiles default profile', 'automation profile', 'agent host profile', 'host collection', 'another host collection',
 	'tab profile to the host extension host', 'tab deletes a host collection', 'tab collection to the host extension host',
 	'host default profile picks a REH profile', 'host default profile picks a contributed profile', 'foreign profile icon', 'automation profile without a connection',
 	'REH profile written to host settings', 'markdown image in a profile description', 'foreign workspace id on detach',
@@ -554,6 +592,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 	}],
 	['a tab gets none of the host terminal settings', async () => {
 		assert.deepEqual(await leaks(sources(true), TAB), []);
+		// A tab authority in another case is the same tab, as the filter module's test has it (R5-21).
+		assert.deepEqual(await leaks(sources(true), TAB.replace('seclab', 'SecLab')), []);
+		const filter = readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
+		const filterTest = /\nconst SECLAB_AUTHORITY = (\/.*\/\w*);/.exec(filter)![1];
+		const ours = /\/\^seclab\\\+\/\w*/.exec(sources(true).helper)![0];
+		assert.equal(ours, filterTest, 'the terminal helper\'s tab test is the filter module\'s');
 	}],
 	['a tab keeps its own terminal settings and the defaults', async () => {
 		const o = await observe(sources(true), TAB, remoteFile(TAB));
@@ -636,6 +680,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['tab profile writes extend the host profiles', mutant(OURS[4], '+		if (!tab) {\n+			return this._configurationService.getValue(key);', '+		if (true) {\n+			return this._configurationService.getValue(key);'), 'host profiles copied into the tab'],
 			['profile text as markdown', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return String(value);'), 'markdown image in a profile description'],
 			['profile text keeps links', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return escapeMarkdownSyntaxTokens(String(value));'), 'link or forged line in a profile description'],
+			['hover status as markdown', mutant(OURS[5], 'const text = (s: string) => seclabTab ? escapeUntrustedMarkdown(s) : s;', 'const text = (s: string) => s;'), 'markdown image in the terminal hover'],
+			['process switches from the host', mutant(OURS[0], "windowsUseConptyDll: tab<boolean>('terminal.integrated.windowsUseConptyDll') === true,", "windowsUseConptyDll: options.windowsUseConptyDll,"), 'host process switches'],
+			['folder cwd from the host', mutant(OURS[0], "? seclabCwd.workspaceFolderValue ?? seclabCwd.userRemoteValue ?? seclabCwd.defaultValue", "? configurationService.getValue(TerminalSettingId.Cwd, { resource: folder.uri })"), 'host cwd in a folder\'s launch'],
+			['contributed profile to host settings', mutant(OURS[4], '? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER);', '? ConfigurationTarget.USER : ConfigurationTarget.USER);'), 'contributed profile written to host settings'],
 			['hover title as markdown', mutant(OURS[5], '? escapeUntrustedMarkdown(instance.title) : instance.title', '? instance.title : instance.title'), 'markdown image in the terminal hover'],
 			['link scheme to the host', mutant(OURS[4], '[...(Array.isArray(own) ? own : []), scheme], ConfigurationTarget.USER_REMOTE);', '[...(Array.isArray(own) ? own : []), scheme]);'), 'link scheme allowed in host settings'],
 			['link schemes from the merged list', mutant(OURS[4], '+									if (tab && seclabIsTabWindow(tab)) {', '+									if (false) {'), 'host link schemes in the written list'],
