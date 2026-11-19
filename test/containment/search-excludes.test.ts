@@ -321,7 +321,7 @@ async function leaks(patch: string): Promise<string[]> {
 }
 
 const cases: Array<[string, () => Promise<void> | void]> = [
-	['the baseline sends the host user\'s patterns to the tab every way', async () => {
+	["the baseline sends the host user's patterns to the tab every way", async () => {
 		assert.deepEqual(await leaks(''), [
 			'a search query QueryBuilder sends the tab carries host excludes',
 			'a search query built by hand carries host excludes',
@@ -330,7 +330,7 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 			'the tab\'s extension host receives the host user\'s path patterns',
 		]);
 	}],
-	['a tab gets none of the host user\'s patterns and keeps its own', async () => {
+	["a tab gets none of the host user's patterns and keeps its own", async () => {
 		// On a tree without 0060 this reports every leak.
 		assert.deepEqual(await leaks(P0060), []);
 		// The guard reads the files patches create as well as upstream's.
@@ -345,7 +345,7 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 		assert.deepEqual(snapshotKeys(P0060, HOST_LAYER, false), [...SNAPSHOT_KEYS, 'editor.tabSize'].sort());
 		assert.deepEqual(snapshotKeys(P0060, HOST_LAYER, true), ['editor.tabSize']);
 	}],
-	['a caller\'s own patterns reach the tab untouched, so a query says nothing about the host\'s', async () => {
+	["a caller's own patterns reach the tab untouched, so a query says nothing about the host's", async () => {
 		// Where every query leaves for the tab, nothing is removed (round 2's key strip was an oracle).
 		const q = { folderQueries: [{ folder: tab('/work/ws'), excludePattern: [{ pattern: { [HOST_FILES]: true } }] }], excludePattern: { [HOST_SEARCH]: true } };
 		assert.deepEqual(await sentQuery(P0060, structuredClone(q)), q);
@@ -354,7 +354,7 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 		assert.ok(folderQueryExcludes(P0060, tab('/work/ws'), { [HOST_FILES]: true }).includes(HOST_FILES));
 		assert.ok(!folderQueryExcludes(P0060, tab('/work/ws')).includes(HOST_FILES));
 	}],
-	['a window that is not a tab\'s keeps upstream\'s settings', async () => {
+	["a window that is not a tab's keeps upstream's settings", async () => {
 		const upstream = folderQueryExcludes('', { scheme: 'file', authority: '', path: '/work/ws' });
 		assert.ok(upstream.includes(HOST_FILES) && upstream.includes(HOST_SEARCH));
 		assert.deepEqual(folderQueryExcludes(P0060, { scheme: 'file', authority: '', path: '/work/ws' }), upstream);
@@ -362,7 +362,7 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 		// An authority in another case is still the tab's (review SRCH3-8).
 		assert.ok(!folderQueryExcludes(P0060, { scheme: 'vscode-remote', authority: 'SECLAB+tab1', path: '/work/ws' }).includes(HOST_FILES));
 	}],
-	['each mutant of 0060 brings its leak back', async () => {
+	["each mutant of 0060 brings its leak back", async () => {
 		const mutants: Array<[string, string, string, string]> = [
 			['QueryBuilder unwrapped', '+		const folderConfig = seclabWithTabExcludes(this.configurationService, folderUri, this.configurationService.getValue<ISearchConfiguration>({ resource: folderUri }));', '+		const folderConfig = this.configurationService.getValue<ISearchConfiguration>({ resource: folderUri });', 'a search query QueryBuilder sends the tab carries host excludes'],
 			['chat picker unwrapped', '+	const searchExcludePattern = getExcludes(seclabWithTabExcludes(configurationService, workspace, configurationService.getValue<ISearchConfiguration>({ resource: workspace }))) || {};', '+	const searchExcludePattern = getExcludes(configurationService.getValue<ISearchConfiguration>({ resource: workspace })) || {};', 'a search query built by hand carries host excludes'],
