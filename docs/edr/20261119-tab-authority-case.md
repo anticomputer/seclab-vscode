@@ -1,4 +1,4 @@
-# Every tab test agrees with the RPC filter's, in any case
+# Every tab test in the patch series agrees with the RPC filter's, in any case
 
 - **Date:** 2026-11-19
 - **Status:** accepted.
@@ -25,7 +25,10 @@ window's authority, so this was a consistency gap, not a reachable escape.
   negated.
 - `test/containment/filter-module.test.ts` checks every patch in `patches/series`: an added line that
   tests the authority or remote name case-sensitively fails the suite, unless a later patch in the
-  series removes that line (0034's, which 0053 rewrites).
+  series removes that line from the same file (0034's, which 0053 rewrites). It reads each line
+  for `seclab` regex literals (anchored and case-insensitive only), `seclab+`/`seclab` strings and
+  the constants a file declares to hold them (compared only by a lower-cased `startsWith`, or a
+  `startsWith` on a variable the file lower-cased), and allows building, slicing and logging.
 
 ## Proof
 - **Unit:** the series-wide guard, and mixed-case cases in the channel-guard, host-terminal and
@@ -34,4 +37,10 @@ window's authority, so this was a consistency gap, not a reachable escape.
 - **Build:** the changed files typecheck with the whole series applied.
 
 ## Consequences
-- A new tab test must be case-insensitive, or the rpc-filter suite fails.
+- A new tab test in a patch must be case-insensitive, or the rpc-filter suite fails, for the
+  shapes the guard reads. It reads one line at a time: a call and its argument on different lines,
+  object keys and computed comparisons are beyond it, and review still covers those.
+- Outside the series, the Tab Manager (`extensions/seclab-tab-manager`) tests the authority
+  case-sensitively on purpose: its resolver refuses any authority but `seclab+<tab id>` in lower
+  case, so a mixed-case window never connects, and its status bar and current-tab lookup only ever
+  see the authorities it resolved.

@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 101 | 307 | 477 | 62 | 961 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 199 | 82 | 349 |
+| fixed-untested | 0 | 5 | 63 | 202 | 82 | 352 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 118 | 405 | 776 | 209 | 1526 |
+| **all** | 18 | 118 | 405 | 779 | 209 | 1529 |
 
 ## Baseline: open high and critical findings
 
@@ -516,6 +516,9 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-4** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The extension-host scan could read an empty scan as containment, and its control canary was token-shaped, so the tab's secret gate refused the workspace. | A probe correction, shown by both runtime runs; nothing further to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-6** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The suite didn't record collections, options or the active file, nor the application and policy layers. | A test correction; nothing to test. |
 | [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-1** | low | fixed-untested | patches: tab authority tests | The series-wide guard matched a short list of shapes, stripped \`//\` inside strings, excused a line removed from any file, and read \`patches/series\` differently from the build. | A test correction; nothing to test. |
+| [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-2** | low | fixed-untested | patches: tab authority tests | The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively. | A record or test correction; nothing to test. |
+| [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-3** | low | fixed-untested | patches: tab authority tests | The guard missed a prefix held in a differently named constant, \`case\` labels, \`new RegExp\`, regexes after \`=&gt;\` or \`\[\`, array membership and an upper-case literal. | A record or test correction; nothing to test. |
+| [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-4** | low | fixed-untested | patches: tab authority tests | The guard flagged correct code: slicing by the prefix's length, a startsWith on a variable lowered earlier, a trailing block comment, non-authority regexes, string building and logging. | A record or test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-1** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against. | A build correction, shown by patch-build's typecheck of upstream's own tests. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-2** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The runtime harness was outside the harness-hygiene lint. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-3** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
@@ -2665,6 +2668,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
 | TA-1 | low | fixed-untested | The series-wide guard matched a short list of shapes, stripped \`//\` inside strings, excused a line removed from any file, and read \`patches/series\` differently from the build. | A test correction; nothing to test. |
+| TA-2 | low | fixed-untested | The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively. | A record or test correction; nothing to test. |
+| TA-3 | low | fixed-untested | The guard missed a prefix held in a differently named constant, \`case\` labels, \`new RegExp\`, regexes after \`=&gt;\` or \`\[\`, array membership and an upper-case literal. | A record or test correction; nothing to test. |
+| TA-4 | low | fixed-untested | The guard flagged correct code: slicing by the prefix's length, a startsWith on a variable lowered earlier, a trailing block comment, non-authority regexes, string building and logging. | A record or test correction; nothing to test. |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 
