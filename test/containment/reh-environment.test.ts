@@ -983,6 +983,12 @@ async function leaks(b: Build): Promise<string[]> {
 	if (uninstallDropsHost(b, TAB)) {
 		out.push('an uninstall the tab reports drops a running host extension');
 	}
+	{
+		const r = await management(b, TAB, [{ identifier: { id: 'tab.own' }, operation: 1, source: { identifier: { id: 'tab.own' }, name: 'own', assets: {} } }], [], 'installGalleryExtensions');
+		if ((r.reply as Array<{ source?: unknown }> | undefined)?.[0]?.source !== undefined) {
+			out.push('a gallery entry in an install reply reaches the window');
+		}
+	}
 	if (updateDropsHost(b, TAB)) {
 		out.push('an update the tab reports drops a running host extension');
 	}
@@ -1067,7 +1073,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here', 'a tab extension claiming a host dependency turns the host extension off', 'an uninstall the tab reports drops a running host extension', 'an update the tab reports drops a running host extension',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here', 'a tab extension claiming a host dependency turns the host extension off', 'an uninstall the tab reports drops a running host extension', 'a gallery entry in an install reply reaches the window', 'an update the tab reports drops a running host extension',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
@@ -1244,6 +1250,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['locations may be left out', { patch: ["'localHistoryHome', 'userHome'].some(k => !d[k] || typeof d[k] !== 'object')", "'localHistoryHome', 'userHome'].some(() => false)"] }, 'environment: a host fallback: localHistoryHome left out'],
 			['local history falls back', { patch: ["+		if (!historyHome && seclabIsTabAuthority(this.environmentService.remoteAuthority)) {", "+		if (false) {"] }, 'local history falls back to the host'],
 			['host extensions depend on the tab', { patch: ["(!this.seclabOnTab(e) || this.seclabOnTab(extension)) &&", ""] }, 'a tab extension claiming a host dependency turns the host extension off'],
+			['gallery entries in install replies', { filter: [": command === 'installGalleryExtensions' ? seclabNoGallerySource(await checked.call<T>(command, arg, token)) as T", ": command === 'installGalleryExtensions' ? await checked.call<T>(command, arg, token)"] }, 'a gallery entry in an install reply reaches the window'],
 			['tab updates drop host extensions', { patch: ["new DeltaExtensionsQueueItem(extensions, seclabIsTabAuthority(this._environmentService.remoteAuthority) ? updated : toRemove)", "new DeltaExtensionsQueueItem(extensions, toRemove)"] }, 'an update the tab reports drops a running host extension'],
 			['tab uninstalls drop host extensions', { patch: ["event.server.id !== 'local' && running &&", "false &&"] }, 'an uninstall the tab reports drops a running host extension'],
 			['host extensions take the workspace enablement', { patch: ["enablementState = this.seclabOnTab(extension) ? this._getUserEnablementState", "enablementState = true ? this._getUserEnablementState"] }, 'a workspace entry under a host id changes a host extension here'],
