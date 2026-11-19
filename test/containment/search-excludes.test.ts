@@ -89,6 +89,9 @@ function evaluate<T>(code: string, result: string, deps: Record<string, unknown>
 	return new Function(...Object.keys(deps), `return ${js}();`)(...Object.values(deps));
 }
 
+// The filter module's own tab test, from this tree (it compares case-insensitively since round 4).
+const SECLAB_AUTHORITY = new Function(`return ${/\nconst SECLAB_AUTHORITY = (\/.*\/\w*);/.exec(readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8'))![1]};`)() as RegExp;
+const seclabIsTabAuthority = (a: string) => typeof a === 'string' && SECLAB_AUTHORITY.test(a);
 const TAB = 'seclab+tab1';
 const tab = (path: string) => ({ scheme: 'vscode-remote', authority: TAB, path });
 const HOST_FILES = '**/seclabcanary_hx1.txt';
@@ -125,7 +128,7 @@ function helpers(patch: string): Record<string, unknown> {
 	const src = source(SETTINGS, patch);
 	const names = src === undefined ? [] : [...src.matchAll(/\nexport function (\w+)/g)].map(m => m[1]);
 	return src === undefined ? {} : evaluate(moduleBody(src), `{ ${names.join(', ')} }`,
-		{ Schemas: { vscodeRemote: 'vscode-remote' }, seclabIsTabAuthority: (a: string) => /^seclab\+/.test(a) });
+		{ Schemas: { vscodeRemote: 'vscode-remote' }, seclabIsTabAuthority });
 }
 
 const getExcludes = () => evaluate<(c: unknown, s?: boolean) => Record<string, unknown> | undefined>(asFunction(slice(readFileSync(join(SRC!, 'workbench/services/search/common/search.ts'), 'utf8'), /\nexport function getExcludes\(/)!.replace(/^export /, '')), 'getExcludes',
@@ -140,7 +143,7 @@ function folderQueryExcludes(patch: string, folder = tab('/work/ws'), callerPatt
 	for (const name of ['getExcludesForFolder', 'seclabFolderConfig']) {
 		const m = slice(query, new RegExp(`\\n\\tprivate ${name}\\(`));
 		if (m) {
-			self[name] = evaluate<(...a: unknown[]) => unknown>(asFunction(m), name, { ...deps, Schemas: { vscodeRemote: 'vscode-remote' }, seclabIsTabAuthority: (a: string) => /^seclab\+/.test(a) }).bind(self);
+			self[name] = evaluate<(...a: unknown[]) => unknown>(asFunction(m), name, { ...deps, Schemas: { vscodeRemote: 'vscode-remote' }, seclabIsTabAuthority }).bind(self);
 		}
 	}
 	const root = evaluate<(...a: unknown[]) => { excludePattern: Array<{ pattern: Record<string, unknown> }> }>(asFunction(slice(query, /\n\tprivate getFolderQueryForRoot\(/)!), 'getFolderQueryForRoot', deps);
@@ -241,7 +244,6 @@ const ALL_FILES = (readdirSync(SRC!, { recursive: true }) as string[]).filter(f 
  */
 const LOCAL_ONLY: Record<string, string> = {
 	'workbench/services/history/browser/historyService.ts': 'filters the window\'s own history list; nothing is sent',
-	'sessions/contrib/editor/browser/emptyFileEditorSearch.ts': 'parses the pattern to filter locally; nothing is sent',
 };
 /** Readers of `watcherExclude` other than WorkspaceWatcher, with why none sends a host value to a tab. */
 const WATCHER_READERS: Record<string, string> = {
@@ -252,7 +254,10 @@ const WATCHER_READERS: Record<string, string> = {
 	'workbench/contrib/files/browser/files.contribution.ts': 'the setting\'s registration',
 	'workbench/contrib/preferences/browser/settingsTreeModels.ts': 'the Settings editor, in the window',
 };
-const IMPORTS_GET_EXCLUDES = /import \{[^}]*\bgetExcludes\b[^}]*\} from '(?:\.\/|[^']*\/search\/common\/)search\.js'/;
+// Any import of search's module, in any shape, and a call of `getExcludes` (bare or through a namespace;
+// `x.getExcludes()` with no argument is another API).
+const IMPORTS_SEARCH = /from '(?:\.\/|[^']*\/services\/search\/common\/)search\.js'/;
+const CALLS_GET_EXCLUDES = /(?<![\w])(?:\w+\.)?getExcludes\((?!\))/;
 const WRAPPED = /seclabWithTabExcludes\((?:this\.)?(\w+), ([\w.]+), (?:this\.)?\1\.getValue<ISearchConfiguration>\(\{ resource: \2 \}\)\)/g;
 
 /** Files that build a tab-bound query's or watch request's excludes from settings without 0060's helper. */
@@ -260,8 +265,10 @@ function unwrappedCalls(patch: string): string[] {
 	const out: string[] = [];
 	for (const f of ALL_FILES) {
 		const upstream = readFileSync(join(SRC!, f), 'utf8');
-		if (IMPORTS_GET_EXCLUDES.test(upstream) && !LOCAL_ONLY[f]) {
-			const src = source(f, patch) ?? '';
+		// The patched source, so a file a patch makes a caller is scanned too.
+		const patched = f.endsWith('search/common/search.ts') ? '' : (upstream.includes('getExcludes') || upstream.includes('watcherExclude') ? source(f, patch) ?? '' : '');
+		if (IMPORTS_SEARCH.test(patched) && CALLS_GET_EXCLUDES.test(patched) && !LOCAL_ONLY[f]) {
+			const src = patched;
 			const reads = src.split('getValue<ISearchConfiguration>({ resource').length - 1;
 			const wrapped = [...src.matchAll(WRAPPED)].length;
 			if (!reads || wrapped !== reads) {
@@ -343,6 +350,7 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 			['QueryBuilder unwrapped', '+		const folderConfig = seclabWithTabExcludes(this.configurationService, folderUri, this.configurationService.getValue<ISearchConfiguration>({ resource: folderUri }));', '+		const folderConfig = this.configurationService.getValue<ISearchConfiguration>({ resource: folderUri });', 'a search query QueryBuilder sends the tab carries host excludes'],
 			['chat picker unwrapped', '+	const searchExcludePattern = getExcludes(seclabWithTabExcludes(configurationService, workspace, configurationService.getValue<ISearchConfiguration>({ resource: workspace }))) || {};', '+	const searchExcludePattern = getExcludes(configurationService.getValue<ISearchConfiguration>({ resource: workspace })) || {};', 'a search query built by hand carries host excludes'],
 			['telemetry per workspace, not per folder', '+			const excludePattern = getExcludes(seclabWithTabExcludes(this._configurationService, folder.root, this._configurationService.getValue<ISearchConfiguration>({ resource: folder.root })));', '+			const excludePattern = getExcludes(seclabWithTabExcludes(this._configurationService, workspace.uri, this._configurationService.getValue<ISearchConfiguration>({ resource: folder.root })));', 'a search query built by hand carries host excludes'],
+			['empty-file search walk unwrapped', 'getExcludes(seclabWithTabExcludes(this.configurationService, folder.workingDirectory, this.configurationService.getValue<ISearchConfiguration>({ resource: folder.workingDirectory })))', 'getExcludes(this.configurationService.getValue<ISearchConfiguration>({ resource: folder.workingDirectory }))', 'a query builds its excludes from settings without 0060\'s helper'],
 			['explorer find unwrapped', '+		const searchExcludePattern = getExcludes(seclabWithTabExcludes(this.configurationService, root.resource, this.configurationService.getValue<ISearchConfiguration>({ resource: root.resource }))) || {};', '+		const searchExcludePattern = getExcludes(this.configurationService.getValue<ISearchConfiguration>({ resource: root.resource })) || {};', 'a query builds its excludes from settings without 0060\'s helper'],
 			['own layers take the host user\'s', '+	const own = [i.defaultValue, i.userRemoteValue, i.workspaceFolderValue]', '+	const own = [i.defaultValue, i.userLocalValue, i.userRemoteValue, i.workspaceFolderValue]', 'a search query QueryBuilder sends the tab carries host excludes'],
 			['own layers take a workspace file\'s', '+	const own = [i.defaultValue, i.userRemoteValue, i.workspaceFolderValue]', '+	const own = [i.defaultValue, i.userRemoteValue, i.workspaceValue, i.workspaceFolderValue]', 'a search query QueryBuilder sends the tab carries host excludes'],
