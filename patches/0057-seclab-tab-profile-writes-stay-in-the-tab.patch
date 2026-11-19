@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:59:40
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:59:40
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-19 02:46:29
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-19 02:46:29
 @@ -20,6 +20,9 @@
  import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
  import { hasKey, isString } from '../../../../base/common/types.js';
@@ -103,8 +103,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.t
  			onKeyMods: mods => keyMods = mods
  		};
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:40
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:40
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-19 02:46:29
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-19 02:46:29
 @@ -259,7 +259,8 @@
  
  	async registerContributedProfile(args: IRegisterContributedProfileArgs): Promise<void> {
@@ -127,8 +127,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts 
  	}
  
 diff -ruN a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts
---- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:59:40
-+++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:59:40
+--- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-19 02:46:29
++++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-19 02:46:29
 @@ -34,6 +34,10 @@
  import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
  import type { IHoverAction } from '../../../../../base/browser/ui/hover/hover.js';
@@ -136,11 +136,26 @@ diff -ruN a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkM
 +import { ConfigurationTarget } from '../../../../../platform/configuration/common/configuration.js';
 +import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 +import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
-+import { seclabIsTabWindow, seclabTabSetting } from '../../../terminal/common/seclabTabTerminalSettings.js';
++import { seclabIsTabWindow, seclabTabSetting, seclabWorkspaceInTab } from '../../../terminal/common/seclabTabTerminalSettings.js';
  import { isString } from '../../../../../base/common/types.js';
  
  export type XtermLinkMatcherHandler = (event: MouseEvent | undefined, link: string) => Promise<void>;
-@@ -130,11 +134,21 @@
+@@ -124,17 +128,34 @@
+ 					throw new Error(`Could not find scheme in link "${text}"`);
+ 				}
+ 				const scheme = text.substring(0, colonIndex);
+-				if (terminalConfigurationService.config.allowedLinkSchemes.indexOf(scheme) === -1) {
++				// seclab: in a tab window the tab's own list decides, so a scheme only the host user
++				// allowed still prompts (patch 0057, review PR70-2).
++				const key = `terminal.integrated.allowedLinkSchemes`;
++				const seclabWindow = this._instantiationService.invokeFunction(a => a.get(IWorkbenchEnvironmentService).remoteAuthority);
++				const seclabTab = seclabWindow && seclabIsTabWindow(seclabWindow) ? seclabWindow : undefined;
++				const seclabWorkspace = this._instantiationService.invokeFunction(a => a.get(IWorkspaceContextService)).getWorkspace();
++				const seclabOwn = seclabTab ? seclabTabSetting<unknown>(this._configurationService, seclabWorkspace, seclabTab, key) : undefined;
++				const allowed: string[] = seclabTab ? (Array.isArray(seclabOwn) ? seclabOwn : []) : terminalConfigurationService.config.allowedLinkSchemes;
++				if (allowed.indexOf(scheme) === -1) {
+ 					const userAllowed = await new Promise<boolean>((resolve) => {
+ 						notificationService.prompt(Severity.Warning, nls.localize('scheme', 'Opening URIs can be insecure, do you want to allow opening links with the scheme {0}?', scheme), [
  							{
  								label: nls.localize('allow', 'Allow {0}', scheme),
  								run: () => {
@@ -149,14 +164,13 @@ diff -ruN a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkM
 -										scheme
 -									];
 -									this._configurationService.updateValue(`terminal.integrated.allowedLinkSchemes`, allowedLinkSchemes);
-+									// seclab: in a tab window the scheme is the tab's to choose, so it is
-+									// allowed in the tab's own settings, extending the tab's own list, never
-+									// the host user's (patch 0057, review R5-19).
-+									const key = `terminal.integrated.allowedLinkSchemes`;
-+									const tab = this._instantiationService.invokeFunction(a => a.get(IWorkbenchEnvironmentService).remoteAuthority);
-+									if (tab && seclabIsTabWindow(tab)) {
-+										const own = seclabTabSetting<unknown>(this._configurationService, this._instantiationService.invokeFunction(a => a.get(IWorkspaceContextService)).getWorkspace(), tab, key);
-+										this._configurationService.updateValue(key, [...(Array.isArray(own) ? own : []), scheme], ConfigurationTarget.USER_REMOTE);
++									// seclab: in a tab window the scheme is allowed in the tab's own settings,
++									// extending the tab's own list, never the host user's (patch 0057, review
++									// R5-19): its workspace settings if they set the list, as those win, else its
++									// remote user settings (review PR70-3).
++									if (seclabTab) {
++										const inWorkspace = seclabWorkspaceInTab(seclabWorkspace, seclabTab) && this._configurationService.inspect(key).workspaceValue !== undefined;
++										this._configurationService.updateValue(key, [...allowed, scheme], inWorkspace ? ConfigurationTarget.WORKSPACE : ConfigurationTarget.USER_REMOTE);
 +									} else {
 +										const allowedLinkSchemes = [
 +											...terminalConfigurationService.config.allowedLinkSchemes,

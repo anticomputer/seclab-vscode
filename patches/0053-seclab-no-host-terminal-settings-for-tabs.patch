@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/workbench/api/browser/mainThreadTerminalService.ts
---- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-19 02:46:28
 @@ -26,6 +26,7 @@
  import { TerminalCapability } from '../../../platform/terminal/common/capabilities/capabilities.js';
  import { ITerminalCompletionService } from '../../contrib/terminalContrib/suggest/browser/terminalCompletionService.js';
@@ -22,8 +22,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/w
  		const defaultAutomationProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os, allowAutomationShell: true });
  		this._proxy.$acceptDefaultProfile(...await Promise.all([defaultProfile, defaultAutomationProfile]));
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts b/src/vs/workbench/contrib/terminal/browser/terminalActions.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-19 02:46:28
 @@ -64,6 +64,7 @@
  import { TerminalTabList } from './terminalTabsList.js';
  import { ResourceContextKey } from '../../../common/contextkeys.js';
@@ -47,8 +47,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts b/src/v
  		return { folder, cwd: folder.uri, isAbsolute: false, isOverridden: false };
  	}
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-19 02:46:28
 @@ -24,6 +24,8 @@
  import { Disposable } from '../../../../base/common/lifecycle.js';
  import { isString, type SingleOrMany } from '../../../../base/common/types.js';
@@ -142,8 +142,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverSer
  	}
  }
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-19 02:46:28
 @@ -24,6 +24,8 @@
  import { IExtensionService } from '../../../services/extensions/common/extensions.js';
  import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
@@ -225,8 +225,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts 
  			return contributedDefaultProfile;
  		}
 diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
---- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-19 02:46:28
 @@ -26,6 +26,7 @@
  import type * as performance from '../../../../../base/common/performance.js';
  import { RemoteTerminalChannelEvent, RemoteTerminalChannelRequest } from './terminal.js';
@@ -272,7 +272,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  		} catch (err) {
 diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts
 --- a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	2026-11-18 23:59:39
++++ b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	2026-11-19 02:46:28
 @@ -0,0 +1,73 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: the terminal settings a `seclab+` window sends its tab (patch 0053, reviews DOCSYNC-R5,
@@ -348,8 +348,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.t
 +	return copy(layers.filter(l => l !== undefined).reduce(merge, undefined)) as T | undefined;
 +}
 diff -ruN a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts
---- a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 23:59:39
-+++ b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 23:59:39
+--- a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-19 02:46:28
++++ b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-19 02:46:28
 @@ -13,6 +13,7 @@
  import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
  import { IHistoryService } from '../../../services/history/common/history.js';
