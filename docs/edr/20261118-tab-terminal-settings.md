@@ -86,6 +86,9 @@ own data. 0054 closes the path for any future host-side setter and is shown at u
   - Patched: branch `6fadc8f7`, run 44457923287, every registered REH probe judged: 30/30 and
     14/14. Neither probe found a host canary, the control canary was found, and the picked profile
     went to the tab's own settings. Both runs tore down clean.
+  - Re-run on the same build with the scan counting what it couldn't read (PR #70 review): 30/30
+    and 14/14, 0 unread regions of 435 MB, clean teardown. A patched judgement now needs every
+    writable region read.
   - The commits after `6fadc8f7` change only the tab test's case handling, the contributed
     profile's base, the helper's copy, where `inheritEnv` is read and the tests, each shown by the unit suite.
 
