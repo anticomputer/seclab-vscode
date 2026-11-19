@@ -22492,6 +22492,17 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A record or test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-authority-case.md",
+			"anchor": "PR72-1",
+			"round": "PR #72 review",
+			"severity": "low",
+			"summary": "The guard accepted a lower-cased startsWith against an upper-case prefix, which never matches a tab, and an upper-case prefix constant.",
+			"component": "patches: tab authority tests",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
