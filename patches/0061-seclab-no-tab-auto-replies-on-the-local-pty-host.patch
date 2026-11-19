@@ -1,0 +1,54 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts
+--- a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-19 01:14:59
++++ b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-19 01:14:59
+@@ -32,6 +32,9 @@
+ import { getWorkspaceForTerminal } from '../common/terminalEnvironment.js';
+ import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
+ import { IStatusbarService } from '../../../services/statusbar/browser/statusbar.js';
++import { seclabOnTab, seclabTabOwnValue } from '../../../services/configuration/common/seclabTabSettings.js';
++import { URI } from '../../../../base/common/uri.js';
++import { Schemas } from '../../../../base/common/network.js';
+ 
+ export class RemoteTerminalBackendContribution implements IWorkbenchContribution {
+ 	static ID = 'remoteTerminalBackend';
+@@ -382,6 +385,16 @@
+ 	}
+ 
+ 	installAutoReply(match: string, reply: string, ownerId: string): Promise<void> {
++		// seclab: a tab's server reads every pair it is given, so it gets only pairs from the tab's
++		// own settings, never the host user's (patch 0061, review R5-31).
++		if (seclabIsTabAuthority(this.remoteAuthority)) {
++			const authority = this.remoteAuthority!.toLowerCase();
++			const folder = this._workspaceContextService.getWorkspace().folders.find(f => seclabOnTab(f.uri) && f.uri.authority.toLowerCase() === authority)?.uri;
++			const own = seclabTabOwnValue<Record<string, unknown>>(this._configurationService, 'terminal.integrated.autoReplies', folder ?? URI.from({ scheme: Schemas.vscodeRemote, authority: this.remoteAuthority!, path: '/' }));
++			if (!own || typeof own !== 'object' || !Object.prototype.hasOwnProperty.call(own, match) || own[match] !== reply) {
++				return Promise.resolve();
++			}
++		}
+ 		return this._remoteTerminalChannel.installAutoReply(match, reply, ownerId);
+ 	}
+ 
+diff -ruN a/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts b/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts
+--- a/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts	2026-11-19 01:14:59
++++ b/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts	2026-11-19 01:14:59
+@@ -41,6 +41,7 @@
+ import { shouldUseEnvironmentVariableCollection } from '../../../../platform/terminal/common/terminalEnvironment.js';
+ import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+ import { serializeEnvironmentVariableCollections } from '../../../../platform/terminal/common/environmentVariableShared.js';
++import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
+ 
+ export class LocalTerminalBackendContribution implements IWorkbenchContribution {
+ 
+@@ -394,6 +395,12 @@
+ 	// #region Pty service contribution RPC calls
+ 
+ 	installAutoReply(match: string, reply: string, ownerId: string): Promise<void> {
++		// seclab: this pty host is shared by every window and applies each reply to all its
++		// terminals. A tab window's settings include those its tab's server serves, so a tab window
++		// installs none here; its own terminals run on its tab's backend (patch 0061, review R5-32).
++		if (seclabIsTabAuthority(this._environmentService.remoteAuthority)) {
++			return Promise.resolve();
++		}
+ 		return this._proxy.installAutoReply(match, reply, ownerId);
+ 	}
+ 	uninstallAllAutoReplies(ownerId: string): Promise<void> {
