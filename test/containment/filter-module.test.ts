@@ -153,7 +153,7 @@ function caseSensitiveTabTests(patches: Array<[string, string]>): string[] {
 const SERIES = seriesNames(readFileSync(join(REPO, 'patches', 'series'), 'utf8'))
 	.map(n => [n, readFileSync(join(REPO, 'patches', n), 'utf8')] as [string, string]);
 
-test('every seclab+ tab test the series ships is case-insensitive, as the filter\'s (SRCH3-14)', () => {
+test("every seclab+ tab test the series ships is case-insensitive, as the filter's (SRCH3-14)", () => {
 	assert.ok(F.seclabIsTabAuthority('SecLab+x') && F.seclabIsTabAuthority('SECLAB+x'), 'the filter\'s own test is case-insensitive');
 	const shipped = caseSensitiveTabTests(SERIES);
 	assert.equal(shipped.length, 0, `case-sensitive tab tests ship: ${shipped.join('; ')}`);
