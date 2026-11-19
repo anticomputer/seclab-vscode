@@ -28,3 +28,9 @@ mixed-case cases.
 | TA-2 | Low | records | The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively. | fixed | The EDR is scoped to the series, and records the Tab Manager's tests as deliberate: its resolver refuses a mixed-case authority, so no such window connects. | none |
 | TA-3 | Low | tests | The guard missed a prefix held in a differently named constant, `case` labels, `new RegExp`, regexes after `=>` or `[`, array membership and an upper-case literal. | fixed | It learns each file's prefix constants and reads those shapes; what a single line can't show (a call split across lines, object keys) is documented. | none |
 | TA-4 | Low | tests | The guard flagged correct code: slicing by the prefix's length, a startsWith on a variable lowered earlier, a trailing block comment, non-authority regexes, string building and logging. | fixed | It allows those. | none |
+
+## PR review (#72)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PR72-1 | Low | tests | The guard accepted a lower-cased startsWith against an upper-case prefix, which never matches a tab, and an upper-case prefix constant. | fixed | A compared literal and a prefix constant's value must be lower case. | none |

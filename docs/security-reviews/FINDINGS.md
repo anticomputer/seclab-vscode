@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 101 | 307 | 477 | 62 | 961 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 202 | 82 | 352 |
+| fixed-untested | 0 | 5 | 63 | 203 | 82 | 353 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 118 | 405 | 779 | 209 | 1529 |
+| **all** | 18 | 118 | 405 | 780 | 209 | 1530 |
 
 ## Baseline: open high and critical findings
 
@@ -515,6 +515,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-33** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-4** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The extension-host scan could read an empty scan as containment, and its control canary was token-shaped, so the tab's secret gate refused the workspace. | A probe correction, shown by both runtime runs; nothing further to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-6** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The suite didn't record collections, options or the active file, nor the application and policy layers. | A test correction; nothing to test. |
+| [20261119-tab-authority-case](20261119-tab-authority-case.md) **PR72-1** | low | fixed-untested | patches: tab authority tests | The guard accepted a lower-cased startsWith against an upper-case prefix, which never matches a tab, and an upper-case prefix constant. | A test correction; nothing to test. |
 | [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-1** | low | fixed-untested | patches: tab authority tests | The series-wide guard matched a short list of shapes, stripped \`//\` inside strings, excused a line removed from any file, and read \`patches/series\` differently from the build. | A test correction; nothing to test. |
 | [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-2** | low | fixed-untested | patches: tab authority tests | The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively. | A record or test correction; nothing to test. |
 | [20261119-tab-authority-case](20261119-tab-authority-case.md) **TA-3** | low | fixed-untested | patches: tab authority tests | The guard missed a prefix held in a differently named constant, \`case\` labels, \`new RegExp\`, regexes after \`=&gt;\` or \`\[\`, array membership and an upper-case literal. | A record or test correction; nothing to test. |
@@ -2671,6 +2672,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | TA-2 | low | fixed-untested | The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively. | A record or test correction; nothing to test. |
 | TA-3 | low | fixed-untested | The guard missed a prefix held in a differently named constant, \`case\` labels, \`new RegExp\`, regexes after \`=&gt;\` or \`\[\`, array membership and an upper-case literal. | A record or test correction; nothing to test. |
 | TA-4 | low | fixed-untested | The guard flagged correct code: slicing by the prefix's length, a startsWith on a variable lowered earlier, a trailing block comment, non-authority regexes, string building and logging. | A record or test correction; nothing to test. |
+| PR72-1 | low | fixed-untested | The guard accepted a lower-cased startsWith against an upper-case prefix, which never matches a tab, and an upper-case prefix constant. | A test correction; nothing to test. |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 
