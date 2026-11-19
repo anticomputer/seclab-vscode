@@ -13,7 +13,8 @@ main: a tab window installed auto replies, which the tab's server can set, on th
 every window shares, where they type into normal windows' local terminals. It lands here first, on
 its own. Round 1 of 0061 found no vulnerability and four correctness defects, all fixed. Round 2
 found the other direction on main, a medium (AR-5): the host user's pairs went to the tab's server.
-It is the terminal-settings review's R5-31, fixed here at the backend instead. Round 3: see below.
+It is the terminal-settings review's R5-31, fixed here at the backend instead. Round 3 found the
+gates sound and one test gap (AR-6), fixed. No high or critical remains.
 
 ## How the evidence was made
 The unit test (`test/containment/auto-replies.test.ts`) runs upstream's auto-reply contribution
@@ -32,3 +33,4 @@ main's containment build: the tab's reply was typed into a normal window's local
 | AR-3 | Low | tests | One check's detail carried container stderr uncapped. | fixed | Capped, as in the sibling harnesses. | none |
 | AR-4 | Low | tests | The harness recorded whether the local terminal ran cat but kept going if it didn't. | fixed | It types nothing unless the terminal is cat. | none |
 | AR-5 | Medium | terminal | A tab window installed the host user's auto-reply pairs on the tab's own backend, whose server reads them; the setting is restricted, so patch 0036 withholds it from the tab's extension host. | fixed | A tab's backend installs only pairs in the tab's own settings (0060's rule). | test/containment/auto-replies.test.ts "a tab window installs no auto reply on the shared local pty host" |
+| AR-6 | Low | tests | The unit test's settings stub ignored the resource, so which folder's settings the tab's backend counts as the tab's was untested: a gate reading a host folder's settings would have passed. | fixed | Folder settings by resource, a host folder listed first, a window with no tab folder, and a mutant for each part of the folder choice. | none |

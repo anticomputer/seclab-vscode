@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 99 | 292 | 460 | 61 | 926 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 193 | 81 | 342 |
+| fixed-untested | 0 | 5 | 63 | 194 | 81 | 343 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 11 | 14 | 8 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 116 | 392 | 754 | 208 | 1488 |
+| **all** | 18 | 116 | 392 | 755 | 208 | 1489 |
 
 ## Baseline: open high and critical findings
 
@@ -519,6 +519,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-2** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The runtime harness was outside the harness-hygiene lint. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-3** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-4** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The harness recorded whether the local terminal ran cat but kept going if it didn't. | A test correction; nothing to test. |
+| [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-6** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The unit test's settings stub ignored the resource, so which folder's settings the tab's backend counts as the tab's was untested: a gate reading a host folder's settings would have passed. | A test correction; nothing to test. |
 | [20261104-rpc-probes-increment](20261104-rpc-probes-increment.md) **PR-M4** | info | open | containment probes (raw RPC) | The raw-RPC test hook does not exist, so the two raw-RPC probes report ERROR. | No test hook provides the raw main-thread RPC handle; the probes remain ERROR and the identity-spoof surface is unmeasured. |
 | [20261104-supply-chain](20261104-supply-chain.md) **info** | info | fixed-untested | rpc-filter/tools/test.sh | \`--platform linux/arm64\` was pinned in the RPC filter's test.sh while CI runs on x86. | The flag is gone (multi-arch digest), but nothing asserts that no platform override returns. |
 | [20261104-write-back-engine](20261104-write-back-engine.md) **note#2** | info | deferred | RPC capability filter (M4) | Until the M4 RPC filter enforces, a rogue extension can invoke seclab.reviewChanges/confirmDeletes to pop dialogs (a click is still needed). | follow-up: RPC capability filter series (patches 0005-0011 / 0030-0034, \`rpc\` session): \`seclab.*\` must stay outside the filter's allowed set. Not on main: patches/series has only the reserved ranges, no filter patch. |
@@ -2627,6 +2628,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | AR-3 | low | fixed-untested | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
 | AR-4 | low | fixed-untested | The harness recorded whether the local terminal ran cat but kept going if it didn't. | A test correction; nothing to test. |
 | AR-5 | medium | fixed | A tab window installed the host user's auto-reply pairs on the tab's own backend, whose server reads them; the setting is restricted, so patch 0036 withholds it from the tab's extension host. | patch:1086dfa390637603bf9af595af03797ac06fe795 · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
+| AR-6 | low | fixed-untested | The unit test's settings stub ignored the resource, so which folder's settings the tab's backend counts as the tab's was untested: a gate reading a host folder's settings would have passed. | A test correction; nothing to test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
