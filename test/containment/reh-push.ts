@@ -1,7 +1,11 @@
 // Server-initiated pushes (patches 0030, 0031) and the remote agent-host dial (refused by
 // patch 0015's gate), proven in a real OCI tab of the containment test build, driven headlessly.
 //
-//   node test/containment/reh-push.ts baseline|patched <user-data-dir> --app <test app.app>
+//   node test/containment/reh-push.ts baseline|patched <user-data-dir> --app <test app.app> [--judge IDS]
+//
+// --judge IDS (comma-separated, a subset of the push probes): judge only these. For a baseline on a
+// build that already ships the earlier patches (main after 0030, 0031, 0034), judge the probes the
+// change under test addresses; the others are already denied there, and the patched run judges all.
 //
 // The tab image is seclab-tab-oci:test-containment, built from the same run's REH
 // (`./seclab fetch macos-containment RUN`, `./seclab image oci --test-variant containment`); the
@@ -53,6 +57,11 @@ const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-ma
 
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
+const JUDGED = argv.includes('--judge') ? argv[argv.indexOf('--judge') + 1].split(',').filter(Boolean) : PUSH_PROBES;
+if (!JUDGED.length || JUDGED.some(id => !PUSH_PROBES.includes(id))) {
+	console.error(`--judge takes push probes only: ${PUSH_PROBES.join(',')}`);
+	process.exit(2);
+}
 const appArg = argv[argv.indexOf('--app') + 1];
 if ((mode !== 'baseline' && mode !== 'patched') || !userDataArg || !argv.includes('--app') || !appArg) {
 	console.error('usage: reh-push.ts baseline|patched <user-data-dir> --app <test app.app>');
@@ -305,7 +314,7 @@ if (fs.existsSync(path.join(userData, 'logs'))) {
 const decisions = rpcDecisions(userData).map(d => d.detail ?? {});
 fs.writeFileSync(path.join(base, 'denials.jsonl'), decisions.filter(d => d.verdict === 'deny').map(d => JSON.stringify({ policyRef: d.ref })).join('\n') + '\n');
 const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
-	'--only', PUSH_PROBES.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],
+	'--only', JUDGED.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],
 { encoding: 'utf8', env: { ...process.env, SECLAB_PROBE_RUNDIR: base } });
 console.log(`${verdict.stdout}${verdict.stderr}`.trim());
 c('probes', verdict.status === 0, 'check-probes accepts the push probes', `exit ${verdict.status}`);
