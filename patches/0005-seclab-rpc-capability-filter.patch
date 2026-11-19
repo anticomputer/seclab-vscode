@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1664 @@
+@@ -0,0 +1,1667 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4989,7 +4989,10 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	}
 +	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', seclabUnrevivedManifest);
 +	return {
-+		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => (command === 'getManifest' ? channel : checked).call<T>(command, arg, token),
++		// `installGalleryExtensions` replies carry the same results as install events (round 19).
++		call: async <T>(command: string, arg?: unknown, token?: CancellationToken) => command === 'getManifest' ? channel.call<T>(command, arg, token)
++			: command === 'installGalleryExtensions' ? seclabNoGallerySource(await checked.call<T>(command, arg, token)) as T
++				: checked.call<T>(command, arg, token),
 +		listen: <T>(event: string, arg?: unknown): Event<T> => event === 'onInstallExtension' || event === 'onDidInstallExtensions'
 +			? (listener, thisArgs, disposables) => checked.listen<T>(event, arg)(e => listener.call(thisArgs, seclabNoGallerySource(e) as T), undefined, disposables)
 +			: checked.listen<T>(event, arg),
