@@ -192,8 +192,11 @@ test('malformed and oversized frames are dropped', () => {
 test('construction invariant: tab identities need a branded transport; opened then verified share a connection', () => {
 	assert.ok(isSeclabAuthority('seclab+abc'));
 	assert.ok(!isSeclabAuthority('ssh-remote+abc'));
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	assert.ok(isSeclabAuthority('SecLab+abc'));
 	seclabAhpCheckTransport('vscode-remote://ssh-remote+x', {});
 	assert.throws(() => seclabAhpCheckTransport('vscode-remote://seclab+t1', {}));
+	assert.throws(() => seclabAhpCheckTransport('vscode-remote://SECLAB+t1', {}));
 	const events: SeclabAhpEvent[] = [];
 	seclabAhpInstallWindow(e => events.push(e));
 	// Once the window is a tab window, every transport must be gated, whatever its identity.

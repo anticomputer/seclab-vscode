@@ -15,6 +15,7 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -107,13 +108,18 @@ test('a channel registered after the guard is installed is guarded too', async (
 // per-call lookup is still asserted, but against a trusted context, where
 // allow-when-absent is correct and necessary.
 
-/** `seclabIsTabContext` + `seclabRefuseUnguarded`, as patch 0006 ships them. */
-const isTabContext = (ctx: unknown): boolean => {
-	const a = typeof ctx === 'string' ? ctx
-		: (ctx && typeof ctx === 'object' && typeof (ctx as { remoteAuthority?: unknown }).remoteAuthority === 'string')
-			? (ctx as { remoteAuthority: string }).remoteAuthority : '';
-	return a.startsWith('seclab+');
-};
+/** `seclabIsTabContext` as patch 0006 ships it, evaluated from the patch's added lines. */
+const isTabContext = ((): (ctx: unknown) => boolean => {
+	const added = readFileSync(join(REPO, 'patches', '0006-seclab-channel-guard.patch'), 'utf8').split('\n')
+		.filter(l => l.startsWith('+') && !l.startsWith('+++')).map(l => l.slice(1)).join('\n');
+	const start = added.indexOf('function seclabIsTabContext(');
+	assert.ok(start >= 0, 'patch 0006 no longer ships seclabIsTabContext');
+	let i = added.indexOf('{', added.indexOf(')', start)) + 1;
+	for (let depth = 1; depth > 0; i++) {
+		depth += added[i] === '{' ? 1 : added[i] === '}' ? -1 : 0;
+	}
+	return new Function(`return ${stripTypeScriptTypes(`(${added.slice(start, i)})`, { mode: 'transform' }).trim().replace(/;$/, '')};`)();
+})();
 const refuseUnguarded = (guard: Guard | undefined, ...ctxs: unknown[]): Error | undefined =>
 	guard === undefined && ctxs.some(isTabContext) ? new Error('Unsupported operation') : undefined;
 
@@ -149,6 +155,16 @@ test('the tab context is recognised through remoteAuthority, not only as a bare 
 	const channels = new Map();
 	registerShipped(channels, 'download', realChannel, () => undefined, { remoteAuthority: 'seclab+t-abc' });
 	await assert.rejects(() => channels.get('download').call({ remoteAuthority: 'seclab+t-abc' }, 'x'));
+});
+
+test('a tab context is recognised in any case, as the RPC filter\'s tab test (SRCH3-14)', async () => {
+	for (const ctx of ['SecLab+t-abc', { remoteAuthority: 'SECLAB+t-abc' }]) {
+		const channels = new Map();
+		registerShipped(channels, 'download', realChannel, () => undefined, ctx);
+		await assert.rejects(() => channels.get('download').call(ctx, 'x'), `served to ${JSON.stringify(ctx)}`);
+	}
+	assert.equal(isTabContext('seclab-t-abc'), false);
+	assert.equal(isTabContext('ssh-remote+box'), false);
 });
 
 test('a refused listen on an unguarded tab context returns an event, not a throw', () => {

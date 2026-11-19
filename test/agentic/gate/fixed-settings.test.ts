@@ -162,6 +162,8 @@ test('0017 and 0015 decide "is this a tab window" from the same prefix', () => {
 
 test('isSeclabTabAuthority matches the prefix and nothing adjacent to it', () => {
 	assert.ok(isSeclabTabAuthority('seclab+t-abc'));
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	assert.ok(isSeclabTabAuthority('SecLab+t-abc'));
 	assert.ok(!isSeclabTabAuthority('xseclab+t-abc'));
 	assert.ok(!isSeclabTabAuthority('seclab'));
 	assert.ok(!isSeclabTabAuthority(undefined));

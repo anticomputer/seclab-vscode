@@ -34,7 +34,8 @@ function code(patch: string, file: string): string {
 	return out.join('\n');
 }
 
-const NOT_TAB = "RemoteNameContext.notEqualsTo('seclab')";
+// Not a tab window, in any case, as the RPC filter's tab test (review SRCH3-14).
+const NOT_TAB = 'ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate()';
 
 function problems(patch: string): string[] {
 	const p: string[] = [];
@@ -55,7 +56,7 @@ function problems(patch: string): string[] {
 	// The Explorer's "Open in ... Terminal" items for a host (file:) resource (review NHT-3). The
 	// file name is shared with the electron-browser contribution, so read the browser hunk by path.
 	const explorer = code(patch, 'contrib/externalTerminal/browser/externalTerminal.contribution.ts');
-	if ((explorer.match(new RegExp(`ResourceContextKey\\.Scheme\\.isEqualTo\\(Schemas\\.file\\), ${NOT_TAB.replace(/[().]/g, '\\$&')},`, 'g')) ?? []).length !== 2) {
+	if ((explorer.match(new RegExp(`ResourceContextKey\\.Scheme\\.isEqualTo\\(Schemas\\.file\\), ${NOT_TAB.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')},`, 'g')) ?? []).length !== 2) {
 		p.push('the Explorer offers a terminal on a host folder in a tab window');
 	}
 	const manager = code(patch, 'terminalProcessManager.ts');
@@ -77,11 +78,12 @@ const tests: Array<[string, () => void]> = [
 			['Explorer item shown on a host folder', `ResourceContextKey.Scheme.isEqualTo(Schemas.file), ${NOT_TAB},`, 'ResourceContextKey.Scheme.isEqualTo(Schemas.file),'],
 			['palette when clause dropped', `+\twhen: ${NOT_TAB}\n`, ''],
 			['backend refusal allows any authority', 'this.remoteAuthority?.toLowerCase() !== seclabWindow!.toLowerCase()', 'this.remoteAuthority === undefined && false'],
+			['the remote-name gate is case-sensitive', NOT_TAB, "RemoteNameContext.notEqualsTo('seclab')"],
 			['backend refusal keyed on the terminal', 'const seclabWindow = this._workbenchEnvironmentService.remoteAuthority;', 'const seclabWindow = this.remoteAuthority;'],
 		];
 		for (const [name, from, to] of mutants) {
 			assert.ok(PATCH.includes(from), `mutant "${name}" no longer applies; update it`);
-			assert.notDeepEqual(problems(PATCH.replace(from, to)), [], `mutant survived: ${name}`);
+			assert.notDeepEqual(problems(PATCH.split(from).join(to)), [], `mutant survived: ${name}`);
 		}
 	}],
 ];
