@@ -1188,7 +1188,10 @@ export function seclabTabExtensionsChannel(channel: IChannel, remoteAuthority: s
 	}
 	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', seclabUnrevivedManifest);
 	return {
-		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => (command === 'getManifest' ? channel : checked).call<T>(command, arg, token),
+		// `installGalleryExtensions` replies carry the same results as install events (round 19).
+		call: async <T>(command: string, arg?: unknown, token?: CancellationToken) => command === 'getManifest' ? channel.call<T>(command, arg, token)
+			: command === 'installGalleryExtensions' ? seclabNoGallerySource(await checked.call<T>(command, arg, token)) as T
+				: checked.call<T>(command, arg, token),
 		listen: <T>(event: string, arg?: unknown): Event<T> => event === 'onInstallExtension' || event === 'onDidInstallExtensions'
 			? (listener, thisArgs, disposables) => checked.listen<T>(event, arg)(e => listener.call(thisArgs, seclabNoGallerySource(e) as T), undefined, disposables)
 			: checked.listen<T>(event, arg),
