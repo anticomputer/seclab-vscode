@@ -85,6 +85,8 @@ test('a push refusal made before the log installs is held, then delivered with i
 
 test('identity: the tab id comes from the authority, and nothing else parses', () => {
 	assert.equal(F.seclabResolveTabId(AUTH), TAB);
+	// The prefix in any case, the id as written (PR review on #68).
+	assert.equal(F.seclabResolveTabId(AUTH.replace('seclab', 'SECLAB')), TAB);
 	for (const bad of ['seclab+', 'seclab+a/b', 'seclab+a b', 'seclab+a:1', 'ssh-remote+x', '', 'x seclab+a', 'seclab+a\n']) {
 		assert.equal(F.seclabResolveTabId(bad), undefined, JSON.stringify(bad));
 	}
@@ -102,6 +104,11 @@ test('attachment fails closed: unparseable tab throws, unknown remote is deny-al
 	assert.throws(() => F.seclabPartitionOf('seclab+a/b'));
 	assert.equal(F.seclabIsTabAuthority(AUTH), true);
 	assert.equal(F.seclabIsTabAuthority('ssh-remote+x'), false);
+	// A tab authority in another case is a tab with the same id, for the filter and the partition.
+	const mixed = AUTH.replace('seclab', 'SecLab');
+	assert.equal(F.seclabIsTabAuthority(mixed), true);
+	assert.equal(F.seclabFilterFor(mixed).tabId, TAB);
+	assert.equal(F.seclabPartitionOf(mixed), TAB);
 	assert.equal(F.seclabIsTabAuthority(undefined), false);
 });
 
@@ -567,7 +574,9 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['an unregistered rewrite is permitted', "if (!seclabRewrites.has(`${sid}.${method}`)) {", 'if (false) {'],
 		['a channel rewrite is permitted', "return this._deny(ref, 'rewrite is not defined for a channel; failing closed');", 'return this._permit(ref, verdict);'],
 		['an unparseable tab gets a filter', "throw new Error(`seclab: cannot derive a tab id from authority ${remoteAuthority}`);\n\t}\n\treturn new SeclabFilter(tabId,", "}\n\treturn new SeclabFilter(tabId ?? 'unparsed',"],
-		['the tab id accepts any characters', "authority.match(/^seclab\\+([\\w.-]+)$/)", "authority.match(/^seclab\\+(.+)$/)"],
+		['the tab id accepts any characters', "authority.match(/^seclab\\+([\\w.-]+)$/i)", "authority.match(/^seclab\\+(.+)$/i)"],
+		['the tab id parser is case-sensitive', "authority.match(/^seclab\\+([\\w.-]+)$/i)", "authority.match(/^seclab\\+([\\w.-]+)$/)"],
+		['the tab test is case-sensitive', 'const SECLAB_AUTHORITY = /^seclab\\+/i;', 'const SECLAB_AUTHORITY = /^seclab\\+/;'],
 		['the route falls back to the plain path', "return Promise.reject(new Error('Unsupported operation'));\n\t}\n\treturn tainted.seclabExecuteFromTab", "return (commandService as any).executeCommand(id, ...args);\n\t}\n\treturn tainted.seclabExecuteFromTab"],
 		['early decisions are dropped', 'if (seclabEarly.length < SECLAB_EARLY_MAX) {', 'if (false) {'],
 		['a denied data command runs on the trusted side', "if (entry.filter.commandVerdict(entry.id) === 'allow') {", 'if (true) {'],
