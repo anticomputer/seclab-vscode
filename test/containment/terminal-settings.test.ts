@@ -214,6 +214,8 @@ interface Observed {
 	contributedWrite: number | undefined;
 	contributedValue: unknown;
 	schemeWrites: Array<{ key: string; value: unknown; target: number | undefined }>;
+	hostSchemePrompted: boolean;
+	wsWrites: Array<{ key: string; value: unknown; target: number | undefined }>;
 }
 
 async function observe(src: Record<Key, string>, authority: string, activeFile: unknown, kind: WorkspaceKind = 'tab'): Promise<Observed> {
@@ -372,7 +374,7 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		_proxy: { $initEnvironmentVariableCollections: (c: Array<[string, unknown]>) => localCollections.push(...c.map(e => e[0])) },
 	}, { remoteAuthority: null, remoteOS: 3 });
 	// R5-14: "Select Default Profile" on a profile the REH returned.
-	const ConfigurationTarget = { USER: 2, USER_LOCAL: 3, USER_REMOTE: 4 };
+	const ConfigurationTarget = { USER: 2, USER_LOCAL: 3, USER_REMOTE: 4, WORKSPACE: 5 };
 	const profileWrites: Observed['profileWrites'] = [];
 	const quick: Record<string, unknown> = {
 		_terminalProfileService: { getPlatformKey: async () => 'linux' },
@@ -434,21 +436,40 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	const tooltipSrc = src.tooltip.replace('): { content: MarkdownString; actions: IHoverAction[] } {', ') {');
 	const hover = (method(tooltipSrc, 'getInstanceHoverInfo', { ...tooltipDeps, getShellProcessTooltip })!(term, { get: () => '1', store: () => { } }) as { content: { value: string } }).content.value;
 
-	// R5-19: "Allow <scheme>" on a link the tab's shell printed.
-	const schemeWrites: Observed['schemeWrites'] = [];
-	const at = src.links.indexOf('label: nls.localize(\'allow\'');
-	const open = src.links.indexOf('run: () => {', at) + 'run: () => '.length;
+	// R5-19, PR70-2, PR70-3: a link the tab's shell printed, activated, and "Allow <scheme>" clicked.
+	const at = src.links.indexOf('activate: async (event, text) => {');
+	assert.ok(at > 0, 'the link handler moved');
+	const open = src.links.indexOf('{', at);
 	let end = open + 1;
 	for (let depth = 1; depth > 0; end++) {
 		depth += src.links[end] === '{' ? 1 : src.links[end] === '}' ? -1 : 0;
 	}
-	const allowRun = new Function('ConfigurationTarget', 'IWorkbenchEnvironmentService', 'IWorkspaceContextService', 'seclabIsTabWindow', 'seclabTabSetting',
-		`return ${stripTypeScriptTypes(`(function (scheme, terminalConfigurationService, resolve) ${src.links.slice(open, end)})`, { mode: 'transform' }).trim().replace(/;$/, '')};`)(
-		ConfigurationTarget, 'env', 'workspace', h.seclabIsTabWindow, h.seclabTabSetting) as (...a: unknown[]) => void;
-	allowRun.call({
-		_configurationService: { ...cfg, updateValue: (key: string, value: unknown, target?: number) => { schemeWrites.push({ key, value: structuredClone(value), target }); } },
-		_instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: (id: string) => id === 'env' ? { remoteAuthority: authority } : { getWorkspace: () => workspace } }) },
-	}, 'tabchosen', { config: { allowedLinkSchemes: cfg.getValue('terminal.integrated.allowedLinkSchemes') } }, () => { });
+	const activate = new Function('ConfigurationTarget', 'IWorkbenchEnvironmentService', 'IWorkspaceContextService', 'seclabIsTabWindow', 'seclabTabSetting', 'seclabWorkspaceInTab',
+		'nls', 'Severity', 'notificationService', 'terminalConfigurationService', 'URI', 'TerminalBuiltinLinkType',
+		`return ${stripTypeScriptTypes(`(async function (event, text) ${src.links.slice(open, end)})`, { mode: 'transform' }).trim().replace(/;$/, '')};`);
+	/** Activate `scheme:x` with these layers: whether it prompted, opened, and what it wrote where. */
+	const link = async (scheme: string, layers: Layers) => {
+		const linkCfg = config({ ...settings, 'terminal.integrated.allowedLinkSchemes': layers });
+		const got = { prompted: false, opened: false, writes: [] as Observed['schemeWrites'] };
+		const run = activate(ConfigurationTarget, 'env', 'workspace', h.seclabIsTabWindow, h.seclabTabSetting, h.seclabWorkspaceInTab,
+			{ localize: (_k: unknown, m: string) => m }, { Warning: 2 },
+			{ prompt: (_s: unknown, _m: unknown, choices: Array<{ run: () => void }>) => { got.prompted = true; choices[0].run(); } },
+			{ config: { allowedLinkSchemes: linkCfg.getValue('terminal.integrated.allowedLinkSchemes') } }, { parse: (t: string) => t }, { Url: 'url' }) as (e: unknown, t: string) => Promise<void>;
+		await run.call({
+			_isLinkActivationModifierDown: () => true,
+			_openers: { get: () => ({ open: () => { got.opened = true; } }) },
+			_configurationService: { ...linkCfg, updateValue: (key: string, value: unknown, target?: number) => { got.writes.push({ key, value: structuredClone(value), target }); } },
+			_instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: (id: string) => id === 'env' ? { remoteAuthority: authority } : { getWorkspace: () => workspace } }) },
+		}, {}, `${scheme}:x`);
+		return got;
+	};
+	const LINKS = settings['terminal.integrated.allowedLinkSchemes'];
+	const chosen = await link('tabchosen', LINKS);
+	const schemeWrites = chosen.writes;
+	// A scheme only the host user allowed must still prompt in a tab window (PR70-2).
+	const hostScheme = await link(`host${HOST}`, LINKS);
+	// With the tab's workspace setting the list, "Allow" must land where it takes effect (PR70-3).
+	const wsWrites = (await link('tabchosen', { ...LINKS, workspaceValue: ['file', 'https', 'tabws'] })).writes;
 
 	// R5-22: a new terminal's cwd for a folder, as the window resolves it before the launch.
 	const folderCwd = ((await method(src.actions, 'resolveWorkspaceFolderCwd', {
@@ -474,7 +495,7 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 	return {
 		createProcess: sent!, getProfiles, automation, agentHost, collections: [...merged.collections.keys()].sort(), localDefaultProfile,
 		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection, inheritEnv,
-		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, contributedValue, schemeWrites,
+		profileWrites, descriptions, detachSent, hover, folderCwd, contributedWrite, contributedValue, schemeWrites, hostSchemePrompted: hostScheme.prompted, wsWrites,
 	};
 }
 
@@ -570,11 +591,14 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 	if (/(^|[^\\])!\[/.test(o.hover)) {
 		out.push('markdown image in the terminal hover');
 	}
-	if (o.schemeWrites.some(w => w.target !== 4)) {
+	if ([...o.schemeWrites, ...o.wsWrites].some(w => w.target !== 4 && w.target !== 5)) {
 		out.push('link scheme allowed in host settings');
 	}
-	if (o.schemeWrites.some(w => sees(w.value))) {
+	if ([...o.schemeWrites, ...o.wsWrites].some(w => sees(w.value))) {
 		out.push('host link schemes in the written list');
+	}
+	if (!o.hostSchemePrompted) {
+		out.push('a scheme only the host allowed opens without a prompt');
 	}
 	for (const kind of ['hostFolder', 'hostFile'] as const) {
 		const w = await observe(src, authority, remoteFile(authority), kind);
@@ -593,7 +617,7 @@ const EVERY_LEAK = ['active file: host file', 'active file: another tab file', '
 	'tab profile to the host extension host', 'tab deletes a host collection', 'tab collection to the host extension host',
 	'host default profile picks a REH profile', 'host default profile picks a contributed profile', 'foreign profile icon', 'automation profile without a connection',
 	'REH profile written to host settings', 'markdown image in a profile description', 'foreign workspace id on detach',
-	'link or forged line in a profile description', 'markdown image in the terminal hover', 'link scheme allowed in host settings', 'host link schemes in the written list',
+	'link or forged line in a profile description', 'markdown image in the terminal hover', 'link scheme allowed in host settings', 'host link schemes in the written list', 'a scheme only the host allowed opens without a prompt',
 	'hostFolder: workspace settings', 'hostFolder: folder paths or name', 'hostFile: workspace settings', 'hostFile: folder paths or name'];
 
 /** A mutant of one of our patches: `from` replaced by `to` in its added lines, exactly once. */
@@ -650,6 +674,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(o.createProcess.configuration['terminal.integrated.cwd'], '');
 		assert.equal(o.createProcess.configuration['terminal.integrated.detectLocale'], 'auto');
 		assert.equal(o.inheritEnv, true);
+		// "Allow" lands where it takes effect: the tab's workspace settings when they set the list (PR70-3).
+		assert.deepEqual(o.wsWrites.map(w => [w.target, w.value]), [[5, ['file', 'https', 'tabws', 'tabchosen']]]);
 		const profiles = o.getProfiles[0] as Record<string, Record<string, unknown>>;
 		assert.deepEqual(Object.keys(profiles).sort(), ['bash', 'tabp']);
 		// Upstream merges maps recursively: a tab's partial override keeps the default's path (R5-5).
@@ -739,8 +765,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['folder cwd from the host', mutant(OURS[0], "? seclabCwd.workspaceFolderValue ?? seclabCwd.userRemoteValue ?? seclabCwd.defaultValue", "? configurationService.getValue(TerminalSettingId.Cwd, { resource: folder.uri })"), 'host cwd in a folder\'s launch'],
 			['contributed profile to host settings', mutant(OURS[4], '? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER);', '? ConfigurationTarget.USER : ConfigurationTarget.USER);'), 'contributed profile written to host settings'],
 			['hover title as markdown', mutant(OURS[5], '? escapeUntrustedMarkdown(instance.title) : instance.title', '? instance.title : instance.title'), 'markdown image in the terminal hover'],
-			['link scheme to the host', mutant(OURS[4], '[...(Array.isArray(own) ? own : []), scheme], ConfigurationTarget.USER_REMOTE);', '[...(Array.isArray(own) ? own : []), scheme]);'), 'link scheme allowed in host settings'],
-			['link schemes from the merged list', mutant(OURS[4], '+									if (tab && seclabIsTabWindow(tab)) {', '+									if (false) {'), 'host link schemes in the written list'],
+			['link scheme to the host', mutant(OURS[4], '[...allowed, scheme], inWorkspace ? ConfigurationTarget.WORKSPACE : ConfigurationTarget.USER_REMOTE);', '[...allowed, scheme]);'), 'link scheme allowed in host settings'],
+			['link schemes from the merged list', mutant(OURS[4], '+									if (seclabTab) {', '+									if (false) {'), 'host link schemes in the written list'],
+			['the merged list decides', mutant(OURS[4], "seclabTab ? (Array.isArray(seclabOwn) ? seclabOwn : []) : terminalConfigurationService.config.allowedLinkSchemes;", "terminalConfigurationService.config.allowedLinkSchemes;"), 'a scheme only the host allowed opens without a prompt'],
 			['detach with a foreign id', mutant(OURS[2], '+		if (seclabIsTabWindow(this._remoteAuthority) && workspaceId !== this._workspaceContextService.getWorkspace().id) {', '+		if (false) {'), 'foreign workspace id on detach'],
 			['foreign icons kept', mutant(OURS[3], '+		const seclabOk = (u: URI | UriComponents) => !seclabTab || seclabUriInTab(u, seclabTab);', '+		const seclabOk = (_u: URI | UriComponents) => true;'), 'foreign profile icon'],
 		];
@@ -751,6 +778,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		// R5-26: the resolution guard in another case lets a mixed-case tab's launch resolve host settings.
 		const guard = mutant(OURS[0], 'if (!/^seclab\\+/i.test(this._remoteAuthority)) {', 'if (!/^seclab\\+/.test(this._remoteAuthority)) {');
 		assert.ok((await leaks(sources(true, guard), TAB.replace('seclab', 'SecLab'))).includes('host settings resolved for the tab'), 'mutant not caught: a case-sensitive resolution guard');
+		// PR70-3: "Allow" written to the remote user settings, under a workspace list that overrides it.
+		const remoteOnly = mutant(OURS[4], 'inWorkspace ? ConfigurationTarget.WORKSPACE : ConfigurationTarget.USER_REMOTE);', 'ConfigurationTarget.USER_REMOTE);');
+		assert.notDeepEqual((await observe(sources(true, remoteOnly), TAB, remoteFile(TAB))).wsWrites.map(w => w.target), [5], 'mutant not caught: a grant a workspace list overrides');
 		// R5-27: a contributed profile write starting from the merged profiles.
 		const merged = mutant(OURS[4], "const profilesConfig = this._seclabSetting(`${TerminalSettingPrefix.Profiles}${platformKey}`) ?? {};", "const profilesConfig = this._configurationService.getValue(`${TerminalSettingPrefix.Profiles}${platformKey}`);");
 		assert.ok((await leaks(sources(true, merged), TAB)).includes('host profiles copied into a contributed profile write'), 'mutant not caught: a contributed write from the merged profiles');
