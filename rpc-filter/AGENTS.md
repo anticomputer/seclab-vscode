@@ -105,7 +105,7 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `ai-agent-host-token-push` | rogue extension | `push:agentHostProxy` | denied |
 | `ai-disable-ai-features-reenable` | rogue extension | `ai-setting:chat.disableAIFeatures` | denied |
 | `ai-instructions-tool-call` | rogue extension | `ai-tool:fetch_webpage` | denied |
-| `ai-remote-agent-host-dial` | rogue extension | `ai-setting:chat.workspaceRemoteAgentHosts` | denied |
+| `ai-remote-agent-host-dial` | rogue extension | `ai-setting:chat.workspaceRemoteAgentHosts` | succeeded |
 | `ai-settings-reenable` | rogue extension | `ai-setting:chat.agent.enabled` | denied |
 | `as-external-uri` | rogue extension | `rpc:MainThreadWindow.$asExternalUri` | denied |
 | `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |

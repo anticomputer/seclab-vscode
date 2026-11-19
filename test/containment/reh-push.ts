@@ -52,7 +52,7 @@ import { readHits } from './beacon.ts';
 import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
-const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting',
+const PUSH_PROBES = ['ai-remote-agent-host-dial', 'reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting',
 	'reh-terminal-host-settings', 'reh-exthost-terminal-profile'];
 
 const argv = process.argv.slice(2);
@@ -313,12 +313,6 @@ if (fs.existsSync(path.join(userData, 'logs'))) {
 }
 const decisions = rpcDecisions(userData).map(d => d.detail ?? {});
 fs.writeFileSync(path.join(base, 'denials.jsonl'), decisions.filter(d => d.verdict === 'deny').map(d => JSON.stringify({ policyRef: d.ref })).join('\n') + '\n');
-const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
-	'--only', JUDGED.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],
-{ encoding: 'utf8', env: { ...process.env, SECLAB_PROBE_RUNDIR: base } });
-console.log(`${verdict.stdout}${verdict.stderr}`.trim());
-c('probes', verdict.status === 0, 'check-probes accepts the push probes', `exit ${verdict.status}`);
-
 const hostDialled = readHits(hostBeaconLog).some(h => h.url.startsWith(dialPath));
 const tabDialled = fs.existsSync(tabBeaconLog) && fs.readFileSync(tabBeaconLog, 'utf8').includes(dialPath);
 const controlDialled = readHits(hostBeaconLog).some(h => h.url.startsWith(controlPath));
@@ -344,6 +338,17 @@ const gateRefusals = (() => {
 	walk(path.join(base, 'editor-logs'));
 	return n;
 })();
+// The dial as a judged probe (ai-remote-agent-host-dial): what the run measured, facts only.
+fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ results: [{
+	id: 'ai-remote-agent-host-dial', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', outcome: 'succeeded',
+	facts: { hostDialled, tabDialled, controlDialled, gateRefusals },
+}] }, null, '\t'));
+const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
+	'--only', JUDGED.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],
+{ encoding: 'utf8', env: { ...process.env, SECLAB_PROBE_RUNDIR: base } });
+console.log(`${verdict.stdout}${verdict.stderr}`.trim());
+c('probes', verdict.status === 0, 'check-probes accepts the push probes', `exit ${verdict.status}`);
+
 c('dial', controlDialled, 'control: an empty window dials the same kind of entry to the host listener');
 c('dial', !hostDialled && !tabDialled, 'the tab window did not dial the tab-written agent-host address', `host=${hostDialled} tab=${tabDialled}`);
 c('dial', gateRefusals > 0, 'patch 0015\'s gate logged refusing the agent-host transport in the tab window', `${gateRefusals} refusal(s)`);

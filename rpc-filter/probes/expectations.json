@@ -39,12 +39,13 @@
       "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
     },
     "ai-remote-agent-host-dial": {
-      "required": false,
+      "required": true,
       "surface": "client-push",
       "policyRef": "ai-setting:chat.workspaceRemoteAgentHosts",
       "why": "the tab writes chat.workspaceRemoteAgentHosts pointing at a local beacon, through both .vscode/settings.json and remote user settings. The host renderer would dial it from the host network, bypassing the broker, and the dialled connection is not seclab+ so the authority predicate never fires",
-      "status": "not-implemented",
-      "blocked_on": "the dial itself is measured outside this runner by test/containment/reh-push.ts on every run: the workspace settings file lists a loopback agent host, a listener on each side of the boundary records any dial, an empty window dialling the same kind of entry is the positive control, and patch 0015's gate log records the refusal. Nothing in the rogue-extension runner imports test/containment/rogue-extension/ai-probes.js yet, so this registry entry stays not-implemented for that runner rather than counting as a pass."
+      "runner": "reh-push",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/reh-push.ts: listeners on both sides of the boundary, an empty window dialling the same kind of entry as the positive control, and patch 0015's gate log; written to harness-probes.json and judged here."
     },
     "ai-settings-reenable": {
       "required": false,
