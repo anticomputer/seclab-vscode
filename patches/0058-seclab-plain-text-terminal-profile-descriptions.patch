@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/platform/terminal/common/terminalProfiles.ts b/src/vs/platform/terminal/common/terminalProfiles.ts
---- a/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 23:44:07
-+++ b/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 23:44:07
+--- a/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 23:59:40
++++ b/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 23:59:41
 @@ -9,7 +9,23 @@
  import { IExtensionTerminalProfile, ITerminalProfile, TerminalIcon } from './terminal.js';
  import { ThemeIcon } from '../../../base/common/themables.js';
@@ -62,8 +62,8 @@ diff -ruN a/src/vs/platform/terminal/common/terminalProfiles.ts b/src/vs/platfor
  }
  
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts b/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts	2026-11-18 23:44:07
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts	2026-11-18 23:44:07
+--- a/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts	2026-11-18 23:59:41
++++ b/src/vs/workbench/contrib/terminal/browser/terminalTooltip.ts	2026-11-18 23:59:41
 @@ -5,27 +5,33 @@
  
  import type { IHoverAction } from '../../../../base/browser/ui/hover/hover.js';
