@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1675 @@
+@@ -0,0 +1,1676 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -5048,7 +5048,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * argument is exactly the mistake being avoided.
 + */
 +export function seclabResolveTabId(authority: string): string | undefined {
-+	const m = authority.match(/^seclab\+([\w.-]+)$/);
++	// The prefix in any case, as `seclabIsTabAuthority` accepts it; the id as written (PR review on #68).
++	const m = authority.match(/^seclab\+([\w.-]+)$/i);
 +	return m ? m[1] : undefined;
 +}
 +
