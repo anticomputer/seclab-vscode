@@ -726,7 +726,7 @@ async function serverRoundTrip(b: Build): Promise<string[]> {
 				deps[n] = evaluate(m, n, deps);
 			}
 		}
-		const self = { getUriTransformer: () => transformer, service, onInstallExtension: 0, onDidInstallExtensions: 0 };
+		const self = { getUriTransformer: () => transformer, service, onInstallExtension: 0, onDidInstallExtensions: 0, onDidInstallMcpServers: 0 };
 		const wire = (v: unknown) => JSON.parse(JSON.stringify(v));
 		return {
 			call: async (command: string, args: unknown[]) => wire(await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(src, call)!), 'call', deps).call(self, 'ctx', command, args)),
@@ -764,6 +764,11 @@ async function serverRoundTrip(b: Build): Promise<string[]> {
 		if (!await through('seclabTabMcpChannel', await mcp.call(command, []))) {
 			problems.push(`a genuine MCP ${command} reply is refused`);
 		}
+	}
+	// A gallery server's configuration names its variables, `path` among them.
+	const gallery = { name: 's', configuration: { remotes: [{ type: 'http', url: 'https://mcp.example.test/{path}', variables: { path: { description: 'a path', default: 'v1' } } }] } };
+	if (!heard('seclabTabMcpChannel', mcp.event('onDidInstallMcpServers', [{ name: 's', source: gallery, local: mcpLocal(), mcpResource: serverFile('/Users/someone/.vscode-server/data/User/mcp.json') }]))) {
+		problems.push('a genuine MCP gallery install event is dropped');
 	}
 	return problems;
 }
