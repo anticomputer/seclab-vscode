@@ -128,7 +128,12 @@ function caseSensitiveTest(code: string, ctx: TabTestContext = { prefixes: new S
 		}
 		const before = code.slice(0, m.index);
 		const after = code.slice(m.index + m[0].length);
+		const literal = /^['"`]/.test(m[0]) && !m[0].startsWith('`vscode-remote://${');
 		if (/\bconst\s+\w+\s*(:\s*\w+\s*)?=\s*$/.test(before) || /\bconst\s+$/.test(before) || /^\s*(:\s*\w+\s*)?=[^=]/.test(after)) {
+			// A prefix constant holds the lower-case prefix, or a lower-cased compare never matches (PR #72 review).
+			if (literal && m[0] !== m[0].toLowerCase()) {
+				return `${m[0]} declares a prefix that is not lower case`;
+			}
 			continue;
 		}
 		if (/\+\s*$/.test(before) || /^\s*\+/.test(after) || /^\.length\b/.test(after) || /\.(slice|substring|substr)\(\s*$/.test(before)) {
@@ -148,6 +153,9 @@ function caseSensitiveTest(code: string, ctx: TabTestContext = { prefixes: new S
 			const receiver = before.slice(0, call.index);
 			const loweredVar = [...ctx.lowered].some(v => new RegExp(`\\b${v}$`).test(receiver));
 			if (call[1] === 'startsWith' && (/\.toLowerCase\(\)$/.test(receiver) || loweredVar) && /^\s*`?\s*\)/.test(after)) {
+				if (literal && m[0] !== m[0].toLowerCase()) {
+					return `${m[0]} is not lower case, so a lower-cased startsWith never matches`;
+				}
 				continue;
 			}
 			return `${m[0]} is passed to .${call[1]}(...) without a lower-cased startsWith`;
@@ -211,7 +219,8 @@ test("every seclab+ tab test the series ships is case-insensitive, as the filter
 		"a.endsWith('seclab+')", "a.toLowerCase().includes('seclab+')",
 		"const SECLAB_TAB_PREFIX = 'seclab+';\n+return typeof a === 'string' && a.startsWith(SECLAB_TAB_PREFIX);", "switch (remoteName) { case 'seclab': return true; }",
 		"const re = new RegExp('^seclab\\\\+');", 'const isTab = (a: string) => /^seclab\\+/.test(a);', 'const all = [/^seclab\\+/, /x/];', "a.startsWith('SECLAB+')",
-		"if (['seclab'].includes(name)) {"];
+		"if (['seclab'].includes(name)) {", "return a.toLowerCase().startsWith('SECLAB+');", "export const SECLAB_AUTHORITY_PREFIX = 'SECLAB+';",
+		"const lowered = a.toLowerCase();\n+return lowered.startsWith('SecLab+');"];
 	for (const bad of BAD) {
 		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`]]).length, 1, `not caught: ${bad}`);
 		const removed = bad.split('\n+').map(l => `-${l}`).join('\n');
