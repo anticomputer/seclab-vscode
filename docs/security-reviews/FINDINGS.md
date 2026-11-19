@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 101 | 305 | 477 | 61 | 958 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 197 | 82 | 347 |
+| fixed-untested | 0 | 5 | 63 | 198 | 82 | 348 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 118 | 403 | 774 | 209 | 1522 |
+| **all** | 18 | 118 | 403 | 775 | 209 | 1523 |
 
 ## Baseline: open high and critical findings
 
@@ -512,6 +512,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-55** | low | fixed-untested | patch 0059: tab server locations and host extension management | A fault in the rogue-REH payload's early arming would escape into the test server's startup. | Covered by review; no regression test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-68** | low | deferred | patch 0059: tab server locations and host extension management | A tab can make host extensions unavailable in its own window: the extension registry checks dependency loops by id across the host's and the tab's extensions, so a tab extension claiming an id that closes a cycle removes the host extension in it, and activation resolves a host extension's dependency through the tab's claimed id. An availability loss contained to that window, not an escape. Tab Manager can't be hit: the product pins it to the local host, so the local copy takes its id, and it has no dependencies. | follow-up: Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts "Tab Manager stays out of reach of a tab claiming its id" keeps Tab Manager out of reach meanwhile. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-28** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The suite didn't model the window's resolution, and pinned only the helper's tab test to the filter module's. | A test correction; nothing to test. |
+| [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-33** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-4** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The extension-host scan could read an empty scan as containment, and its control canary was token-shaped, so the tab's secret gate refused the workspace. | A probe correction, shown by both runtime runs; nothing further to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-6** | low | fixed-untested | patches 0053-0058: terminal settings in tab windows | The suite didn't record collections, options or the active file, nor the application and policy layers. | A test correction; nothing to test. |
 | [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-1** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against. | A build correction, shown by patch-build's typecheck of upstream's own tests. |
@@ -2655,6 +2656,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PR70-1 | low | false-positive | \`unicodeVersion\` and the persistent-sessions switch reach the REH from the merged settings. | Neither is restricted, and both already reach a tab's extension host in 0036's snapshot; core settings follow the host by design. |
 | PR70-2 | low | fixed | In a tab window a link's scheme was checked against the merged list, so a scheme only the host user allowed opened without the prompt. | patch:1a60c0f134287edc8835494917bb3d62527c9bd3 · `test/containment/terminal-settings.test.ts` "a tab gets none of the host terminal settings" |
 | PR70-3 | low | fixed | "Allow" wrote the tab's remote user settings even when the tab's workspace sets the list, which wins, so the grant didn't persist. | patch:1a60c0f134287edc8835494917bb3d62527c9bd3 · `test/containment/terminal-settings.test.ts` "a tab keeps its own terminal settings and the defaults" |
+| R5-33 | low | fixed-untested | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 

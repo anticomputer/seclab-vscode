@@ -22114,7 +22114,7 @@
 			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
-				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 35 leaks."
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 37 leaks."
 			}
 		},
 		{
@@ -22164,7 +22164,7 @@
 			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
-				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 35 leaks."
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 37 leaks."
 			}
 		},
 		{
@@ -22403,6 +22403,17 @@
 				"file": "test/containment/terminal-settings.test.ts",
 				"name": "a tab keeps its own terminal settings and the defaults"
 			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-33",
+			"round": "patches 0053-0058 round 12",
+			"severity": "low",
+			"summary": "No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
