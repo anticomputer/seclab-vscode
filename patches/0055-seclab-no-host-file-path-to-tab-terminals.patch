@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
---- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:18:39
 @@ -26,7 +26,8 @@
  import type * as performance from '../../../../../base/common/performance.js';
  import { RemoteTerminalChannelEvent, RemoteTerminalChannelRequest } from './terminal.js';
@@ -11,7 +11,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  
  export const REMOTE_TERMINAL_CHANNEL_NAME = 'remoteterminal';
  
-@@ -194,18 +195,24 @@
+@@ -201,18 +202,24 @@
  			filterByScheme: [Schemas.file, Schemas.vscodeUserData, Schemas.vscodeRemote]
  		});
  
@@ -42,7 +42,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  			cols,
  			rows,
  			unicodeVersion,
-@@ -215,8 +222,28 @@
+@@ -222,8 +229,28 @@
  	}
  
  	requestDetachInstance(workspaceId: string, instanceId: number): Promise<IProcessDetails | undefined> {
@@ -72,7 +72,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  	acceptDetachInstanceReply(requestId: number, persistentProcessId: number): Promise<void> {
  		return this._channel.call(RemoteTerminalChannelRequest.AcceptDetachInstanceReply, [requestId, persistentProcessId]);
  	}
-@@ -287,7 +314,7 @@
+@@ -294,7 +321,7 @@
  		return this._channel.call(RemoteTerminalChannelRequest.GetDefaultSystemShell, [osOverride]);
  	}
  	getProfiles(profiles: unknown, defaultProfile: unknown, includeDetectedProfiles?: boolean): Promise<ITerminalProfile[]> {
@@ -81,7 +81,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  	}
  	acceptPtyHostResolvedVariables(requestId: number, resolved: string[]): Promise<void> {
  		return this._channel.call(RemoteTerminalChannelRequest.AcceptPtyHostResolvedVariables, [requestId, resolved]);
-@@ -304,7 +331,7 @@
+@@ -311,7 +338,7 @@
  	setTerminalLayoutInfo(layout?: ITerminalsLayoutInfoById): Promise<void> {
  		const workspace = this._workspaceContextService.getWorkspace();
  		const args: ISetTerminalLayoutInfoArgs = {
@@ -90,7 +90,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  			tabs: layout ? layout.tabs : [],
  			background: layout ? layout.background : null
  		};
-@@ -330,13 +357,13 @@
+@@ -337,13 +364,13 @@
  	getTerminalLayoutInfo(): Promise<ITerminalsLayoutInfo | undefined> {
  		const workspace = this._workspaceContextService.getWorkspace();
  		const args: IGetTerminalLayoutInfoArgs = {

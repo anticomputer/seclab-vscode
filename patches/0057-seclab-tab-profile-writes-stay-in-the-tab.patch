@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 14:51:51
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 14:51:51
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.ts	2026-11-18 23:18:39
 @@ -20,6 +20,9 @@
  import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
  import { hasKey, isString } from '../../../../base/common/types.js';
@@ -102,9 +102,23 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileQuickpick.t
  			},
  			onKeyMods: mods => keyMods = mods
  		};
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:18:39
+@@ -272,7 +272,9 @@
+ 
+ 			(profilesConfig as { [key: string]: ITerminalProfileObject })[args.title] = newProfile;
+ 		}
+-		await this._configurationService.updateValue(`${TerminalSettingPrefix.Profiles}${platformKey}`, profilesConfig, ConfigurationTarget.USER);
++		// seclab: a tab window writes the tab's own (remote) user settings, never the host's (patch 0057, review R5-25).
++		const seclabWindow = this._environmentService.remoteAuthority;
++		await this._configurationService.updateValue(`${TerminalSettingPrefix.Profiles}${platformKey}`, profilesConfig, seclabWindow && seclabIsTabWindow(seclabWindow) ? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER);
+ 		return;
+ 	}
+ 
 diff -ruN a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts
---- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 14:51:51
-+++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 14:51:51
+--- a/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts	2026-11-18 23:18:39
 @@ -34,6 +34,10 @@
  import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
  import type { IHoverAction } from '../../../../../base/browser/ui/hover/hover.js';

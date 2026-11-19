@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/workbench/api/browser/mainThreadTerminalService.ts
---- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:18:38
++++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:18:38
 @@ -26,6 +26,7 @@
  import { TerminalCapability } from '../../../platform/terminal/common/capabilities/capabilities.js';
  import { ITerminalCompletionService } from '../../contrib/terminalContrib/suggest/browser/terminalCompletionService.js';
@@ -21,9 +21,34 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/w
  		const defaultProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os });
  		const defaultAutomationProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os, allowAutomationShell: true });
  		this._proxy.$acceptDefaultProfile(...await Promise.all([defaultProfile, defaultAutomationProfile]));
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts b/src/vs/workbench/contrib/terminal/browser/terminalActions.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-18 23:18:38
++++ b/src/vs/workbench/contrib/terminal/browser/terminalActions.ts	2026-11-18 23:18:38
+@@ -64,6 +64,7 @@
+ import { TerminalTabList } from './terminalTabsList.js';
+ import { ResourceContextKey } from '../../../common/contextkeys.js';
+ import { SeparatorSelectOption } from '../../../../base/browser/ui/selectBox/selectBox.js';
++import { seclabIsTabWindow } from '../common/seclabTabTerminalSettings.js';
+ 
+ export const switchTerminalShowTabsTitle = localize('showTerminalTabs', "Show Tabs");
+ 
+@@ -1696,7 +1697,12 @@
+ }
+ 
+ async function resolveWorkspaceFolderCwd(folder: IWorkspaceFolder, configurationService: IConfigurationService, configurationResolverService: IConfigurationResolverService): Promise<WorkspaceFolderCwdPair> {
+-	const cwdConfig = configurationService.getValue(TerminalSettingId.Cwd, { resource: folder.uri });
++	// seclab: a folder on a tab takes its cwd from the tab's own layers, never the host user's, which
++	// would reach the tab's server in the launch config (patch 0053, review R5-22).
++	const seclabCwd = configurationService.inspect<string>(TerminalSettingId.Cwd, { resource: folder.uri });
++	const cwdConfig = folder.uri.scheme === Schemas.vscodeRemote && seclabIsTabWindow(folder.uri.authority)
++		? seclabCwd.workspaceFolderValue ?? seclabCwd.userRemoteValue ?? seclabCwd.defaultValue
++		: configurationService.getValue(TerminalSettingId.Cwd, { resource: folder.uri });
+ 	if (!isString(cwdConfig) || cwdConfig.length === 0) {
+ 		return { folder, cwd: folder.uri, isAbsolute: false, isOverridden: false };
+ 	}
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 23:18:39
 @@ -24,6 +24,8 @@
  import { Disposable } from '../../../../base/common/lifecycle.js';
  import { isString, type SingleOrMany } from '../../../../base/common/types.js';
@@ -107,8 +132,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverSer
  	}
  }
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
---- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 23:18:39
 @@ -24,6 +24,8 @@
  import { IExtensionService } from '../../../services/extensions/common/extensions.js';
  import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
@@ -137,6 +162,24 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts 
  			if (!defaultProfileName || !isString(defaultProfileName)) {
  				return undefined;
  			}
+@@ -155,7 +158,7 @@
+ 		const contributedProfilesChanged = await this._updateContributedProfiles();
+ 		// Automation profiles
+ 		const platform = await this.getPlatformKey();
+-		const automationProfile = this._configurationService.getValue<ITerminalExecutable | null | undefined>(`${TerminalSettingPrefix.AutomationProfile}${platform}`);
++		const automationProfile = this._seclabSetting(`${TerminalSettingPrefix.AutomationProfile}${platform}`) as ITerminalExecutable | null | undefined;
+ 		const automationProfileChanged = !objects.equals(automationProfile, this._automationProfile);
+ 		// Update
+ 		if (profilesChanged || contributedProfilesChanged || automationProfileChanged) {
+@@ -171,7 +174,7 @@
+ 	private async _updateContributedProfiles(): Promise<boolean> {
+ 		const platformKey = await this.getPlatformKey();
+ 		const excludedContributedProfiles: string[] = [];
+-		const configProfiles: { [key: string]: ITerminalExecutable | null | undefined } = this._configurationService.getValue(TerminalSettingPrefix.Profiles + platformKey);
++		const configProfiles = (this._seclabSetting(TerminalSettingPrefix.Profiles + platformKey) ?? {}) as { [key: string]: ITerminalExecutable | null | undefined };
+ 		for (const [profileName, value] of Object.entries(configProfiles)) {
+ 			if (value === null) {
+ 				excludedContributedProfiles.push(profileName);
 @@ -205,10 +208,22 @@
  			return this._availableProfiles || [];
  		}
@@ -172,8 +215,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts 
  			return contributedDefaultProfile;
  		}
 diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
---- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 23:18:39
 @@ -26,6 +26,7 @@
  import type * as performance from '../../../../../base/common/performance.js';
  import { RemoteTerminalChannelEvent, RemoteTerminalChannelRequest } from './terminal.js';
@@ -182,20 +225,27 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  
  export const REMOTE_TERMINAL_CHANNEL_NAME = 'remoteterminal';
  
-@@ -132,6 +133,18 @@
+@@ -132,6 +133,25 @@
  	): Promise<ICreateTerminalProcessResult> {
  		// Be sure to first wait for the remote configuration
  		await this._configurationService.whenRemoteConfigurationLoaded();
-+		// seclab: the host user's terminal env and cwd settings stay on the host (patch 0053).
++		// seclab: the host user's terminal settings stay on the host (patch 0053): env, cwd, and the
++		// switches the process options carry (review R5-23).
 +		if (seclabIsTabWindow(this._remoteAuthority)) {
 +			const workspace = this._workspaceContextService.getWorkspace();
-+			const tab = <T>(key: keyof ICompleteTerminalConfiguration) => seclabTabSetting<T>(this._configurationService, workspace, this._remoteAuthority, key);
++			const tab = <T>(key: string) => seclabTabSetting<T>(this._configurationService, workspace, this._remoteAuthority, key);
 +			configuration = {
 +				...configuration,
 +				'terminal.integrated.env.windows': tab<ICompleteTerminalConfiguration['terminal.integrated.env.windows']>('terminal.integrated.env.windows') ?? {},
 +				'terminal.integrated.env.osx': tab<ICompleteTerminalConfiguration['terminal.integrated.env.osx']>('terminal.integrated.env.osx') ?? {},
 +				'terminal.integrated.env.linux': tab<ICompleteTerminalConfiguration['terminal.integrated.env.linux']>('terminal.integrated.env.linux') ?? {},
 +				'terminal.integrated.cwd': tab<string>('terminal.integrated.cwd') ?? '',
++				'terminal.integrated.detectLocale': tab<ICompleteTerminalConfiguration['terminal.integrated.detectLocale']>('terminal.integrated.detectLocale') ?? 'auto',
++			};
++			options = {
++				...options,
++				shellIntegration: { ...options.shellIntegration, enabled: tab<boolean>('terminal.integrated.shellIntegration.enabled') === true, suggestEnabled: tab<boolean>('terminal.integrated.suggest.enabled') === true },
++				windowsUseConptyDll: tab<boolean>('terminal.integrated.windowsUseConptyDll') === true,
 +			};
 +		}
  
@@ -203,8 +253,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChanne
  		// But then we will keep only some variables, since the rest need to be resolved on the remote side
 diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts
 --- a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	2026-11-18 10:51:47
-@@ -0,0 +1,57 @@
++++ b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	2026-11-18 23:18:39
+@@ -0,0 +1,58 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: the terminal settings a `seclab+` window sends its tab (patch 0053, reviews DOCSYNC-R5,
 + *  RFU1R-2, RFU1R2-1). The settings read here are all registered `restricted`, so patch 0036
@@ -217,13 +267,14 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.t
 +import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 +import { IWorkspace } from '../../../../platform/workspace/common/workspace.js';
 +
++/** The filter module's tab test, `seclabIsTabAuthority`: the prefix in any case (review R5-21). */
 +export function seclabIsTabWindow(remoteAuthority: string | null | undefined): boolean {
-+	return typeof remoteAuthority === 'string' && /^seclab\+/.test(remoteAuthority);
++	return typeof remoteAuthority === 'string' && /^seclab\+/i.test(remoteAuthority);
 +}
 +
-+/** A resource on the tab's own file system: `vscode-remote` on the window's authority. */
++/** A resource on the tab's own file system: `vscode-remote` on the window's authority, in any case. */
 +export function seclabUriInTab(uri: UriComponents | null | undefined, remoteAuthority: string): boolean {
-+	return !!uri && uri.scheme === 'vscode-remote' && uri.authority === remoteAuthority;
++	return !!uri && uri.scheme === 'vscode-remote' && typeof uri.authority === 'string' && uri.authority.toLowerCase() === remoteAuthority.toLowerCase();
 +}
 +
 +const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -263,8 +314,8 @@ diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.t
 +	return layers.filter(l => l !== undefined).reduce(merge, undefined) as T | undefined;
 +}
 diff -ruN a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts
---- a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 23:18:39
 @@ -13,6 +13,7 @@
  import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
  import { IHistoryService } from '../../../services/history/common/history.js';
