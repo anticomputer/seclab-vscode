@@ -71,7 +71,10 @@ Each refusal logs `data:server-locations` with its site (`environment`, `profile
 `host-install`, `host-enablement`), never the value.
 
 The check can't break a genuine tab: the server transforms every URI it sends with the authority
-the window itself asked for, and builds each one fresh. Control 2 costs the user host extension
+the window itself asked for, and builds each one fresh. Upstream's server left its install replies
+(extension and MCP), MCP metadata updates and a VSIX install's source untransformed; 0059 makes the
+server transform them too, and the unit suite runs a genuine server's own channels through the
+window's checks (PR review on #66). Control 2 costs the user host extension
 management from tab windows; ARCHITECTURE §4.8 lists what changes.
 
 ## Proof
@@ -107,6 +110,6 @@ management from tab windows; ARCHITECTURE §4.8 lists what changes.
 - A tab can still make host extensions unavailable in its own window through the extension
   registry's id-keyed dependency handling (ENV-68, deferred): the registry's partition by tab is a
   follow-up. Tab Manager is out of reach, and a test keeps it so.
-- 0059 is large (about 360 added lines over 26 upstream files) for one concern, a tab's server
+- 0059 is large (about 385 added lines over 28 upstream files) for one concern, a tab's server
   steering the host through what it names; the range for RPC follow-ons is full, and splitting it
   would leave each part's guarantee depending on the others.

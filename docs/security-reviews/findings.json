@@ -21474,6 +21474,66 @@
 			"owner": "rpc",
 			"status": "deferred",
 			"followUp": "Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts \"Tab Manager stays out of reach of a tab claiming its id\" keeps Tab Manager out of reach meanwhile."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-4",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "Upstream's server sent install replies and a VSIX install's source as server-side file URIs, unlike its other replies, so a tab window refused a genuine install's reply and dropped its event after the install had happened.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:0ef61ec6862f47cc17814611ee68e8d1d2499238",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-5",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "Upstream's MCP server sent install and metadata-update replies untransformed, so a tab window refused them after the change had been written.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:0ef61ec6862f47cc17814611ee68e8d1d2499238",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-6",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "The runtime check read the environment probe's served count with `Number`, so a malformed count read as NaN and passed.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d38517782b7d01e823a18546a442e681ed44a680",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the environment probe needs the lie served and the canary on a baseline, and a logged refusal after patch 0059"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-7",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "An update the tab's server reported queued a bare id for removal, which removed a running host extension sharing the id from the tab window.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:0ef61ec6862f47cc17814611ee68e8d1d2499238",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
 		}
 	]
 }

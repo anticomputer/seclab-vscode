@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 285 | 449 | 60 | 906 |
+| fixed | 14 | 98 | 285 | 453 | 60 | 910 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 186 | 80 | 334 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 385 | 737 | 204 | 1459 |
+| **all** | 18 | 115 | 385 | 741 | 204 | 1463 |
 
 ## Baseline: open high and critical findings
 
@@ -2579,6 +2579,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | ENV-66 | low | fixed | A tab extension claiming a host extension's dependency id, with no API and reported invalid, turned the host extension off in the tab window through the dependency rule. | patch:4ac299b590206cc54e2d7899b9e331b3b015331a · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | ENV-67 | low | fixed | An uninstall the tab's server reported, carried as a bare id, removed a running host extension sharing the id from the tab window. | patch:4ac299b590206cc54e2d7899b9e331b3b015331a · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | ENV-68 | low | deferred | A tab can make host extensions unavailable in its own window: the extension registry checks dependency loops by id across the host's and the tab's extensions, so a tab extension claiming an id that closes a cycle removes the host extension in it, and activation resolves a host extension's dependency through the tab's claimed id. An availability loss contained to that window, not an escape. Tab Manager can't be hit: the product pins it to the local host, so the local copy takes its id, and it has no dependencies. | follow-up: Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts "Tab Manager stays out of reach of a tab claiming its id" keeps Tab Manager out of reach meanwhile. |
+| PR66-4 | low | fixed | Upstream's server sent install replies and a VSIX install's source as server-side file URIs, unlike its other replies, so a tab window refused a genuine install's reply and dropped its event after the install had happened. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes a genuine server unchanged" |
+| PR66-5 | low | fixed | Upstream's MCP server sent install and metadata-update replies untransformed, so a tab window refused them after the change had been written. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes a genuine server unchanged" |
+| PR66-6 | low | fixed | The runtime check read the environment probe's served count with \`Number\`, so a malformed count read as NaN and passed. | patch:d38517782b7d01e823a18546a442e681ed44a680 · `test/containment/check-probes.test.ts` "the environment probe needs the lie served and the canary on a baseline, and a logged refusal after patch 0059" |
+| PR66-7 | low | fixed | An update the tab's server reported queued a bare id for removal, which removed a running host extension sharing the id from the tab window. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
