@@ -349,6 +349,9 @@ function scanMemory(pid, tokens) {
 	const CHUNK = 8 << 20;
 	const TAIL = 512;
 	let bytes = 0;
+	// What the scan couldn't read: a judge must not read containment into memory it never saw.
+	let unreadBytes = 0;
+	let unreadRegions = 0;
 	try {
 		for (const line of maps.split('\n')) {
 			const m = line.match(/^([0-9a-f]+)-([0-9a-f]+) rw/);
@@ -362,7 +365,13 @@ function scanMemory(pid, tokens) {
 				try {
 					n = fs.readSync(fd, buf, 0, buf.length, at);
 				} catch {
+					unreadRegions++;
+					unreadBytes += end - at;
 					break;
+				}
+				if (n < buf.length) {
+					unreadRegions++;
+					unreadBytes += buf.length - n;
 				}
 				bytes += Math.min(n, CHUNK);
 				const view = buf.subarray(0, n);
@@ -376,17 +385,22 @@ function scanMemory(pid, tokens) {
 	} finally {
 		fs.closeSync(fd);
 	}
-	return bytes;
+	return { bytes, unreadBytes, unreadRegions };
 }
 async function extensionHostMemoryFacts() {
 	const pids = extensionHostPids();
 	const tokens = new Set();
 	let bytes = 0;
+	let unreadBytes = 0;
+	let unreadRegions = 0;
 	for (const pid of pids) {
-		bytes += scanMemory(pid, tokens);
+		const s = scanMemory(pid, tokens);
+		bytes += s.bytes;
+		unreadBytes += s.unreadBytes;
+		unreadRegions += s.unreadRegions;
 	}
 	return {
-		extensionHosts: pids.length, scannedMb: Math.floor(bytes / (1 << 20)), sawControl: tokens.has(EXTHOST_CONTROL),
+		extensionHosts: pids.length, scannedMb: Math.floor(bytes / (1 << 20)), unreadKb: Math.ceil(unreadBytes / 1024), unreadRegions, sawControl: tokens.has(EXTHOST_CONTROL),
 		canaryTokens: [...tokens].filter(t => t !== EXTHOST_CONTROL).sort().slice(0, 16),
 	};
 }
