@@ -91,7 +91,11 @@ const seclabIsTabAuthority = (a: unknown) => typeof a === 'string' && SECLAB_AUT
 
 // The host user's pair, and the tab's from its server's remote user settings.
 const LAYERS = { defaultValue: {}, userLocalValue: { seclabcanary_hostmatch_ar1: 'seclabcanary_hostreply_ar1', unset: null }, userRemoteValue: { seclabcanary_tabmatch_ar1: 'seclabcanary_tabreply_ar1' } };
-const MERGED = { ...LAYERS.defaultValue, ...LAYERS.userLocalValue, ...LAYERS.userRemoteValue };
+// Folder settings: the tab folder's are the tab's; a host folder's (a multi-root window) are the host's.
+const TAB_FOLDER = { seclabcanary_tabfoldermatch_ar1: 'seclabcanary_tabfolderreply_ar1' };
+const HOST_FOLDER = { seclabcanary_hostfoldermatch_ar1: 'seclabcanary_hostfolderreply_ar1' };
+const MERGED = { ...LAYERS.defaultValue, ...LAYERS.userLocalValue, ...LAYERS.userRemoteValue, ...TAB_FOLDER, ...HOST_FOLDER };
+const HOST_DIR = { scheme: 'file', authority: '', path: '/Users/someone/h' };
 /** 0060's helper module (on every tree this suite runs on), evaluated over stubs. */
 function helpers(): { seclabOnTab: unknown; seclabTabOwnValue: unknown } {
 	const sec = section(patchFile('0060-seclab-no-host-search-excludes-in-tabs.patch'), SETTINGS);
@@ -107,7 +111,7 @@ const LOCAL = '(local pty host)';
  * contribution: the local backend runs the tree's LocalTerminalBackend.installAutoReply over a
  * recording pty host, any other backend records what it is given.
  */
-async function installs(p0061: string | undefined, window: string | undefined, backends: Array<string | undefined>): Promise<Record<string, string[]>> {
+async function installs(p0061: string | undefined, window: string | undefined, backends: Array<string | undefined>, tabFolder = true): Promise<Record<string, string[]>> {
 	const install = fn(applied(CONTRIB, p0061), '_installListenersOnBackend', {
 		seclabIsTabAuthority, TERMINAL_CONFIG_SECTION: 'terminal.integrated', TerminalAutoRepliesSettingId: { AutoReplies: 'terminal.integrated.autoReplies' }, localize: (_k: string, m: string) => m,
 	});
@@ -132,8 +136,18 @@ async function installs(p0061: string | undefined, window: string | undefined, b
 		const local = { _environmentService: { remoteAuthority: window }, _proxy: { installAutoReply: record } };
 		const remote = {
 			remoteAuthority: authority, _remoteTerminalChannel: { installAutoReply: record },
-			_workspaceContextService: { getWorkspace: () => ({ folders: [{ uri: { scheme: 'vscode-remote', authority, path: '/w' } }] }) },
-			_configurationService: { inspect: (k: string) => k === 'terminal.integrated.autoReplies' ? structuredClone(LAYERS) : {} },
+			// A host folder first, as in a multi-root window; the tab's own folder after it.
+			_workspaceContextService: { getWorkspace: () => ({ folders: [{ uri: HOST_DIR }, ...(tabFolder ? [{ uri: { scheme: 'vscode-remote', authority, path: '/w' } }] : [])] }) },
+			_configurationService: {
+				inspect: (k: string, o?: { resource?: { scheme: string; authority: string; path: string } }) => {
+					if (k !== 'terminal.integrated.autoReplies') {
+						return {};
+					}
+					const u = o?.resource;
+					const folder = u?.scheme === 'vscode-remote' && u.path === '/w' ? TAB_FOLDER : u?.scheme === 'file' && u.path === HOST_DIR.path ? HOST_FOLDER : undefined;
+					return { ...structuredClone(LAYERS), workspaceFolderValue: structuredClone(folder) };
+				},
+			},
 		};
 		install.call(self, {
 			remoteAuthority: authority,
@@ -152,6 +166,8 @@ const TAB = 'seclab+tab1';
 const BACKENDS = [undefined, TAB];
 const HOST = 'seclabcanary_hostmatch_ar1=seclabcanary_hostreply_ar1';
 const TABR = 'seclabcanary_tabmatch_ar1=seclabcanary_tabreply_ar1';
+const TABF = 'seclabcanary_tabfoldermatch_ar1=seclabcanary_tabfolderreply_ar1';
+const HOSTF = 'seclabcanary_hostfoldermatch_ar1=seclabcanary_hostfolderreply_ar1';
 const P = patchFile(P0061);
 
 const tests: Array<[string, () => Promise<void>]> = [
@@ -162,16 +178,19 @@ const tests: Array<[string, () => Promise<void>]> = [
 	}],
 	['baseline: a tab window installs replies on the shared local pty host', async () => {
 		const got = await installs(undefined, TAB, BACKENDS);
-		assert.deepEqual(got[LOCAL], [HOST, TABR, 'uninstall', HOST, TABR]);
-		// And the host user's pair went to the tab's server (R5-31).
-		assert.deepEqual(got[TAB], [HOST, TABR, 'uninstall', HOST, TABR]);
+		assert.deepEqual(got[LOCAL], [HOST, TABR, TABF, HOSTF, 'uninstall', HOST, TABR, TABF, HOSTF]);
+		// And the host user's pairs went to the tab's server (AR-5).
+		assert.deepEqual(got[TAB], [HOST, TABR, TABF, HOSTF, 'uninstall', HOST, TABR, TABF, HOSTF]);
 	}],
 	['a tab window installs no auto reply on the shared local pty host', async () => {
 		for (const window of [TAB, 'SecLab+Tab1']) {
 			const got = await installs(P, window, BACKENDS);
 			assert.deepEqual(got[LOCAL], ['uninstall'], `${window}: the local pty host got replies`);
-			// The tab's own backend gets the tab's pair, never the host user's, at start and on a change.
-			assert.deepEqual(got[TAB], [TABR, 'uninstall', TABR], `${window}: the tab's own backend`);
+			// The tab's own backend gets the tab's pairs, never the host user's or a host folder's, at
+			// start and on a change.
+			assert.deepEqual(got[TAB], [TABR, TABF, 'uninstall', TABR, TABF], `${window}: the tab's own backend`);
+			// With no folder on the tab, the tab's remote user settings still apply, and no host folder's.
+			assert.deepEqual((await installs(P, window, BACKENDS, false))[TAB], [TABR, 'uninstall', TABR], `${window}: no tab folder`);
 		}
 	}],
 	['a window that is not a tab installs on every backend, as upstream', async () => {
@@ -200,6 +219,17 @@ const tests: Array<[string, () => Promise<void>]> = [
 			assert.equal(P.split(from).length - 1, 1, `mutant text not found once: ${name}`);
 			const got = await installs(P.replace(from, () => to), TAB, BACKENDS);
 			assert.ok(got[TAB].includes(HOST), `mutant not caught: ${name}`);
+		}
+		// AR-6: which folder's settings count as the tab's.
+		const folderMutants: Array<[string, string, string, boolean]> = [
+			['any folder', '.folders.find(f => seclabOnTab(f.uri) && f.uri.authority.toLowerCase() === authority)?.uri;', '.folders[0]?.uri;', true],
+			['any remote folder', '.folders.find(f => seclabOnTab(f.uri) && f.uri.authority.toLowerCase() === authority)?.uri;', '.folders.find(f => f.uri.authority.toLowerCase() === authority || !seclabOnTab(f.uri))?.uri;', true],
+			['the fallback is a folder', "folder ?? URI.from({ scheme: Schemas.vscodeRemote, authority: this.remoteAuthority!, path: '/' })", 'folder ?? this._workspaceContextService.getWorkspace().folders[0].uri', false],
+		];
+		for (const [name, from, to, withTabFolder] of folderMutants) {
+			assert.equal(P.split(from).length - 1, 1, `mutant text not found once: ${name}`);
+			const got = await installs(P.replace(from, () => to), TAB, BACKENDS, withTabFolder);
+			assert.ok(got[TAB].includes(HOSTF), `mutant not caught: ${name}`);
 		}
 	}],
 ];
