@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/workbench/api/browser/mainThreadTerminalService.ts
---- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 23:18:39
 @@ -114,7 +114,12 @@
  			if (hostOS === undefined) {
  				throw new Error('Remote extension host operating system is required to restore terminal environment collections.');
@@ -31,8 +31,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/w
  			const translatedCollection = {
  				persistent,
 diff -ruN a/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts b/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts
---- a/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 10:51:47
-+++ b/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 10:51:47
+--- a/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 23:18:39
++++ b/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 23:18:39
 @@ -91,6 +91,11 @@
  					this._logService.warn(`Ignoring terminal PATH contributions with an invalid origin for extension '${extensionIdentifier}'.`);
  				}
