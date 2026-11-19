@@ -57,7 +57,8 @@ const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egr
  *  (Copilot review on PR 25), so the build scripts write a lease, and the later of the two counts. */
 /** Whether a tracked file's literal tags keep an image live. A unit test or a fixture names tags as
  *  data for a validator, not as images anything runs, so its literals don't count: one kept an
- *  unused proof image live indefinitely (seclab-tab-oci:b-1453-dcd3ad6, named in driver.test.ts). */
+ *  unused proof image live indefinitely (a 1.145.3 per-build tab image named in driver.test.ts).
+ *  Never write a real tag in a comment here: this file's literals do count. */
 export function keepsTagsLive(file: string): boolean {
 	return !/\.test\.(ts|mts|js|mjs)$|(^|\/)test_[^/]+\.py$|_test\.py$|(^|\/)fixtures\//.test(file);
 }
