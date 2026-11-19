@@ -89,6 +89,8 @@ own data. 0054 closes the path for any future host-side setter and is shown at u
   - Re-run on the same build with the scan counting what it couldn't read (PR #70 review): 30/30
     and 14/14, 0 unread regions of 435 MB, clean teardown. A patched judgement now needs every
     writable region read.
+  - Re-run again with the scan taking the fixed-length canary whatever byte follows it (PR #70
+    review): 30/30 and 14/14, 0 unread, the control found, no host canary, clean teardown.
   - The commits after `6fadc8f7` change only the tab test's case handling, the contributed
     profile's base, the helper's copy, where `inheritEnv` is read and the tests, each shown by the unit suite.
 

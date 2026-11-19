@@ -22429,6 +22429,21 @@
 				"file": "test/containment/check-probes.test.ts",
 				"name": "the terminal settings and extension-host scan probes need their canaries on a baseline and a control after the patches"
 			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "PR70-5",
+			"round": "PR #70 review",
+			"severity": "medium",
+			"summary": "The extension-host scan dropped a canary that a word byte followed in memory, since it took the greedy canary run and then rejected it as too long.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9d1014d78929ef0c0c0dad65e93ff54c4507d3ac",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the extension-host scan keeps a canary whatever byte follows it in memory"
+			}
 		}
 	]
 }

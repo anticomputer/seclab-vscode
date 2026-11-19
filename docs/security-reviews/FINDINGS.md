@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 101 | 306 | 477 | 61 | 959 |
+| fixed | 14 | 101 | 307 | 477 | 61 | 960 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 198 | 82 | 348 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 118 | 404 | 775 | 209 | 1524 |
+| **all** | 18 | 118 | 405 | 775 | 209 | 1525 |
 
 ## Baseline: open high and critical findings
 
@@ -2658,6 +2658,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PR70-3 | low | fixed | "Allow" wrote the tab's remote user settings even when the tab's workspace sets the list, which wins, so the grant didn't persist. | patch:1a60c0f134287edc8835494917bb3d62527c9bd3 · `test/containment/terminal-settings.test.ts` "a tab keeps its own terminal settings and the defaults" |
 | R5-33 | low | fixed-untested | No test checked the workspace-ownership guard on the new workspace write for a link scheme, so dropping it, which would let a tab-chosen scheme land in a host-side workspace, went unnoticed. | A test correction; nothing to test. |
 | PR70-4 | medium | fixed | The extension-host scan skipped a region on a thrown or short read and still judged containment if the control canary turned up elsewhere, so a host canary in the skipped region would go unseen. | patch:9b3558b82cbdef100028d97c5cd24a7205d48636 · `test/containment/check-probes.test.ts` "the terminal settings and extension-host scan probes need their canaries on a baseline and a control after the patches" |
+| PR70-5 | medium | fixed | The extension-host scan dropped a canary that a word byte followed in memory, since it took the greedy canary run and then rejected it as too long. | patch:9d1014d78929ef0c0c0dad65e93ff54c4507d3ac · `test/containment/check-probes.test.ts` "the extension-host scan keeps a canary whatever byte follows it in memory" |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 
