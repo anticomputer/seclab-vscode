@@ -589,6 +589,23 @@ const EVERY_LEAK = ['active file: host file', 'active file: another tab file', '
 	'hostFolder: workspace settings', 'hostFolder: folder paths or name', 'hostFile: workspace settings', 'hostFile: folder paths or name'];
 
 /** A mutant of one of our patches: `from` replaced by `to` in its added lines, exactly once. */
+// R5-29: upstream's inspect returns the configuration model's own objects, so a write that edits
+// the value it read would edit the window's defaults. Only the defaults set this key here.
+async function contributedOverLiveLayers(src: Record<Key, string>): Promise<{ defaults: unknown; written: unknown }> {
+	const h = helper(src.helper);
+	const layers: Layers = { defaultValue: { bash: { path: 'bash', icon: 'terminal-bash' } } };
+	const workspace = WORKSPACES.tab(TAB);
+	let written: unknown;
+	const self: Record<string, unknown> = {
+		getPlatformKey: async () => 'linux', _environmentService: { remoteAuthority: TAB }, _seclabWorkspace: { getWorkspace: () => workspace },
+		_configurationService: { inspect: () => layers, getValue: () => layers.defaultValue, updateValue: async (_k: string, v: unknown) => { written = structuredClone(v); } },
+	};
+	self._seclabSetting = method(src.profiles, '_seclabSetting', { seclabIsTabWindow: h.seclabIsTabWindow, seclabTabSetting: h.seclabTabSetting });
+	await method(src.profiles, 'registerContributedProfile', { ConfigurationTarget: { USER: 2, USER_LOCAL: 3, USER_REMOTE: 4 }, TerminalSettingPrefix: { Profiles: 'terminal.integrated.profiles.' }, seclabIsTabWindow: h.seclabIsTabWindow })!.call(
+		self, { extensionIdentifier: 'tab.ext', id: 'p', title: 'p', options: {} });
+	return { defaults: structuredClone(layers.defaultValue), written };
+}
+
 function mutant(name: string, from: string, to: string): Record<string, string> {
 	const text = readPatch(name);
 	assert.equal(text.split(from).length - 1, 1, `mutant text not found once in ${name}: ${from}`);
@@ -637,6 +654,13 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(o.createProcess.workspaceId, 'w');
 		assert.deepEqual(o.ownIcon, { scheme: 'vscode-remote', authority: TAB, path: '/w/icon.png', $uri: true });
 		assert.deepEqual(o.localCollections, ['host.ui-extension']);
+		// A contributed profile extends the tab's own profiles and the defaults (R5-27, R5-29).
+		assert.deepEqual(Object.keys(o.contributedValue as object).sort(), ['bash', 'p', 'tabp']);
+	}],
+	["a contributed profile write leaves the window's defaults unchanged", async () => {
+		const { defaults, written } = await contributedOverLiveLayers(sources(true));
+		assert.deepEqual(defaults, { bash: { path: 'bash', icon: 'terminal-bash' } });
+		assert.deepEqual(Object.keys(written as object).sort(), ['bash', 'p']);
 	}],
 	['the host extension host can still set an id a tab took first', async () => {
 		// 0054 stops a tab displacing another host's collection, never the window's own host (R5-11).
@@ -720,6 +744,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		// R5-27: a contributed profile write starting from the merged profiles.
 		const merged = mutant(OURS[4], "const profilesConfig = this._seclabSetting(`${TerminalSettingPrefix.Profiles}${platformKey}`) ?? {};", "const profilesConfig = this._configurationService.getValue(`${TerminalSettingPrefix.Profiles}${platformKey}`);");
 		assert.ok((await leaks(sources(true, merged), TAB)).includes('host profiles copied into a contributed profile write'), 'mutant not caught: a contributed write from the merged profiles');
+		// R5-29: the helper hands back a configuration model's own object.
+		const live = mutant(OURS[0], '+	return copy(layers.filter(l => l !== undefined).reduce(merge, undefined)) as T | undefined;', '+	return layers.filter(l => l !== undefined).reduce(merge, undefined) as T | undefined;');
+		assert.ok(Object.keys((await contributedOverLiveLayers(sources(true, live))).defaults as object).includes('p'), "mutant not caught: the helper returns a model's own object");
 	}],
 ];
 
