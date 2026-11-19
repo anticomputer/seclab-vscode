@@ -69,6 +69,48 @@ const AUTH = `seclab+${TAB}`;
 const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 
+/**
+ * Every `seclab+` tab test a shipped patch adds that compares case-sensitively, unless a later
+ * patch in the series removes that line again. The filter's own test is `/^seclab\+/i`; one that
+ * isn't would call a mixed-case authority a tab here and not there (review SRCH3-14).
+ */
+function caseSensitiveTabTests(patches: Array<[string, string]>): string[] {
+	const CASE_SENSITIVE = [
+		/startsWith\((['"`])seclab\+\1\)/, /startsWith\(`vscode-remote:\/\/\$\{SECLAB_\w*AUTHORITY_PREFIX\}`\)/, /startsWith\(SECLAB_\w*AUTHORITY_PREFIX\)/,
+		/\/\^seclab\\\+[^/]*\/(?![a-z]*i)/, /(?:notE|e)qualsTo\((['"])seclab\1\)/, /===\s*(['"])seclab\+?\1/,
+	];
+	const found: string[] = [];
+	patches.forEach(([name, text], i) => {
+		for (const line of text.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'))) {
+			const code = line.slice(1).replace(/(^|\s)\/\/.*$/, '');
+			if (/^\s*\*/.test(code) || !CASE_SENSITIVE.some(r => r.test(code)) || /\.toLowerCase\(\)\.startsWith/.test(code)) {
+				continue;
+			}
+			const removedLater = patches.slice(i + 1).some(([, later]) => later.split('\n').includes(`-${line.slice(1)}`));
+			if (!removedLater) {
+				found.push(`${name}: ${line.slice(1).trim()}`);
+			}
+		}
+	});
+	return found;
+}
+const SERIES = readFileSync(join(REPO, 'patches', 'series'), 'utf8').split('\n').map(l => l.trim()).filter(l => l.endsWith('.patch'))
+	.map(n => [n, readFileSync(join(REPO, 'patches', n), 'utf8')] as [string, string]);
+
+test('every seclab+ tab test the series ships is case-insensitive, as the filter\'s (SRCH3-14)', () => {
+	assert.ok(F.seclabIsTabAuthority('SecLab+x') && F.seclabIsTabAuthority('SECLAB+x'), 'the filter\'s own test is case-insensitive');
+	assert.deepEqual(caseSensitiveTabTests(SERIES), []);
+	// Each shape is caught when a patch adds it (and kept when a later patch doesn't remove it).
+	for (const bad of ["return a.startsWith('seclab+');", 'if (!/^seclab\\+/.test(x)) {', 'return s.startsWith(SECLAB_TAB_AUTHORITY_PREFIX);',
+		"when: RemoteNameContext.notEqualsTo('seclab')", "if (name === 'seclab') {", 'x.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)']) {
+		assert.equal(caseSensitiveTabTests([['p1', `+${bad}`]]).length, 1, `not caught: ${bad}`);
+		assert.equal(caseSensitiveTabTests([['p1', `+${bad}`], ['p2', `-${bad}`]]).length, 0, `a later removal not honoured: ${bad}`);
+	}
+	for (const good of ["return a.toLowerCase().startsWith('seclab+');", 'if (!/^seclab\\+/i.test(x)) {', ' * a `seclab+` window', '// startsWith(\'seclab+\')']) {
+		assert.equal(caseSensitiveTabTests([['p1', `+${good}`]]).length, 0, `flagged: ${good}`);
+	}
+});
+
 // Runs first: nothing has subscribed yet, which is the window before its decision log installs.
 test('a push refusal made before the log installs is held, then delivered with its fixed reason', () => {
 	F.seclabRefusePush(AUTH, 'push:remoteterminal:$onExecuteCommand');

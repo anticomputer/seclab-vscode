@@ -96,6 +96,8 @@ test('ambientConnection being undefined cannot make an unresolved session look l
 
 test('the tab-authority test matches the prefix, not a substring', () => {
 	assert.equal(seclabChatSessionAllowed('seclab+t-1', true, { ambientConnection: undefined, resolveSessionResource: () => undefined }, uri('x')), false, 'a tab authority is gated');
+	// In any case, as the RPC filter's tab test (review SRCH3-14).
+	assert.equal(seclabChatSessionAllowed('SecLab+t-1', true, { ambientConnection: undefined, resolveSessionResource: () => undefined }, uri('x')), false, 'a mixed-case tab authority is gated');
 	assert.equal(seclabChatSessionAllowed('ssh-remote+seclab+t-1', true, { ambientConnection: undefined, resolveSessionResource: () => undefined }, uri('x')), true, 'must anchor at the start');
 	assert.equal(seclabChatSessionAllowed(undefined, true, { ambientConnection: undefined, resolveSessionResource: () => undefined }, uri('x')), true);
 	assert.equal(seclabChatSessionAllowed('', true, { ambientConnection: undefined, resolveSessionResource: () => undefined }, uri('x')), true);
