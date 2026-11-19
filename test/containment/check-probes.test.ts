@@ -12,6 +12,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -237,6 +238,24 @@ const tests: Array<[string, () => void]> = [
 		for (const unread of [1, undefined, '0', null]) {
 			assert.ok(failed(run({ expectations: exp, reh: reh({}, { unreadRegions: unread }) }).out, /reh-exthost-terminal-profile patched predicate holds/), `unreadRegions ${JSON.stringify(unread)}`);
 		}
+	}],
+	['the extension-host scan keeps a canary whatever byte follows it in memory', () => {
+		// PR #70 review: the scan once took the greedy canary run and then dropped it for being too long.
+		// As staged in the tab, probes.js finds probe-safety.js beside it.
+		const req = createRequire(import.meta.url);
+		const mod = { exports: {} as { exthostTokens: (t: string) => string[] } };
+		new Function('require', 'module', 'exports', fs.readFileSync(path.join(import.meta.dirname, 'rogue-reh', 'probes.js'), 'utf8'))(
+			(id: string) => req(id === './probe-safety.js' ? './probe-safety.js' : id), mod, mod.exports);
+		const { exthostTokens } = mod.exports;
+		const token = `seclabcanary_TERMINALAUTOMATI_${'0123456789abcdef'.repeat(2)}`;
+		for (const after of ['', '"', 'X', '_', '7', 'a']) {
+			for (const enc of ['latin1', 'utf16le'] as const) {
+				const memory = Buffer.from(`\u0000junk${token}${after}more`, enc).toString(enc);
+				assert.deepEqual(exthostTokens(memory), [token], `followed by ${JSON.stringify(after)} (${enc})`);
+			}
+		}
+		// A fragment cut short is never a token.
+		assert.deepEqual(exthostTokens(token.slice(0, -1)), []);
 	}],
 	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {
 		const spec = { required: true, runner: 'reh-push', policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };

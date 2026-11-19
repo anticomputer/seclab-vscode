@@ -325,7 +325,11 @@ const EXTHOST_REF = 'data:exthost-terminal-default-profile';
 const EXTHOST_NEEDLE = 'seclabcanary_TERMINAL';
 const EXTHOST_CONTROL = `seclabcanary_TERMINALTABOWN_${require('crypto').randomBytes(16).toString('hex')}`;
 /** A whole minted canary (test/canary/canary.ts): tag, then 32 hex digits. Fragments never count. */
-const EXTHOST_TOKEN = /^seclabcanary_TERMINAL[A-Z0-9]{0,8}_[0-9a-f]{32}$/;
+// The fixed-length token itself, whatever bytes follow it in memory (PR #70 review).
+const EXTHOST_TOKEN = /seclabcanary_TERMINAL[A-Z0-9]{0,8}_[0-9a-f]{32}/g;
+function exthostTokens(text) {
+	return String(text).match(EXTHOST_TOKEN) || [];
+}
 function extensionHostPids() {
 	const out = [];
 	for (const d of fs.readdirSync('/proc')) {
@@ -377,7 +381,7 @@ function scanMemory(pid, tokens) {
 				const view = buf.subarray(0, n);
 				for (const [needle, enc] of forms) {
 					for (let i = view.indexOf(needle); i >= 0; i = view.indexOf(needle, i + needle.length)) {
-						safety.canaryTokens(view.subarray(i, i + 2 * 160).toString(enc)).filter(t => EXTHOST_TOKEN.test(t)).forEach(t => tokens.add(t));
+						exthostTokens(view.subarray(i, i + 2 * 160).toString(enc)).forEach(t => tokens.add(t));
 					}
 				}
 			}
@@ -778,4 +782,4 @@ function early(socketServer) {
 	};
 }
 
-module.exports = { runRehProbes, main, early };
+module.exports = { runRehProbes, main, early, exthostTokens };
