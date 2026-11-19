@@ -497,12 +497,16 @@
 			"summary": "Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host.",
 			"component": "window→tab pushes (terminal profile/env)",
 			"owner": "rpc",
-			"status": "open",
-			"gap": "No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling.",
-			"note": "Handed to the RPC follow-ups session (coordinator, 2026-11-16): its patches 0034 (no host variables in a tab REH's terminal launch config) and 0050 (no host terminal in a tab window) touch the same code. Document-sync notes: measure what MainThreadTerminalService pushes to a tab's host (terminal names and launch configs of host terminals, the default profile, environment variable collections) with a host-side canary in terminal.integrated.env.* and a host terminal title; the editor-tab model already sends a host terminal's title (EDT-6).",
+			"status": "fixed",
+			"note": "Handed to the RPC follow-ups session (coordinator, 2026-11-16): its patches 0034 (no host variables in a tab REH's terminal launch config) and 0050 (no host terminal in a tab window) touch the same code. Document-sync notes: measure what MainThreadTerminalService pushes to a tab's host (terminal names and launch configs of host terminals, the default profile, environment variable collections) with a host-side canary in terminal.integrated.env.* and a host terminal title; the editor-tab model already sends a host terminal's title (EDT-6). Closed by patches 0053 to 0058 (review record 20261118-tab-terminal-settings.md).",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
-				"quote": "the terminal default profile and environment collections;"
+				"quote": "the terminal default profile and environment collections; patches 0053 to 0058"
+			},
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
 			}
 		},
 		{
@@ -14570,9 +14574,12 @@
 			"summary": "In a tab window the window sends the host user's raw terminal.integrated.env.<os>, terminal.integrated.cwd and terminal.integrated.profiles.<os> settings to the tab's REH in createProcess and getProfiles, though 0036 withholds them from the tab's extension host.",
 			"component": "remote terminal backend (remoteTerminalBackend.createProcess, getProfiles)",
 			"owner": "rpc",
-			"status": "open",
-			"followUp": "In a seclab+ window, filter the terminal configuration and profiles sent to the REH, and the automation profile sent to the tab's extension host (RFU1R2-1), with 0036's withhold rules, with rogue-REH and rogue-extension probes reading them (rpc session).",
-			"gap": "No patch or probe yet: host terminal env, cwd and profile settings reach the tab's REH in createProcess and getProfiles."
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
 		},
 		{
 			"record": "20261116-rfu1-terminal-variables.md",
@@ -14582,9 +14589,12 @@
 			"summary": "activeFileResource may be a host file: or vscode-userdata: document, and its path goes to the tab's REH on every createProcess.",
 			"component": "remote terminal channel (remoteTerminalChannel.createProcess)",
 			"owner": "rpc",
-			"status": "open",
-			"followUp": "In a seclab+ window, send activeFileResource only when it is vscode-remote on this tab's authority (rpc session).",
-			"gap": "No patch yet: a host document's path reaches the tab's REH in createProcess."
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
 		},
 		{
 			"record": "20261116-rfu1-terminal-variables.md",
@@ -14639,9 +14649,12 @@
 			"summary": "In a tab window the host user's raw terminal.integrated.automationProfile.<os> object (env and args included) goes to the tab's extension host in $acceptDefaultProfile, unfiltered, though 0036 withholds it from the tab's configuration.",
 			"component": "terminal default profile push (MainThreadTerminalService._updateDefaultProfile)",
 			"owner": "rpc",
-			"status": "open",
-			"followUp": "With RFU1R-2: in a seclab+ window send no automation profile, or one filtered with 0036's withholdReason, in $acceptDefaultProfile, with a rogue-extension probe (rpc session).",
-			"gap": "No patch or probe yet: the host automation profile reaches the tab's extension host."
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
 		},
 		{
 			"record": "20261116-rfu1-terminal-variables.md",
@@ -21898,6 +21911,453 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-1",
+			"round": "patches 0053-0058 round 1",
+			"severity": "medium",
+			"summary": "The layer rule counted a host-side workspace's settings as the tab's.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-2",
+			"round": "patches 0053-0058 round 1",
+			"severity": "medium",
+			"summary": "The REH was told the window's host folders, active folder and workspace name, and the options' workspace folder.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-3",
+			"round": "patches 0053-0058 round 1",
+			"severity": "medium",
+			"summary": "In a tab window the window's own extension host was sent the default profile the tab's REH chose.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-4",
+			"round": "patches 0053-0058 round 1",
+			"severity": "low",
+			"summary": "The extension-host scan could read an empty scan as containment, and its control canary was token-shaped, so the tab's secret gate refused the workspace.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:a453599464b06afe6dcf7eb7b29c41e5f2543f83",
+			"gap": "A probe correction, shown by both runtime runs; nothing further to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-5",
+			"round": "patches 0053-0058 round 1",
+			"severity": "low",
+			"summary": "The layer rule replaced maps instead of merging them as upstream does, and left `cwd` undefined.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab keeps its own terminal settings and the defaults"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-6",
+			"round": "patches 0053-0058 round 1",
+			"severity": "low",
+			"summary": "The suite didn't record collections, options or the active file, nor the application and policy layers.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:ba50e2eebc74d9bd517b3956126a597149046409",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-7",
+			"round": "patches 0053-0058 round 1",
+			"severity": "info",
+			"summary": "The change had no EDR.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record; nothing to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-8",
+			"round": "patches 0053-0058 round 1",
+			"severity": "medium",
+			"summary": "A tab's extension host could replace or delete a collection another host set under the same id.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-9",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "medium",
+			"summary": "A REH's profiles or the tab's settings could name any `https` image as a terminal icon, which the trusted window fetched past the tab's broker.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-10",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "low",
+			"summary": "The default profile's name, from the host user's settings, picked among the REH's profiles, so a host value could be confirmed by guessing.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-11",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "low",
+			"summary": "Upstream filtered only other origins' `PATH` entries from a tab's terminal environment.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-12",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "low",
+			"summary": "The workspace label and id sent to the REH could derive from a host path.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-13",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "low",
+			"summary": "The resolver read the window's authority from the connection, not the environment.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-14",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "high",
+			"summary": "\"Select Default Profile\" and saving a detected profile wrote the REH's profile (path, args, `env`) into the host user's settings, where a normal window's next terminal would run it.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			},
+			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 34 leaks."
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-15",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "medium",
+			"summary": "Terminal profile descriptions are rendered as markdown in Settings, so a REH's profile could make the trusted window fetch an image.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-16",
+			"round": "patches 0053-0058 rounds 2-3",
+			"severity": "low",
+			"summary": "A detach request naming another window's workspace reached the REH with that workspace's id.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:082b65679903a1c979f0b7d0665ae27cb3d5319e",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-18",
+			"round": "patches 0053-0058 round 4",
+			"severity": "high",
+			"summary": "The terminal hover rendered the title and command line, which the tab's shell and REH set, as markdown.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:eef2c88a4bf49f34749f1451133a14b7fd090410",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			},
+			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 34 leaks."
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-19",
+			"round": "patches 0053-0058 round 4",
+			"severity": "medium",
+			"summary": "\"Allow <scheme>\" on a link the tab's shell printed wrote `allowedLinkSchemes` into the host user's settings, from the merged list.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:eef2c88a4bf49f34749f1451133a14b7fd090410",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-20",
+			"round": "patches 0053-0058 round 4",
+			"severity": "low",
+			"summary": "Profile descriptions kept autolinks, and a new line could forge another entry's fields.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:eef2c88a4bf49f34749f1451133a14b7fd090410",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-21",
+			"round": "patches 0053-0058 round 5",
+			"severity": "medium",
+			"summary": "The terminal helper's tab test was case-sensitive while the filter module's is not, so a mixed-case tab authority was a tab to the filter and not to 0053 to 0058.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c4ba9d2199b3735a98e7475fa900e1913a93f9e7",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-22",
+			"round": "patches 0053-0058 round 5",
+			"severity": "low",
+			"summary": "A new terminal's cwd for a folder came from the merged `terminal.integrated.cwd` and reached the REH in the launch config.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c4ba9d2199b3735a98e7475fa900e1913a93f9e7",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-23",
+			"round": "patches 0053-0058 round 5",
+			"severity": "low",
+			"summary": "The host user's shell integration, suggest, ConPTY and locale switches reached the REH in the process options.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c4ba9d2199b3735a98e7475fa900e1913a93f9e7",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-24",
+			"round": "patches 0053-0058 round 5",
+			"severity": "medium",
+			"summary": "A terminal status's tooltip, which can be a launch error the tab's server sent, was rendered as markdown in the hover.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c4ba9d2199b3735a98e7475fa900e1913a93f9e7",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-25",
+			"round": "patches 0053-0058 round 5",
+			"severity": "low",
+			"summary": "The automation profile and the contributed-profile exclusions were read from the merged settings, and a contributed profile was written to the host user's settings.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c4ba9d2199b3735a98e7475fa900e1913a93f9e7",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-26",
+			"round": "patches 0053-0058 round 6",
+			"severity": "medium",
+			"summary": "The guard that keeps a tab's launch config unresolved stayed case-sensitive, so a mixed-case tab authority had host settings resolved into it.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ce43ec27000d312e304e720e69ec06207639e0b0",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "each mutant of 0053 to 0058 is caught"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-27",
+			"round": "patches 0053-0058 round 6",
+			"severity": "low",
+			"summary": "A contributed profile written from a tab window started from the merged profiles, copying the host user's into the tab's settings.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:ce43ec27000d312e304e720e69ec06207639e0b0",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-28",
+			"round": "patches 0053-0058 round 6",
+			"severity": "low",
+			"summary": "The suite didn't model the window's resolution, and pinned only the helper's tab test to the filter module's.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:4626c508938c68779884ea2ee0635f8d79f5923e",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-29",
+			"round": "patches 0053-0058 round 7",
+			"severity": "low",
+			"summary": "The tab-layer helper returned a configuration model's own object when one layer set the key, so the contributed-profile write edited the window's defaults in place.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9e8fa0be8fcad588e793f0360b232b29b69b2d27",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a contributed profile write leaves the window's defaults unchanged"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-30",
+			"round": "patches 0053-0058 round 8",
+			"severity": "low",
+			"summary": "The launch's `useShellEnvironment`, which reaches the REH, was filled from the host user's `terminal.integrated.inheritEnv`.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2443676bb54a419e58da816063a1337ba9fce083",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "R5-31",
+			"round": "patches 0053-0058 round 9",
+			"severity": "medium",
+			"summary": "The window installed the host user's `terminal.integrated.autoReplies` prompts and replies on every terminal backend, the tab's REH included, at start and on every change.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:fbbcdf991616cf5ef4d5883e2f310b0b10d38b11",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
 		}
 	]
 }

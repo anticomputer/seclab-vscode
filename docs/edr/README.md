@@ -139,5 +139,6 @@ Same rules as ADRs:
 | 2026-11-18 | [New highs closed by their own change show their test failing on main](20261118-new-highs-failing-baseline.md) | accepted |
 | 2026-11-18 | [Pending owner acceptances: the owner's decision before the finding's record](20261118-pending-owner-acceptances.md) | accepted |
 | 2026-11-18 | [A tab's server says where the tab's files are; the window checks it](20261118-tab-server-environment.md) | accepted |
+| 2026-11-18 | [Tab windows send their tab no host terminal settings, and take no tab profile into host settings](20261118-tab-terminal-settings.md) | accepted |
 | 2026-11-19 | [A tab window installs no terminal auto reply on the shared local pty host](20261119-tab-auto-replies.md) | accepted |
 <!-- index:end -->

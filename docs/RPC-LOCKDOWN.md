@@ -716,11 +716,10 @@ read, write and open their own workspace files.
       filesystem and text-content provider registrations
       ([EDR](edr/20261116-scheme-squatting.md));
     - workspace data; patch 0041: no window enters a workspace, so a tab window's
-      workspace names only the tab's folder ([EDR](edr/20261116-workspace-data.md)).
-
-    Still open, each needing its own push-side control:
-    - the terminal default profile and environment collections; owned by the RPC
-      follow-ups, whose patches 0034 and 0050 touch the same code.
+      workspace names only the tab's folder ([EDR](edr/20261116-workspace-data.md));
+    - the terminal default profile and environment collections; patches 0053 to 0058
+      send a tab only its own terminal settings, collections and paths
+      ([EDR](edr/20261118-tab-terminal-settings.md)).
 
 ## 8. Decisions taken
 
