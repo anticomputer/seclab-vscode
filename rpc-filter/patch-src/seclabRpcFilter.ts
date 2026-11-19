@@ -32,7 +32,8 @@ export interface SeclabFilterServices {
 }
 
 /** Authorities we filter. Anything else is either local-trusted or unknown. */
-const SECLAB_AUTHORITY = /^seclab\+/;
+// Authorities compare case-insensitively, as URIs and the resolver treat them (patch 0060, review SRCH3-8).
+const SECLAB_AUTHORITY = /^seclab\+/i;
 
 /** A context value no tab ever set: what an unreadable context key reports. */
 const SECLAB_UNKNOWN_VALUE: unknown = Object.freeze({});
