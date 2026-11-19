@@ -297,10 +297,6 @@ const tests: Array<[string, () => void]> = [
 		assert.doesNotMatch(fault.out, /names harness|harness is recorded twice/, fault.out);
 		// Its record is required when it is selected, and the rogue extension's is not.
 		assert.ok(failed(judge(undefined).out, /harness-measured evidence present/));
-		// The tab's own REH record can't stand in for the host's measurement, nor add a second result (AID-1).
-		const forged = judge({ results: [result({ hostDialled: true, gateRefusals: 0 })] }, { reh: { results: [result({})] } });
-		assert.ok(failed(forged.out, /rogue REH evidence names ai-remote-agent-host-dial, which only harness-probes.json may record/), forged.out);
-		assert.ok(failed(forged.out, /ai-remote-agent-host-dial patched predicate holds/), forged.out);
 		assert.ok(failed(judge({ results: [result({}), result({})] }).out, /ai-remote-agent-host-dial is recorded twice/));
 		// The REH record keeps its own probes.
 		assert.ok(failed(judge({ results: [result({}), { id: 'reh-onexecutecommand-windowopen', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'denied' }] }).out, /names reh-onexecutecommand-windowopen, which only reh-probes.json may record/));
@@ -308,6 +304,17 @@ const tests: Array<[string, () => void]> = [
 		const baseline = judge({ results: [result({})] }, { mode: 'unpatched' });
 		assert.match(baseline.out, /ai-remote-agent-host-dial has no unpatched baseline/);
 		assert.doesNotMatch(baseline.out, /ai-remote-agent-host-dial succeeds on the unpatched build/);
+	}],
+	["the tab's REH record can't stand in for the host's dial measurement", () => {
+		// AID-1: the host's record shows an escape; the tab's REH writes a clean one under the same id.
+		const id = 'ai-remote-agent-host-dial';
+		const spec = { required: true, runner: 'reh-push', surface: 'client-push', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, [id]: spec }, rehProbes: {} };
+		const clean = { tabDialled: false, tabDialledClaimed: false, tabListenerLive: true, tabListenerLiveClaimed: true, controlDialled: true };
+		const result = (facts: Record<string, unknown>) => ({ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { ...clean, ...facts } });
+		const forged = run({ expectations: exp, rpc: { results: [] }, harness: { results: [result({ hostDialled: true, gateRefusals: 0 })] }, reh: { results: [result({ hostDialled: false, gateRefusals: 7 })] }, args: ['--only', id] });
+		assert.notEqual(forged.status, 0, 'a forged REH record passed the dial');
+		assert.ok(failed(forged.out, /rogue REH evidence names ai-remote-agent-host-dial, which only harness-probes.json may record/), forged.out);
 	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
