@@ -239,7 +239,7 @@
 		},
 		{
 			"id": "fixture:test/containment/search-probe",
-			"runBy": "test/containment/search-probe.ts before|after, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
+			"runBy": "test/containment/search-probe.ts before|after|excludes-baseline|excludes-patched, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
 			"evidence": [
 				{
 					"record": "docs/edr/20261117-search-in-tabs.md",

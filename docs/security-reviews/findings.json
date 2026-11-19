@@ -19348,12 +19348,15 @@
 			"anchor": "SRCH-3",
 			"round": "search restoration review (2026-11-17)",
 			"severity": "low",
-			"summary": "The query sent to a tab carried extraFileResources (open editors outside the workspace; now filtered by 0051) and still carries include/exclude globs built from the host's files.exclude and search.exclude.",
-			"component": "search query sent to a tab (searchService, patch 0051)",
+			"summary": "The query sent to a tab carried extraFileResources (open editors outside the workspace; filtered by 0051) and include/exclude globs built from the host's files.exclude and search.exclude (removed by 0060).",
+			"component": "search query sent to a tab (searchService, patches 0051, 0060)",
 			"owner": "rpc",
-			"status": "open",
-			"followUp": "extraFileResources are filtered by 0051; filter host-derived globs with 0036's withhold rules, or record the trade-off (which files a search returns) as a residual (rpc session).",
-			"gap": "Host-derived include/exclude globs still reach the tab's search provider."
+			"status": "fixed",
+			"commit": "patch:155dc26f24afa78c24f13bd42531c35390620c3a",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
 		},
 		{
 			"record": "20261117-search-in-tabs.md",
@@ -21563,6 +21566,219 @@
 			"test": {
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes a genuine server unchanged"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-1",
+			"round": "patch 0060 round 1",
+			"severity": "medium",
+			"summary": "Explorer find, the chat file picker, prompt-file discovery and sessions telemetry build file queries by hand from the merged settings, bypassing the first version's QueryBuilder change, so the host's patterns still reached the tab.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:8db1c244938bb1d2b2a17df0daddd2989666e4e4",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-2",
+			"round": "patch 0060 round 1",
+			"severity": "medium",
+			"summary": "The window's watch requests for a tab's workspace carried the host user's `files.watcherExclude` and `files.watcherInclude`, and the snapshot let `files.watcherExclude` cross.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:8db1c244938bb1d2b2a17df0daddd2989666e4e4",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-3",
+			"round": "patch 0060 round 1",
+			"severity": "low",
+			"summary": "The first version kept a workspace file's settings, wherever the file was.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:8db1c244938bb1d2b2a17df0daddd2989666e4e4",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-4",
+			"round": "patch 0060 round 2",
+			"severity": "medium",
+			"summary": "Removing host patterns by key where a query leaves for the tab also removed a caller's matching pattern, so a tab passing a guess to `findFiles` learned whether the host's settings held it.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:31a0295b4522bce76b5952c4935270b0f3cd7f3f",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a caller's own patterns reach the tab untouched, so a query says nothing about the host's"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-5",
+			"round": "patch 0060 round 2",
+			"severity": "medium",
+			"summary": "`files.readonlyInclude`, `files.readonlyExclude` and `explorer.autoRevealExclude` are glob maps with boolean values, so their host values crossed to the tab's extension host.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:31a0295b4522bce76b5952c4935270b0f3cd7f3f",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-6",
+			"round": "patch 0060 round 2",
+			"severity": "low",
+			"summary": "Round 2's helper merged the tab's own values across folders and keys, and an object spread of a `__proto__` key defeated its own-property check.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:31a0295b4522bce76b5952c4935270b0f3cd7f3f",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-7",
+			"round": "patch 0060 round 3",
+			"severity": "medium",
+			"summary": "Sessions telemetry took excludes for the session's workspace URI and used them for every folder it queried, so a session whose URI isn't the tab's sent the host's patterns.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:b101c6d22d6731a4fb57fe583a76144b733f40b2",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-8",
+			"round": "patch 0060 round 3",
+			"severity": "low",
+			"summary": "The tab test compared the authority case-sensitively, while URIs keep its case.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:155dc26f24afa78c24f13bd42531c35390620c3a",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a window that is not a tab's keeps upstream's settings"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-9",
+			"round": "patch 0060 round 3",
+			"severity": "info",
+			"summary": "The oracle case passed whatever the chokepoint did, and the structural guard read a fixed list of files.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:e12dcd7289627a6d3bceccf8c646da4b4b575e1f",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-10",
+			"round": "patch 0060 round 3",
+			"severity": "info",
+			"summary": "Exclude defaults that host-installed extensions contribute, `files.encoding`, the ignore-file and symlink switches, and `editor.wordSeparators` still follow the host in a tab's query.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Defaults a host extension ships aren't the user's files; the rest are low-entropy switches and encodings that name no file.",
+			"ref": {
+				"file": "docs/security-reviews/20261118-host-search-excludes.md",
+				"quote": "Defaults a host extension ships aren't the user's files"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-11",
+			"round": "patch 0060 round 4",
+			"severity": "medium",
+			"summary": "The sessions empty-file search walks a folder's directories skipping excluded ones, and a tab sees which it is asked to resolve; it was wrongly exempted as local-only.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:155dc26f24afa78c24f13bd42531c35390620c3a",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a tab gets none of the host user's patterns and keeps its own"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-12",
+			"round": "patch 0060 round 4",
+			"severity": "low",
+			"summary": "The guard missed namespace imports of search's module and files a patch makes callers.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:38c6848c545f8a67c9136c5463658bc50a6c12f4",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-14",
+			"round": "patch 0060 round 5",
+			"severity": "info",
+			"summary": "Seven `seclab+` prefix tests outside 0060 (in `ipc.ts`, `mainThreadConfiguration.ts`, `seclabDocumentOrigin.ts`, `seclabFixedSettings.ts`, `seclabAhpGateCheck.ts`, `seclabChatSessions.ts`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "deferred",
+			"followUp": "Centralise every `seclab+` prefix test on `seclabIsTabAuthority` in a follow-up across the patches that own them (rpc session)."
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-15",
+			"round": "patch 0060 round 5",
+			"severity": "low",
+			"summary": "The guard read upstream's files only, not those the series' patches create.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:24151644a21cd42ece0a6387ca9221b11de258bb",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "SRCH3-13",
+			"round": "patch 0060 round 4",
+			"severity": "low",
+			"summary": "Round 3's case fix was local to 0060; the filter module's tab test stayed case-sensitive for its other callers.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:155dc26f24afa78c24f13bd42531c35390620c3a",
+			"test": {
+				"file": "test/containment/search-excludes.test.ts",
+				"name": "a window that is not a tab's keeps upstream's settings"
 			}
 		}
 	]

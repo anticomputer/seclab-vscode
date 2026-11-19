@@ -212,6 +212,15 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   trusted all of it, so a server naming the host user's settings file had the window read it as the
   tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-51, PR66-1 to PR66-3;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
+- `0060-seclab-no-host-search-excludes-in-tabs.patch`: `seclabTabSettings.ts` (new),
+  `queryBuilder.ts`, `explorerViewer.ts`, `searchChatContext.ts`, `promptFilesLocator.ts`,
+  `sessionsTelemetry.contribution.ts`, `workspaceWatcher.ts` and 0036's
+  `seclabConfigurationSnapshot.ts`. The host user's exclude, watcher and read-only patterns never
+  reach a tab: for a folder on a tab, the settings part of every search query and watch request
+  comes from the defaults, the tab's remote user settings and the folder's own settings (a
+  caller's own patterns are untouched), and the snapshot never lets their host values cross.
+  Applies after 0036
+  (review SRCH-3; project owner, 2026-11-18; [EDR](../docs/edr/20261118-host-search-excludes.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release

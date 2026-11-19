@@ -253,6 +253,13 @@ User-visible consequences of containment, so they read as design rather than bug
   keybindings. A terminal whose working folder is a host folder doesn't start either. Every
   terminal in a tab window runs in the tab; open a local terminal from a normal window
   (project owner decision 2026-11-16; patch 0050, [ADR](adr/20261116-no-host-terminal-in-tabs.md)).
+- **Exclude settings come from the tab.** A tab's search, file watching and extensions use the
+  default exclude patterns and the tab's own settings: the host user's `files.exclude`,
+  `search.exclude`, `files.watcherExclude`, `files.watcherInclude`, `files.readonlyInclude`,
+  `files.readonlyExclude` and `explorer.autoRevealExclude` don't reach the tab, since they name the
+  user's own files and folders; for a tab, these settings are not read from a multi-root workspace
+  file either. Put exclude patterns a tab needs in its folder settings
+  (project owner decision 2026-11-18; patch 0060, [EDR](edr/20261118-host-search-excludes.md)).
 - **Host extensions are managed from a normal window.** A tab window lists the host's extensions
   but doesn't install, update, uninstall, enable or disable them, language packs included, and
   "Install Locally" is refused: in a tab window which extensions those actions reach is the tab's
