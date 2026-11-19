@@ -44,7 +44,12 @@ the final version (run logs kept outside the repo, under the session's `.work/`)
 | SRCH3-12 | Low | tests | The guard missed namespace imports of search's module and files a patch makes callers. | fixed | Any import shape, in the patched sources. | none |
 | SRCH3-14 | Info | tab test | Seven `seclab+` prefix tests outside 0060 (in `ipc.ts`, `mainThreadConfiguration.ts`, `seclabDocumentOrigin.ts`, `seclabFixedSettings.ts`, `seclabAhpGateCheck.ts`, `seclabChatSessions.ts`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority. | deferred | Centralise every `seclab+` prefix test on `seclabIsTabAuthority` in a follow-up across the patches that own them (rpc session). | none |
 | SRCH3-15 | Low | tests | The guard read upstream's files only, not those the series' patches create. | fixed | It reads every file a shipped patch creates too. | none |
+| PR68-1 | Low | tab test | With the tab test case-insensitive (SRCH3-13), the tab id parser still took only a lowercase prefix, so a mixed-case tab authority was a tab whose filter and storage partition couldn't be derived (both threw). | fixed | The parser takes the prefix in any case and keeps the id as written. | test/containment/filter-module.test.ts "attachment fails closed: unparseable tab throws, unknown remote is deny-all, local is unfiltered" |
+| PR68-2 | Low | tests | The structural guard picked files by upstream's text, so a patch that makes a file its first caller of `getExcludes` was never scanned. | fixed | The guard reads every file as the whole shipped series leaves it; a mutant adds an unwrapped caller through a patch. | none |
 | SRCH3-13 | Low | tab test | Round 3's case fix was local to 0060; the filter module's tab test stayed case-sensitive for its other callers. | fixed | `SECLAB_AUTHORITY` matches case-insensitively, and the local lowercase goes. | test/containment/search-excludes.test.ts "a window that is not a tab's keeps upstream's settings" |
+
+PR68-1 and PR68-2 came from the automated review of #68. The filter-module case fails on the tree it
+reviewed with the mixed-case authority, and passes on the fix.
 
 Exploring residuals in round 3 found that `[language]` overrides don't leak (neither the folder
 query nor the snapshot reads them unfiltered). Reaching SRCH3-10's switches takes no file name.

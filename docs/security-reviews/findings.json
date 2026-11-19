@@ -21780,6 +21780,33 @@
 				"file": "test/containment/search-excludes.test.ts",
 				"name": "a window that is not a tab's keeps upstream's settings"
 			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "PR68-1",
+			"round": "PR #68 review",
+			"severity": "low",
+			"summary": "With the tab test case-insensitive (SRCH3-13), the tab id parser still took only a lowercase prefix, so a mixed-case tab authority was a tab whose filter and storage partition couldn't be derived (both threw).",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2875a0c3e31a2ce524ef5a2030c00f9f47e85619",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "attachment fails closed: unparseable tab throws, unknown remote is deny-all, local is unfiltered"
+			}
+		},
+		{
+			"record": "20261118-host-search-excludes.md",
+			"anchor": "PR68-2",
+			"round": "PR #68 review",
+			"severity": "low",
+			"summary": "The structural guard picked files by upstream's text, so a patch that makes a file its first caller of `getExcludes` was never scanned.",
+			"component": "patch 0060: host exclude and watcher settings in tabs",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:cc4ec64b4da9f2d82a9ce1ca811bbb7abff6a2cf",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
