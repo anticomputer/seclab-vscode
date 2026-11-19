@@ -116,11 +116,36 @@ const configurationService = {
 	getValue: (k?: unknown) => typeof k === 'string' ? undefined : ({ files: { exclude: merged('files.exclude'), watcherExclude: merged('files.watcherExclude'), watcherInclude: merged('files.watcherInclude') }, search: { exclude: merged('search.exclude') } }),
 };
 
-/** The series' code for `rel` with `patch` as this tree's 0060: earlier patches, then 0060. */
+/** Each file's sections in the shipped series, in apply order, by path relative to src/vs. */
+const SERIES_TOUCHES = new Map<string, string[]>();
+for (const name of readFileSync(join(REPO, 'patches', 'series'), 'utf8').split('\n').map(l => l.trim()).filter(l => l.endsWith('.patch'))) {
+	for (const sec of patchFile(name).split(/^(?=diff -ruN )/m).slice(1)) {
+		const m = / b\/src\/vs\/(\S+)$/.exec(sec.split('\n')[0]);
+		if (m) {
+			SERIES_TOUCHES.set(m[1], [...(SERIES_TOUCHES.get(m[1]) ?? []), name]);
+		}
+	}
+}
+const P0060_NAME = '0060-seclab-no-host-search-excludes-in-tabs.patch';
+
+/**
+ * `rel` as the whole shipped series leaves it, with `patch` in 0060's place (review: PR #68):
+ * upstream's file or nothing, then every patch that touches it, in order. Undefined if neither.
+ */
 function source(rel: string, patch: string): string | undefined {
-	const made = created(P0036, rel) ?? created(patch, rel);
-	const base = made ?? (existsSync(join(SRC!, rel)) ? readFileSync(join(SRC!, rel), 'utf8') : undefined);
-	return base === undefined ? undefined : made && created(patch, rel) ? base : apply(rel === SEARCH ? apply(base, P0051, rel) : base, patch, rel);
+	const names = [...(SERIES_TOUCHES.get(rel) ?? [])];
+	if (!names.includes(P0060_NAME) && section(patch, rel)) {
+		names.push(P0060_NAME);
+	}
+	let out = existsSync(join(SRC!, rel)) ? readFileSync(join(SRC!, rel), 'utf8') : undefined;
+	for (const name of names) {
+		const text = name === P0060_NAME ? patch : patchFile(name);
+		if (!section(text, rel)) {
+			continue;
+		}
+		out = created(text, rel) ?? apply(out ?? '', text, rel);
+	}
+	return out;
 }
 
 /** What `name` needs from 0060's helper module, or nothing on a tree without it. */
@@ -248,7 +273,7 @@ for (const name of SERIES) {
 }
 const isSource = (f: string) => f.endsWith('.ts') && !f.endsWith('.d.ts') && !/(^|\/)test\//.test(f);
 /** Every non-test TypeScript file under the pinned src/vs and every one a patch creates, relative to src/vs. */
-const ALL_FILES = [...new Set([...(readdirSync(SRC!, { recursive: true }) as string[]), ...PATCH_CREATED.keys()])].filter(isSource);
+const ALL_FILES = [...new Set([...(readdirSync(SRC!, { recursive: true }) as string[]), ...PATCH_CREATED.keys(), ...SERIES_TOUCHES.keys()])].filter(isSource);
 
 /**
  * Callers of search's `getExcludes` that only filter locally, with why; every other caller builds
@@ -263,6 +288,7 @@ const WATCHER_READERS: Record<string, string> = {
 	'platform/files/common/files.ts': 'the setting\'s type',
 	'platform/files/node/watcher/parcel/parcelWatcher.ts': 'applies the excludes a watch request carries',
 	'platform/files/node/watcher/nodejs/nodejsWatcherLib.ts': 'applies the excludes a watch request carries',
+	'workbench/api/browser/seclabConfigurationSnapshot.ts': 'names the key to withhold its host value from the tab (0036, 0060)',
 	'workbench/api/common/extHostFileSystemEventService.ts': 'runs in the extension host: in a tab it reads the tab\'s snapshot, which 0060 filters',
 	'workbench/contrib/files/browser/files.contribution.ts': 'the setting\'s registration',
 	'workbench/contrib/preferences/browser/settingsTreeModels.ts': 'the Settings editor, in the window',
@@ -276,12 +302,13 @@ const WRAPPED = /seclabWithTabExcludes\((?:this\.)?(\w+), ([\w.]+), (?:this\.)?\
 /** Files that build a tab-bound query's or watch request's excludes from settings without 0060's helper. */
 function unwrappedCalls(patch: string): string[] {
 	const out: string[] = [];
-	for (const f of ALL_FILES) {
-		const made = PATCH_CREATED.get(f);
-		const upstream = made !== undefined ? created(made, f) ?? '' : readFileSync(join(SRC!, f), 'utf8');
-		// The patched source, so a file a patch makes a caller is scanned too.
-		const patched = f.endsWith('search/common/search.ts') ? '' : made !== undefined && !created(patch, f) ? upstream
-			: (upstream.includes('getExcludes') || upstream.includes('watcherExclude') ? source(f, patch) ?? '' : '');
+	const extra = [...patch.matchAll(/^diff -ruN a\/src\/vs\/(\S+) /mg)].map(m => m[1]).filter(f => isSource(f) && !ALL_FILES.includes(f));
+	for (const f of [...ALL_FILES, ...extra]) {
+		// The file as the whole series (with this 0060) leaves it, so a patch that makes a file a
+		// caller is scanned too (PR review on #68); files no patch touches are read as upstream's.
+		const touched = SERIES_TOUCHES.has(f) || !!section(patch, f);
+		const patched = f.endsWith('search/common/search.ts') ? '' : touched ? source(f, patch) ?? '' : readFileSync(join(SRC!, f), 'utf8');
+		const upstream = patched;
 		if (IMPORTS_SEARCH.test(patched) && CALLS_GET_EXCLUDES.test(patched) && !LOCAL_ONLY[f]) {
 			const src = patched;
 			const reads = src.split('getValue<ISearchConfiguration>({ resource').length - 1;
@@ -290,7 +317,7 @@ function unwrappedCalls(patch: string): string[] {
 				out.push(f);
 			}
 		}
-		if (/watcherExclude/.test(upstream) && !WATCHER_READERS[f] && !/seclabTabOwnValue(?:<\w+>)?\(/.test(source(f, patch) ?? '')) {
+		if (/watcherExclude/.test(upstream) && !WATCHER_READERS[f] && !/seclabTabOwnValue(?:<\w+>)?\(/.test(patched)) {
 			out.push(f);
 		}
 	}
@@ -375,6 +402,13 @@ const cases: Array<[string, () => Promise<void> | void]> = [
 			['snapshot lets the keys cross', ' || SECLAB_HOST_ONLY_KEYS.has(key)', '', 'the tab\'s extension host receives the host user\'s path patterns'],
 			['snapshot forgets readonlyInclude', "'files.readonlyInclude', ", '', 'the tab\'s extension host receives the host user\'s path patterns'],
 		];
+		// A patch that makes a file a caller, unwrapped, must be caught though upstream's file has none.
+		const target = 'workbench/services/search/common/searchHelpers.ts';
+		const head = readFileSync(join(SRC!, target), 'utf8').split('\n').slice(0, 3);
+		const added = `diff -ruN a/src/vs/${target} b/src/vs/${target}\n--- a/src/vs/${target}\n+++ b/src/vs/${target}\n@@ -1,3 +1,5 @@\n`
+			+ `+import { getExcludes, ISearchConfiguration } from './search.js';\n+export const seclabMutant = (c: { getValue<T>(o: object): T }, r: unknown) => getExcludes(c.getValue<ISearchConfiguration>({ resource: r }));\n`
+			+ head.map(l => ` ${l}`).join('\n') + '\n';
+		assert.ok((await leaks(P0060 + added)).includes('a query builds its excludes from settings without 0060\'s helper'), 'mutant not caught (a patch adds an unwrapped caller)');
 		for (const [name, from, to, leak] of mutants) {
 			assert.equal(P0060.split(from).length - 1, 1, `mutant ${name}: its text occurs once in 0060`);
 			// A mutant must bring its leak back, not merely break the build under test.
