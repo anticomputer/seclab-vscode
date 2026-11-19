@@ -56,7 +56,10 @@ detection and process creation are behind 0050 or the window's own authority).
   - Baseline: main `3633e20d`, containment build run 44455956648: 13/13. The tab's reply was
     typed into the normal window's local terminal, and the host user's reply came back in the
     tab's terminal.
-  - Patched: PENDING.
+  - Patched: branch `feaca0b1`, containment build run 44471495981: 13/13. Both controls answered,
+    the tab's reply never reached the normal window's terminal, and the host user's never came
+    back from the tab's server. Both runs tore down clean, with no `cat` left. The commits after
+    `feaca0b1` change only the unit test and the records.
 
 ## Consequences
 - Auto replies a tab sets apply in that tab's own terminals only, and the host user's auto replies
