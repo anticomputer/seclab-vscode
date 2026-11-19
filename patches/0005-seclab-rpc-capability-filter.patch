@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1674 @@
+@@ -0,0 +1,1675 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -3833,7 +3833,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +}
 +
 +/** Authorities we filter. Anything else is either local-trusted or unknown. */
-+const SECLAB_AUTHORITY = /^seclab\+/;
++// Authorities compare case-insensitively, as URIs and the resolver treat them (patch 0060, review SRCH3-8).
++const SECLAB_AUTHORITY = /^seclab\+/i;
 +
 +/** A context value no tab ever set: what an unreadable context key reports. */
 +const SECLAB_UNKNOWN_VALUE: unknown = Object.freeze({});

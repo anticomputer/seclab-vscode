@@ -1,6 +1,27 @@
+diff -ruN a/src/vs/sessions/contrib/editor/browser/emptyFileEditorSearch.ts b/src/vs/sessions/contrib/editor/browser/emptyFileEditorSearch.ts
+--- a/src/vs/sessions/contrib/editor/browser/emptyFileEditorSearch.ts	2026-11-18 21:39:50
++++ b/src/vs/sessions/contrib/editor/browser/emptyFileEditorSearch.ts	2026-11-18 21:39:50
+@@ -33,6 +33,7 @@
+ import { QueryBuilder } from '../../../../workbench/services/search/common/queryBuilder.js';
+ import { getExcludes, hasSiblingFn, ISearchComplete, ISearchConfiguration, ISearchService } from '../../../../workbench/services/search/common/search.js';
+ import { ISessionFolder, ISessionWorkspace } from '../../../services/sessions/common/session.js';
++import { seclabWithTabExcludes } from '../../../../workbench/services/configuration/common/seclabTabSettings.js';
+ 
+ export const EmptyFileEditorSearchPickerFocusedContext = new RawContextKey<boolean>('emptyFileEditorSearchPickerFocused', false, localize('emptyFileEditorSearchPickerFocused', "Whether the empty Files editor search picker is active."));
+ 
+@@ -300,7 +301,8 @@
+ 		const queue = folders.map(folder => ({
+ 			folder,
+ 			resource: folder.workingDirectory,
+-			excludes: glob.parseExcludeExpression(getExcludes(this.configurationService.getValue<ISearchConfiguration>({ resource: folder.workingDirectory })) ?? {}, { trimForExclusions: true }),
++			// seclab: on a tab, its own exclude settings only: which folders this walk skips is visible to the tab (patch 0060, review SRCH3-11).
++			excludes: glob.parseExcludeExpression(getExcludes(seclabWithTabExcludes(this.configurationService, folder.workingDirectory, this.configurationService.getValue<ISearchConfiguration>({ resource: folder.workingDirectory }))) ?? {}, { trimForExclusions: true }),
+ 			isExcluded: false,
+ 		}));
+ 
 diff -ruN a/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts b/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts
---- a/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts	2026-11-18 21:28:45
-+++ b/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts	2026-11-18 21:28:45
+--- a/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts	2026-11-18 21:39:50
++++ b/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribution.ts	2026-11-18 21:39:50
 @@ -34,6 +34,7 @@
  import { getSessionsTelemetryCopilotSku } from './sessionsAccountTelemetry.js';
  import { ISessionLifecycleSummary, SessionDoneReason, SessionsLifecycleTracker } from './sessionsLifecycleTracker.js';
@@ -25,8 +46,8 @@ diff -ruN a/src/vs/sessions/contrib/sessions/browser/sessionsTelemetry.contribut
  				folderQueries: [{ folder: folder.root, disregardIgnoreFiles: false }],
  				type: QueryType.File,
 diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts
---- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-18 21:39:50
++++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-18 21:39:50
 @@ -59,6 +59,14 @@
  	return walk(value);
  }
@@ -52,8 +73,8 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
  		}
  		addToValueTree(out, key, value, () => { });
 diff -ruN a/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts b/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts
---- a/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts	2026-11-18 21:39:50
++++ b/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesLocator.ts	2026-11-18 21:39:51
 @@ -29,6 +29,8 @@
  import { equalsIgnoreCase } from '../../../../../../base/common/strings.js';
  import { IWorkspaceTrustManagementService } from '../../../../../../platform/workspace/common/workspaceTrust.js';
@@ -82,8 +103,8 @@ diff -ruN a/src/vs/workbench/contrib/chat/common/promptSyntax/utils/promptFilesL
  				folderQueries: [{ folder, disregardIgnoreFiles }],
  				type: QueryType.File,
 diff -ruN a/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts b/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts
---- a/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts	2026-11-18 21:39:51
++++ b/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts	2026-11-18 21:39:51
 @@ -71,6 +71,7 @@
  import { CountBadge } from '../../../../../base/browser/ui/countBadge/countBadge.js';
  import { listFilterMatchHighlight, listFilterMatchHighlightBorder } from '../../../../../platform/theme/common/colorRegistry.js';
@@ -103,8 +124,8 @@ diff -ruN a/src/vs/workbench/contrib/files/browser/views/explorerViewer.ts b/src
  			folderQueries: [{
  				folder: root.resource,
 diff -ruN a/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts b/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts
---- a/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts	2026-11-18 21:39:51
++++ b/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts	2026-11-18 21:39:51
 @@ -16,6 +16,7 @@
  import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
  import { IHostService } from '../../../services/host/browser/host.js';
@@ -128,8 +149,8 @@ diff -ruN a/src/vs/workbench/contrib/files/browser/workspaceWatcher.ts b/src/vs/
  			for (const key in config.files.watcherExclude) {
  				if (key && config.files.watcherExclude[key] === true) {
 diff -ruN a/src/vs/workbench/contrib/search/browser/searchChatContext.ts b/src/vs/workbench/contrib/search/browser/searchChatContext.ts
---- a/src/vs/workbench/contrib/search/browser/searchChatContext.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/contrib/search/browser/searchChatContext.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/contrib/search/browser/searchChatContext.ts	2026-11-18 21:39:51
++++ b/src/vs/workbench/contrib/search/browser/searchChatContext.ts	2026-11-18 21:39:51
 @@ -35,6 +35,7 @@
  import { SymbolKinds } from '../../../../editor/common/languages.js';
  import { isSupportedChatFileScheme } from '../../chat/common/constants.js';
@@ -150,8 +171,8 @@ diff -ruN a/src/vs/workbench/contrib/search/browser/searchChatContext.ts b/src/v
  			folder: workspace,
 diff -ruN a/src/vs/workbench/services/configuration/common/seclabTabSettings.ts b/src/vs/workbench/services/configuration/common/seclabTabSettings.ts
 --- a/src/vs/workbench/services/configuration/common/seclabTabSettings.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/configuration/common/seclabTabSettings.ts	2026-11-18 21:28:45
-@@ -0,0 +1,46 @@
++++ b/src/vs/workbench/services/configuration/common/seclabTabSettings.ts	2026-11-18 21:39:51
+@@ -0,0 +1,45 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: settings that name the host user's files reach a sandboxed tab only from the tab's own
 + *  layers (patch 0060, review SRCH-3; project owner, 2026-11-18). Wherever the window builds an
@@ -169,8 +190,7 @@ diff -ruN a/src/vs/workbench/services/configuration/common/seclabTabSettings.ts 
 +
 +/** Whether `resource` is on a sandboxed tab's file system. */
 +export function seclabOnTab(resource: URI | undefined): resource is URI {
-+	// Authorities compare case-insensitively, as the rest of the window treats them (review SRCH3-8).
-+	return !!resource && resource.scheme === Schemas.vscodeRemote && seclabIsTabAuthority(resource.authority.toLowerCase());
++	return !!resource && resource.scheme === Schemas.vscodeRemote && seclabIsTabAuthority(resource.authority);
 +}
 +
 +const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -199,8 +219,8 @@ diff -ruN a/src/vs/workbench/services/configuration/common/seclabTabSettings.ts 
 +	};
 +}
 diff -ruN a/src/vs/workbench/services/search/common/queryBuilder.ts b/src/vs/workbench/services/search/common/queryBuilder.ts
---- a/src/vs/workbench/services/search/common/queryBuilder.ts	2026-11-18 21:28:45
-+++ b/src/vs/workbench/services/search/common/queryBuilder.ts	2026-11-18 21:28:45
+--- a/src/vs/workbench/services/search/common/queryBuilder.ts	2026-11-18 21:39:51
++++ b/src/vs/workbench/services/search/common/queryBuilder.ts	2026-11-18 21:39:51
 @@ -23,6 +23,7 @@
  import { IEditorGroupsService } from '../../editor/common/editorGroupsService.js';
  import { IPathService } from '../../path/common/pathService.js';
