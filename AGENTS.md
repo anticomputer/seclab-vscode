@@ -128,7 +128,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
   nothing could tell whose it was.
 - **Superseded images are pruned, live ones kept.** `./seclab image oci`, `./seclab tool`
   and the local npm fetch run `clean-host --superseded-images` after tagging. That removes
-  our images that no worktree's tracked files name literally and that aren't the current
+  our images that no worktree's tracked files name literally (unit tests and fixtures don't count: their
+  tags are data, so a test names a tag no build produces) and that aren't the current
   tool, npm-cache or hook image (anything built in the last hour stays).
   `./seclab clean-host --apply` does the same. Use fixed, literal tags in scripts (for
   example `seclab-broker:test`), so a tag a build uses is recognised as live. Why: 5 npm-cache

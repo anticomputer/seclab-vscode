@@ -55,6 +55,12 @@ const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egr
 /** A proof build's per-build tab image (seclab-tab-oci:b-NAME) stays live for a week from when
  *  it was tagged. The image's own creation time isn't that: a cached build reuses an older image
  *  (Copilot review on PR 25), so the build scripts write a lease, and the later of the two counts. */
+/** Whether a tracked file's literal tags keep an image live. A unit test or a fixture names tags as
+ *  data for a validator, not as images anything runs, so its literals don't count: one kept an
+ *  unused proof image live indefinitely (seclab-tab-oci:b-1453-dcd3ad6, named in driver.test.ts). */
+export function keepsTagsLive(file: string): boolean {
+	return !/\.test\.(ts|mts|js|mjs)$|(^|\/)test_[^/]+\.py$|_test\.py$|(^|\/)fixtures\//.test(file);
+}
 export function perBuildLive(name: string, createdMs: number, leaseMs: number | undefined, nowMs: number): boolean {
 	const from = Math.max(Number.isFinite(createdMs) ? createdMs : 0, leaseMs ?? 0);
 	return /^seclab-tab(-oci)?:b-/.test(name) && nowMs - from < 7 * 24 * 3_600_000;
@@ -126,6 +132,13 @@ if (args.has('--self-test')) {
 		['container', 'seclab-it-4af231-broker'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-net'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-egress'], ['volume', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-home'],
 		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test'], ['image', 'seclab-broker-spike-0123456789abcdef:local'],
 		['image', 'seclab-tool-gitleaks:8.30.1-e3e2f34c682a'], ['image', 'seclab-attest:local']];
+	// Unit tests and fixtures name tags as data: their literals keep nothing live; harness code does.
+	for (const [f, want] of [['test/driver/driver.test.ts', false], ['broker/tests/test_image.py', false], ['test/containment/fixtures/x/tasks.json', false],
+		['test/harness.ts', true], ['tabd/test/e2e-broker.ts', true], ['sandbox/oci/build-images.sh', true], ['AGENTS.md', true]] as Array<[string, boolean]>) {
+		if (keepsTagsLive(f) !== want) {
+			bad.push(`keepsTagsLive(${f}): got ${!want}, want ${want}`);
+		}
+	}
 	const no: Array<[keyof typeof OURS, string]> = [['sandbox', 'copilot-bla'], ['sandbox', 'seclab-example-kit-base'], ['image', 'seclab-example-a:test-caching'],
 		['image', 'seclab-example-b:local'], ['image', 'seclab-example-kit-sast:latest'], ['image', 'seclab-example-kit-base:latest'], ['volume', 'seclab-vscode-work'],
 		['container', 'seclab-example-a-runner'], ['network', 'seclab-example-b-net']];
@@ -496,7 +509,7 @@ function liveImages(): { names: Set<string>; ids: Set<string> } {
 	const ids = new Set<string>();
 	const tag = /seclab-[a-z][a-z0-9-]*:[A-Za-z0-9._-]+(?![A-Za-z0-9._${}-])/g;
 	for (const w of worktrees) {
-		for (const f of lines('git', ['-C', w, 'ls-files']).filter(f => !/\.(png|jpe?g|gif|patch)$/.test(f))) {
+		for (const f of lines('git', ['-C', w, 'ls-files']).filter(f => !/\.(png|jpe?g|gif|patch)$/.test(f) && keepsTagsLive(f))) {
 			try {
 				const text = fs.readFileSync(path.join(w, f), 'utf8');
 				for (const m of text.matchAll(tag)) {
