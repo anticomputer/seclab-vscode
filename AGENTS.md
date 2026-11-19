@@ -399,6 +399,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test chat-dispatch     # chat requests in a tab window through the real ChatService: sendRequest refused by 0009, resend and the queue drain refuse foreign sessions by 0018; pristine upstream and the series without 0018 are the controls, and the gated assertions must fail on each exactly as predicted
 ./seclab test window-proof ordinary ~/.seclab-test/wp   # patch 0019 in the shipped build: an ordinary window restores and nothing is nulled
 ./seclab test window-proof tab ~/.seclab-test/wpt       # ...and a real tab window withholds the providers, with the gate log as the evidence (each run is the other's control)
+./seclab test auto-replies      # patch 0061: a tab window installs no terminal auto reply on the local pty host every window shares, each mutant caught (also in ./seclab test rpc-filter)
 ./seclab test search-excludes   # patch 0060: the host user's exclude and watcher patterns reach a tab no way (upstream's doSearch, watchWorkspace, 0036's snapshot), each mutant caught (also in ./seclab test rpc-filter)
 ./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)
 # One-pass RPC measurement of an ordinary session (unfiltered build, benign fixtures only):

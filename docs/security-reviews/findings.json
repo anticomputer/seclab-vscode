@@ -21807,6 +21807,86 @@
 			"status": "fixed-untested",
 			"commit": "patch:cc4ec64b4da9f2d82a9ce1ca811bbb7abff6a2cf",
 			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "R5-32",
+			"round": "terminal-settings review round 10",
+			"severity": "high",
+			"summary": "A tab window installed auto replies, which the tab's server can set through the remote user settings, on the local backend too; the local pty host is shared by every window and applies each reply to all its terminals, so a tab could type a command into a normal window's local shell.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:1086dfa390637603bf9af595af03797ac06fe795",
+			"test": {
+				"file": "test/containment/auto-replies.test.ts",
+				"name": "a tab window installs no auto reply on the shared local pty host"
+			},
+			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261119-tab-auto-replies.md",
+				"quote": "On main (3633e20d) the case \"a tab window installs no auto reply on the shared local pty host\" fails, with the tab's reply installed on the local pty host."
+			}
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-1",
+			"round": "patch 0061 round 1",
+			"severity": "low",
+			"summary": "The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:1086dfa390637603bf9af595af03797ac06fe795",
+			"gap": "A build correction, shown by patch-build's typecheck of upstream's own tests."
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-2",
+			"round": "patch 0061 round 1",
+			"severity": "low",
+			"summary": "The runtime harness was outside the harness-hygiene lint.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-3",
+			"round": "patch 0061 round 1",
+			"severity": "low",
+			"summary": "One check's detail carried container stderr uncapped.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-4",
+			"round": "patch 0061 round 1",
+			"severity": "low",
+			"summary": "The harness recorded whether the local terminal ran cat but kept going if it didn't.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-5",
+			"round": "patch 0061 round 2",
+			"severity": "medium",
+			"summary": "A tab window installed the host user's auto-reply pairs on the tab's own backend, whose server reads them; the setting is restricted, so patch 0036 withholds it from the tab's extension host.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:1086dfa390637603bf9af595af03797ac06fe795",
+			"test": {
+				"file": "test/containment/auto-replies.test.ts",
+				"name": "a tab window installs no auto reply on the shared local pty host"
+			}
 		}
 	]
 }

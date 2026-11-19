@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 291 | 460 | 61 | 924 |
+| fixed | 14 | 99 | 292 | 460 | 61 | 926 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 189 | 81 | 338 |
+| fixed-untested | 0 | 5 | 63 | 193 | 81 | 342 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 11 | 14 | 8 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 391 | 750 | 208 | 1482 |
+| **all** | 18 | 116 | 392 | 754 | 208 | 1488 |
 
 ## Baseline: open high and critical findings
 
@@ -515,6 +515,10 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-53** | low | deferred | patch 0059: tab server locations and host extension management | A tab extension's theme, applied in a tab window, is cached in host-shared storage and painted briefly by the next host window. | follow-up: Appearance only, the same for any remote window upstream, and not extension management; a follow-up. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-55** | low | fixed-untested | patch 0059: tab server locations and host extension management | A fault in the rogue-REH payload's early arming would escape into the test server's startup. | Covered by review; no regression test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-68** | low | deferred | patch 0059: tab server locations and host extension management | A tab can make host extensions unavailable in its own window: the extension registry checks dependency loops by id across the host's and the tab's extensions, so a tab extension claiming an id that closes a cycle removes the host extension in it, and activation resolves a host extension's dependency through the tab's claimed id. An availability loss contained to that window, not an escape. Tab Manager can't be hit: the product pins it to the local host, so the local copy takes its id, and it has no dependencies. | follow-up: Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts "Tab Manager stays out of reach of a tab claiming its id" keeps Tab Manager out of reach meanwhile. |
+| [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-1** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against. | A build correction, shown by patch-build's typecheck of upstream's own tests. |
+| [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-2** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The runtime harness was outside the harness-hygiene lint. | A test correction; nothing to test. |
+| [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-3** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
+| [20261119-tab-auto-replies](20261119-tab-auto-replies.md) **AR-4** | low | fixed-untested | patch 0061: terminal auto replies from tab windows | The harness recorded whether the local terminal ran cat but kept going if it didn't. | A test correction; nothing to test. |
 | [20261104-rpc-probes-increment](20261104-rpc-probes-increment.md) **PR-M4** | info | open | containment probes (raw RPC) | The raw-RPC test hook does not exist, so the two raw-RPC probes report ERROR. | No test hook provides the raw main-thread RPC handle; the probes remain ERROR and the identity-spoof surface is unmeasured. |
 | [20261104-supply-chain](20261104-supply-chain.md) **info** | info | fixed-untested | rpc-filter/tools/test.sh | \`--platform linux/arm64\` was pinned in the RPC filter's test.sh while CI runs on x86. | The flag is gone (multi-arch digest), but nothing asserts that no platform override returns. |
 | [20261104-write-back-engine](20261104-write-back-engine.md) **note#2** | info | deferred | RPC capability filter (M4) | Until the M4 RPC filter enforces, a rogue extension can invoke seclab.reviewChanges/confirmDeletes to pop dialogs (a click is still needed). | follow-up: RPC capability filter series (patches 0005-0011 / 0030-0034, \`rpc\` session): \`seclab.*\` must stay outside the filter's allowed set. Not on main: patches/series has only the reserved ranges, no filter patch. |
@@ -2612,6 +2616,17 @@ Every other commit the register cites is on main's history, or on the branch its
 | PR66-7 | low | fixed | An update the tab's server reported queued a bare id for removal, which removed a running host extension sharing the id from the tab window. | patch:0ef61ec6862f47cc17814611ee68e8d1d2499238 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | ENV-69 | info | fixed | With the server's install replies transformed, an \`installGalleryExtensions\` reply reached the window with any gallery entry the tab's server named, which the install events already lose; nothing reads it today. | patch:ab185fba584776a6fa593cc30188c2c931b8d570 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | PR66-8 | low | fixed | A gallery MCP server's configuration names its variables freely, so one named \`path\` in an install or update event's gallery entry read as a URI, and the window dropped the whole event. | patch:537e61283a85f4626757d5f9fbdfbeab839ee92a · `test/containment/reh-environment.test.ts` "a tab window takes a genuine server unchanged" |
+
+### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| R5-32 | high | fixed | A tab window installed auto replies, which the tab's server can set through the remote user settings, on the local backend too; the local pty host is shared by every window and applies each reply to all its terminals, so a tab could type a command into a normal window's local shell. | patch:1086dfa390637603bf9af595af03797ac06fe795 · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
+| AR-1 | low | fixed-untested | The first version gated the contribution with a new constructor dependency, which upstream's own test, constructing it with three arguments, would not compile against. | A build correction, shown by patch-build's typecheck of upstream's own tests. |
+| AR-2 | low | fixed-untested | The runtime harness was outside the harness-hygiene lint. | A test correction; nothing to test. |
+| AR-3 | low | fixed-untested | One check's detail carried container stderr uncapped. | A test correction; nothing to test. |
+| AR-4 | low | fixed-untested | The harness recorded whether the local terminal ran cat but kept going if it didn't. | A test correction; nothing to test. |
+| AR-5 | medium | fixed | A tab window installed the host user's auto-reply pairs on the tab's own backend, whose server reads them; the setting is restricted, so patch 0036 withholds it from the tab's extension host. | patch:1086dfa390637603bf9af595af03797ac06fe795 · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

@@ -183,4 +183,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-18 | [alpine, zizmor and nginx pin bumps (round BMP)](20261118-bump-alpine-zizmor-nginx.md) | round BMP, by an Opus-class model, of the pin bumps for alpine:3.22 (including | see record |
 | 2026-11-18 | [the host user's search and watcher excludes stay on the host (patch 0060)](20261118-host-search-excludes.md) | see record | see record |
 | 2026-11-18 | [a tab's server names no host location (patch 0059)](20261118-tab-server-environment.md) | patch 0059 and its filter-module helpers (seclabTabUris, seclabTabServerChannel, | see record |
+| 2026-11-19 | [no tab auto reply on the shared local pty host (patch 0061)](20261119-tab-auto-replies.md) | see record | see record |
 <!-- index:end -->
