@@ -22459,6 +22459,39 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-authority-case.md",
+			"anchor": "TA-2",
+			"round": "SRCH3-14 round 2",
+			"severity": "low",
+			"summary": "The EDR claimed every tab test in the fork agrees, but the guard reads only the patch series; the Tab Manager tests the authority case-sensitively.",
+			"component": "patches: tab authority tests",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record or test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-authority-case.md",
+			"anchor": "TA-3",
+			"round": "SRCH3-14 round 2",
+			"severity": "low",
+			"summary": "The guard missed a prefix held in a differently named constant, `case` labels, `new RegExp`, regexes after `=>` or `[`, array membership and an upper-case literal.",
+			"component": "patches: tab authority tests",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record or test correction; nothing to test."
+		},
+		{
+			"record": "20261119-tab-authority-case.md",
+			"anchor": "TA-4",
+			"round": "SRCH3-14 round 2",
+			"severity": "low",
+			"summary": "The guard flagged correct code: slicing by the prefix's length, a startsWith on a variable lowered earlier, a trailing block comment, non-authority regexes, string building and logging.",
+			"component": "patches: tab authority tests",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record or test correction; nothing to test."
 		}
 	]
 }
