@@ -26,6 +26,8 @@ env:
 
 jobs:
   docs:
+    # RJG proof: with lint and docs both skipped, only required-jobs-ran can block. Never merge.
+    if: false
     name: docs
     runs-on: ubuntu-24.04
     timeout-minutes: 45
