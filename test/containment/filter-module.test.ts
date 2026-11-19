@@ -69,46 +69,114 @@ const AUTH = `seclab+${TAB}`;
 const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 
+/** A code line with its `//` comment removed, quotes respected (so `vscode-remote://` stays). */
+function stripComment(line: string): string {
+	let quote = '';
+	for (let i = 0; i < line.length; i++) {
+		const c = line[i];
+		if (quote) {
+			if (c === '\\') {
+				i++;
+			} else if (c === quote) {
+				quote = '';
+			}
+		} else if (c === '\'' || c === '"' || c === '`') {
+			quote = c;
+		} else if (c === '/' && line[i + 1] === '/') {
+			return line.slice(0, i);
+		}
+	}
+	return line;
+}
+
 /**
- * Every `seclab+` tab test a shipped patch adds that compares case-sensitively, unless a later
- * patch in the series removes that line again. The filter's own test is `/^seclab\+/i`; one that
- * isn't would call a mixed-case authority a tab here and not there (review SRCH3-14).
+ * Why `code` tests a tab authority or remote name in a way the filter's `/^seclab\+/i` wouldn't
+ * agree with, or undefined. Every `seclab` regex literal must be anchored and case-insensitive;
+ * every `seclab+`/`seclab` string or SECLAB_*AUTHORITY_PREFIX used in a test must be compared
+ * by `.toLowerCase().startsWith(...)` and nothing else (review SRCH3-14, TA-1).
  */
-function caseSensitiveTabTests(patches: Array<[string, string]>): string[] {
-	const CASE_SENSITIVE = [
-		/startsWith\((['"`])seclab\+\1\)/, /startsWith\(`vscode-remote:\/\/\$\{SECLAB_\w*AUTHORITY_PREFIX\}`\)/, /startsWith\(SECLAB_\w*AUTHORITY_PREFIX\)/,
-		/\/\^seclab\\\+[^/]*\/(?![a-z]*i)/, /(?:notE|e)qualsTo\((['"])seclab\1\)/, /===\s*(['"])seclab\+?\1/,
-	];
-	const found: string[] = [];
-	patches.forEach(([name, text], i) => {
-		for (const line of text.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'))) {
-			const code = line.slice(1).replace(/(^|\s)\/\/.*$/, '');
-			if (/^\s*\*/.test(code) || !CASE_SENSITIVE.some(r => r.test(code)) || /\.toLowerCase\(\)\.startsWith/.test(code)) {
+function caseSensitiveTest(code: string): string | undefined {
+	// Regex literals, read with string contents blanked, where an expression can start.
+	const unquoted = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g, (_q, q: string, body: string) => q + ' '.repeat(body.length) + q);
+	for (const m of unquoted.matchAll(/(?:^|[(,=:!&|?{};]|\breturn)\s*\/((?:\\.|[^/\\\n])*seclab(?:\\.|[^/\\\n])*)\/([a-z]*)/g)) {
+		if (!m[2].includes('i') || !m[1].startsWith('^')) {
+			return `regex /${m[1]}/${m[2]} is not anchored and case-insensitive`;
+		}
+	}
+	const tokens = /(['"`])(?:vscode-remote:\/\/)?seclab(?:\\?\+)?\1|`vscode-remote:\/\/\$\{SECLAB_\w*AUTHORITY_PREFIX\}`|\bSECLAB_\w*AUTHORITY_PREFIX\b/g;
+	for (const m of code.matchAll(tokens)) {
+		const before = code.slice(0, m.index);
+		const after = code.slice(m.index + m[0].length);
+		if (/\bconst\s+SECLAB_\w*AUTHORITY_PREFIX\s*=\s*$/.test(before) || /^SECLAB_/.test(m[0]) && /\bconst\s+$/.test(before)) {
+			continue;
+		}
+		const call = /\.(\w+)\(\s*$/.exec(before);
+		if (call) {
+			if (call[1] === 'startsWith' && /\.toLowerCase\(\)\.startsWith\(\s*$/.test(before) && /^\s*\)/.test(after)) {
 				continue;
 			}
-			const removedLater = patches.slice(i + 1).some(([, later]) => later.split('\n').includes(`-${line.slice(1)}`));
-			if (!removedLater) {
-				found.push(`${name}: ${line.slice(1).trim()}`);
+			return `${m[0]} is passed to .${call[1]}(...) without a lower-cased startsWith`;
+		}
+		if (/[!=]=\s*$/.test(before) || /^\s*[!=]=/.test(after)) {
+			return `${m[0]} is compared with == or !=`;
+		}
+	}
+	return undefined;
+}
+
+/** `patches/series` as build/apply-patches.sh reads it: `#` comments and all whitespace dropped. */
+const seriesNames = (text: string) => text.split('\n').map(l => l.replace(/#.*$/, '').replace(/\s/g, '')).filter(Boolean);
+
+/**
+ * Every added code line in the shipped series whose tab test disagrees with the filter's, unless a
+ * later patch removes that line from the same file again.
+ */
+function caseSensitiveTabTests(patches: Array<[string, string]>): string[] {
+	const sections = patches.map(([name, text]) => [name, text.split(/^(?=diff )/m).map(sec => [/^diff .* b\/(\S+)/.exec(sec)?.[1] ?? '', sec.split('\n')] as [string, string[]])] as const);
+	const found: string[] = [];
+	sections.forEach(([name, secs], i) => {
+		for (const [file, lines] of secs) {
+			for (const line of lines.filter(l => l.startsWith('+') && !l.startsWith('+++'))) {
+				if (/^\s*(\*|\/\*)/.test(line.slice(1))) {
+					continue;
+				}
+				const why = caseSensitiveTest(stripComment(line.slice(1)));
+				const removedLater = sections.slice(i + 1).some(([, later]) => later.some(([f, ls]) => f === file && ls.includes(`-${line.slice(1)}`)));
+				if (why && !removedLater) {
+					found.push(`${name} ${file}: ${why}`);
+				}
 			}
 		}
 	});
 	return found;
 }
-const SERIES = readFileSync(join(REPO, 'patches', 'series'), 'utf8').split('\n').map(l => l.trim()).filter(l => l.endsWith('.patch'))
+const SERIES = seriesNames(readFileSync(join(REPO, 'patches', 'series'), 'utf8'))
 	.map(n => [n, readFileSync(join(REPO, 'patches', n), 'utf8')] as [string, string]);
 
 test('every seclab+ tab test the series ships is case-insensitive, as the filter\'s (SRCH3-14)', () => {
 	assert.ok(F.seclabIsTabAuthority('SecLab+x') && F.seclabIsTabAuthority('SECLAB+x'), 'the filter\'s own test is case-insensitive');
-	assert.deepEqual(caseSensitiveTabTests(SERIES), []);
-	// Each shape is caught when a patch adds it (and kept when a later patch doesn't remove it).
-	for (const bad of ["return a.startsWith('seclab+');", 'if (!/^seclab\\+/.test(x)) {', 'return s.startsWith(SECLAB_TAB_AUTHORITY_PREFIX);',
-		"when: RemoteNameContext.notEqualsTo('seclab')", "if (name === 'seclab') {", 'x.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)']) {
-		assert.equal(caseSensitiveTabTests([['p1', `+${bad}`]]).length, 1, `not caught: ${bad}`);
-		assert.equal(caseSensitiveTabTests([['p1', `+${bad}`], ['p2', `-${bad}`]]).length, 0, `a later removal not honoured: ${bad}`);
+	const shipped = caseSensitiveTabTests(SERIES);
+	assert.equal(shipped.length, 0, `case-sensitive tab tests ship: ${shipped.join('; ')}`);
+	const BAD = ["return a.startsWith('seclab+');", 'if (!/^seclab\\+/.test(x)) {', 'return s.startsWith(SECLAB_TAB_AUTHORITY_PREFIX);',
+		"when: RemoteNameContext.notEqualsTo('seclab')", "if (name === 'seclab') {", "if (remoteName !== 'seclab') {", "if ('seclab' != name) {",
+		'x.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)', "identity.startsWith('vscode-remote://seclab+')",
+		'ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/).negate()', "a.indexOf('seclab+') === 0", "a.includes('seclab+')",
+		'/seclab\\+/i.test(a)', "a.startsWith('seclab+', 0)", "a.startsWith('seclab')", "x.toLowerCase().startsWith(y) && a.startsWith('seclab+')",
+		"a.endsWith('seclab+')", "a.toLowerCase().includes('seclab+')"];
+	for (const bad of BAD) {
+		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`]]).length, 1, `not caught: ${bad}`);
+		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/f.ts b/src/f.ts\n-${bad}`]]).length, 0, `a later removal not honoured: ${bad}`);
+		assert.equal(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${bad}`], ['p2', `diff -ruN a/src/g.ts b/src/g.ts\n-${bad}`]]).length, 1, `a removal from another file excused it: ${bad}`);
 	}
-	for (const good of ["return a.toLowerCase().startsWith('seclab+');", 'if (!/^seclab\\+/i.test(x)) {', ' * a `seclab+` window', '// startsWith(\'seclab+\')']) {
-		assert.equal(caseSensitiveTabTests([['p1', `+${good}`]]).length, 0, `flagged: ${good}`);
+	const GOOD = ["return a.toLowerCase().startsWith('seclab+');", 'if (!/^seclab\\+/i.test(x)) {', ' * a `seclab+` window', "// startsWith('seclab+')",
+		'return typeof a === \'string\' && a.toLowerCase().startsWith(SECLAB_AUTHORITY_PREFIX);', "export const SECLAB_AUTHORITY_PREFIX = 'seclab+';",
+		'x.toLowerCase().startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`)', 'ContextKeyExpr.regex(RemoteNameContext.key, /^seclab$/i).negate()',
+		'const authority = `seclab+${tabId}`;', "mark(`code/seclab/guarded/${name}`);", "return seclabIsTabAuthority(a); // was a.startsWith('seclab+')"];
+	for (const good of GOOD) {
+		assert.deepEqual(caseSensitiveTabTests([['p1', `diff -ruN a/src/f.ts b/src/f.ts\n+${good}`]]), [], `flagged: ${good}`);
 	}
+	// The series is read as the build reads it: an entry with a trailing comment still counts.
+	assert.deepEqual(seriesNames('# head\n0062-foo.patch  # note\n \n0063-bar.patch\n'), ['0062-foo.patch', '0063-bar.patch']);
 });
 
 // Runs first: nothing has subscribed yet, which is the window before its decision log installs.
