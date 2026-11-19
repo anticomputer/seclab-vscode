@@ -22414,6 +22414,21 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "PR70-4",
+			"round": "PR #70 review",
+			"severity": "medium",
+			"summary": "The extension-host scan skipped a region on a thrown or short read and still judged containment if the control canary turned up elsewhere, so a host canary in the skipped region would go unseen.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9b3558b82cbdef100028d97c5cd24a7205d48636",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the terminal settings and extension-host scan probes need their canaries on a baseline and a control after the patches"
+			}
 		}
 	]
 }
