@@ -63,3 +63,6 @@
 # defaults and the tab's own workspace settings (review SRCH-3; project owner, 2026-11-18). After
 # 0036, whose configuration snapshot it extends.
 0060-seclab-no-host-search-excludes-in-tabs.patch
+# 0061: a tab window installs terminal auto replies only on its tab's own backend, never on the
+# local pty host every window shares (review R5-32).
+0061-seclab-no-tab-auto-replies-on-the-local-pty-host.patch
