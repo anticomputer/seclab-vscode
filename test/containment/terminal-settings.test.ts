@@ -609,6 +609,10 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 		if (sees(rest)) {
 			out.push(`${kind}: folder paths or name`);
 		}
+		// R5-33: a workspace that isn't the tab's never takes a scheme the tab chose.
+		if (w.wsWrites.some(x => x.target !== 4)) {
+			out.push(`${kind}: link scheme written outside the tab's settings`);
+		}
 	}
 	return out;
 }
@@ -618,7 +622,8 @@ const EVERY_LEAK = ['active file: host file', 'active file: another tab file', '
 	'host default profile picks a REH profile', 'host default profile picks a contributed profile', 'foreign profile icon', 'automation profile without a connection',
 	'REH profile written to host settings', 'markdown image in a profile description', 'foreign workspace id on detach',
 	'link or forged line in a profile description', 'markdown image in the terminal hover', 'link scheme allowed in host settings', 'host link schemes in the written list', 'a scheme only the host allowed opens without a prompt',
-	'hostFolder: workspace settings', 'hostFolder: folder paths or name', 'hostFile: workspace settings', 'hostFile: folder paths or name'];
+	'hostFolder: workspace settings', 'hostFolder: folder paths or name', 'hostFolder: link scheme written outside the tab\'s settings',
+	'hostFile: workspace settings', 'hostFile: folder paths or name', 'hostFile: link scheme written outside the tab\'s settings'];
 
 /** A mutant of one of our patches: `from` replaced by `to` in its added lines, exactly once. */
 // R5-29: upstream's inspect returns the configuration model's own objects, so a write that edits
@@ -767,6 +772,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['hover title as markdown', mutant(OURS[5], '? escapeUntrustedMarkdown(instance.title) : instance.title', '? instance.title : instance.title'), 'markdown image in the terminal hover'],
 			['link scheme to the host', mutant(OURS[4], '[...allowed, scheme], inWorkspace ? ConfigurationTarget.WORKSPACE : ConfigurationTarget.USER_REMOTE);', '[...allowed, scheme]);'), 'link scheme allowed in host settings'],
 			['link schemes from the merged list', mutant(OURS[4], '+									if (seclabTab) {', '+									if (false) {'), 'host link schemes in the written list'],
+			['a host workspace takes the grant', mutant(OURS[4], 'const inWorkspace = seclabWorkspaceInTab(seclabWorkspace, seclabTab) && this._configurationService.inspect(key).workspaceValue !== undefined;', 'const inWorkspace = this._configurationService.inspect(key).workspaceValue !== undefined;'), 'hostFile: link scheme written outside the tab\'s settings'],
 			['the merged list decides', mutant(OURS[4], "seclabTab ? (Array.isArray(seclabOwn) ? seclabOwn : []) : terminalConfigurationService.config.allowedLinkSchemes;", "terminalConfigurationService.config.allowedLinkSchemes;"), 'a scheme only the host allowed opens without a prompt'],
 			['detach with a foreign id', mutant(OURS[2], '+		if (seclabIsTabWindow(this._remoteAuthority) && workspaceId !== this._workspaceContextService.getWorkspace().id) {', '+		if (false) {'), 'foreign workspace id on detach'],
 			['foreign icons kept', mutant(OURS[3], '+		const seclabOk = (u: URI | UriComponents) => !seclabTab || seclabUriInTab(u, seclabTab);', '+		const seclabOk = (_u: URI | UriComponents) => true;'), 'foreign profile icon'],
