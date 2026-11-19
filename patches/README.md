@@ -272,8 +272,9 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   (remote) user settings, and extend only the tab's own profiles; the automation profile and the
   contributed-profile exclusions are read from the tab's layers. Upstream wrote the REH's profile
   (path, args, `env`) into the host user's settings, where a normal window's next terminal would
-  run it. "Allow <scheme>" on a terminal link writes the tab's own `allowedLinkSchemes`, from its
-  own list (reviews R5-14, a high on main, R5-19, R5-25, R5-27).
+  run it. In a tab window a terminal link's scheme is checked against the tab's own
+  `allowedLinkSchemes`, and "Allow <scheme>" extends that list in the tab's workspace settings if
+  they set it, else its remote user settings (reviews R5-14, a high on main, R5-19, R5-25, R5-27, PR70-2, PR70-3).
 - `0058-seclab-plain-text-terminal-profile-descriptions.patch`: `platform/terminal/common/terminalProfiles.ts`
   and `terminalTooltip.ts`. The Settings editor renders terminal profile descriptions as markdown;
   their text is now escaped on one line, with no autolinks, and their icon must be a codicon id, so

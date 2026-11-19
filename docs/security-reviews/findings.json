@@ -22114,7 +22114,7 @@
 			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
-				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 34 leaks."
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 35 leaks."
 			}
 		},
 		{
@@ -22164,7 +22164,7 @@
 			"preFix": "3633e20dac3ee59120900493e77f30ef074d5072",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
-				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 34 leaks."
+				"quote": "On main (3633e20d) the case \"a tab gets none of the host terminal settings\" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 35 leaks."
 			}
 		},
 		{
@@ -22357,6 +22357,51 @@
 			"test": {
 				"file": "test/containment/auto-replies.test.ts",
 				"name": "a tab window installs no auto reply on the shared local pty host"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "PR70-1",
+			"round": "PR #70 review",
+			"severity": "low",
+			"summary": "`unicodeVersion` and the persistent-sessions switch reach the REH from the merged settings.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "false-positive",
+			"rationale": "Neither is restricted, and both already reach a tab's extension host in 0036's snapshot; core settings follow the host by design.",
+			"ref": {
+				"file": "docs/security-reviews/20261118-tab-terminal-settings.md",
+				"quote": "core settings follow the host by design (ARCHITECTURE §4.8), so nothing crosses that a tab doesn't get."
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "PR70-2",
+			"round": "PR #70 review",
+			"severity": "low",
+			"summary": "In a tab window a link's scheme was checked against the merged list, so a scheme only the host user allowed opened without the prompt.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:1a60c0f134287edc8835494917bb3d62527c9bd3",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab gets none of the host terminal settings"
+			}
+		},
+		{
+			"record": "20261118-tab-terminal-settings.md",
+			"anchor": "PR70-3",
+			"round": "PR #70 review",
+			"severity": "low",
+			"summary": "\"Allow\" wrote the tab's remote user settings even when the tab's workspace sets the list, which wins, so the grant didn't persist.",
+			"component": "patches 0053-0058: terminal settings in tab windows",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:1a60c0f134287edc8835494917bb3d62527c9bd3",
+			"test": {
+				"file": "test/containment/terminal-settings.test.ts",
+				"name": "a tab keeps its own terminal settings and the defaults"
 			}
 		}
 	]

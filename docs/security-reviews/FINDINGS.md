@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 101 | 305 | 475 | 61 | 956 |
+| fixed | 14 | 101 | 305 | 477 | 61 | 958 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 197 | 82 | 347 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
-| false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 118 | 403 | 771 | 209 | 1519 |
+| false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
+| **all** | 18 | 118 | 403 | 774 | 209 | 1522 |
 
 ## Baseline: open high and critical findings
 
@@ -2652,6 +2652,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | R5-29 | low | fixed | The tab-layer helper returned a configuration model's own object when one layer set the key, so the contributed-profile write edited the window's defaults in place. | patch:9e8fa0be8fcad588e793f0360b232b29b69b2d27 · `test/containment/terminal-settings.test.ts` "a contributed profile write leaves the window's defaults unchanged" |
 | R5-30 | low | fixed | The launch's \`useShellEnvironment\`, which reaches the REH, was filled from the host user's \`terminal.integrated.inheritEnv\`. | patch:2443676bb54a419e58da816063a1337ba9fce083 · `test/containment/terminal-settings.test.ts` "a tab gets none of the host terminal settings" |
 | R5-31 | medium | fixed | The window installed the host user's \`terminal.integrated.autoReplies\` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | 3e192b1aadef29be61186e917f1320f3d92da1fe · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
+| PR70-1 | low | false-positive | \`unicodeVersion\` and the persistent-sessions switch reach the REH from the merged settings. | Neither is restricted, and both already reach a tab's extension host in 0036's snapshot; core settings follow the host by design. |
+| PR70-2 | low | fixed | In a tab window a link's scheme was checked against the merged list, so a scheme only the host user allowed opened without the prompt. | patch:1a60c0f134287edc8835494917bb3d62527c9bd3 · `test/containment/terminal-settings.test.ts` "a tab gets none of the host terminal settings" |
+| PR70-3 | low | fixed | "Allow" wrote the tab's remote user settings even when the tab's workspace sets the list, which wins, so the grant didn't persist. | patch:1a60c0f134287edc8835494917bb3d62527c9bd3 · `test/containment/terminal-settings.test.ts` "a tab keeps its own terminal settings and the defaults" |
 
 ### [20261119-tab-auto-replies](20261119-tab-auto-replies.md)
 
