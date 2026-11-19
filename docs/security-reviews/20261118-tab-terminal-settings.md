@@ -20,7 +20,7 @@ shares. It landed first as patch 0061, which also fixes round 9's R5-31
 
 ## How the evidence was made
 The unit test (`test/containment/terminal-settings.test.ts`) runs upstream's own terminal methods
-with whatever version of 0053 to 0058 a tree has. On main (3633e20d) the case "a tab gets none of the host terminal settings" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 34 leaks.
+with whatever version of 0053 to 0058 a tree has. On main (3633e20d) the case "a tab gets none of the host terminal settings" fails, with R5-14's REH profile written to host settings and R5-18's markdown image in the terminal hover among its 35 leaks.
 The same case fails on the trees rounds 5 and 6 reviewed with those rounds' findings, and passes
 on the final version (run logs kept outside the repo, under the session's `.work/`). The runtime
 proof on main's containment build reproduced both terminal-settings probes and R5-14
@@ -60,6 +60,14 @@ proof on main's containment build reproduced both terminal-settings probes and R
 | R5-29 | Low | profiles | The tab-layer helper returned a configuration model's own object when one layer set the key, so the contributed-profile write edited the window's defaults in place. | fixed | A fresh copy. | test/containment/terminal-settings.test.ts "a contributed profile write leaves the window's defaults unchanged" |
 | R5-30 | Low | settings | The launch's `useShellEnvironment`, which reaches the REH, was filled from the host user's `terminal.integrated.inheritEnv`. | fixed | From the tab's layers. | test/containment/terminal-settings.test.ts "a tab gets none of the host terminal settings" |
 | R5-31 | Medium | settings | The window installed the host user's `terminal.integrated.autoReplies` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | fixed | Patch 0061: a tab's backend installs only pairs in the tab's own settings. | test/containment/auto-replies.test.ts "a tab window installs no auto reply on the shared local pty host" |
+
+## PR review (#70)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PR70-1 | Low | settings | `unicodeVersion` and the persistent-sessions switch reach the REH from the merged settings. | false-positive | Neither is restricted, and both already reach a tab's extension host in 0036's snapshot; core settings follow the host by design (ARCHITECTURE §4.8), so nothing crosses that a tab doesn't get. | none |
+| PR70-2 | Low | links | In a tab window a link's scheme was checked against the merged list, so a scheme only the host user allowed opened without the prompt. | fixed | The tab's own list decides. | test/containment/terminal-settings.test.ts "a tab gets none of the host terminal settings" |
+| PR70-3 | Low | links | "Allow" wrote the tab's remote user settings even when the tab's workspace sets the list, which wins, so the grant didn't persist. | fixed | It writes the tab's workspace settings when they set the list. | test/containment/terminal-settings.test.ts "a tab keeps its own terminal settings and the defaults" |
 
 Not changed here: the case-sensitive tab tests in other patches' files (SRCH3-14, deferred) and the
 unfiltered `mergedCollection`, whose consumers are outside tabs' reach (EDR, Consequences).

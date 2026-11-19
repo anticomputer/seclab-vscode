@@ -47,7 +47,8 @@ In a `seclab+` window (patches 0053-0058):
 - **0056:** a terminal image icon is kept only on the tab's own file system; else a codicon.
 - **0057:** choosing or saving a terminal profile writes the tab's own (remote) settings, never the
   host user's, and extends only the tab's own profiles. So does an extension's contributed profile,
-  and allowing a link scheme.
+  and allowing a link scheme, which goes to the tab's workspace settings when they set the list.
+  A terminal link's scheme is checked against the tab's own list.
 - **0058 (every window):** terminal profile descriptions in Settings are escaped text with a codicon.
   In tab windows the terminal hover's title, command line and status tooltips are escaped too.
 
