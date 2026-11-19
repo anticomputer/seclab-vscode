@@ -21887,6 +21887,17 @@
 				"file": "test/containment/auto-replies.test.ts",
 				"name": "a tab window installs no auto reply on the shared local pty host"
 			}
+		},
+		{
+			"record": "20261119-tab-auto-replies.md",
+			"anchor": "AR-6",
+			"round": "patch 0061 round 3",
+			"severity": "low",
+			"summary": "The unit test's settings stub ignored the resource, so which folder's settings the tab's backend counts as the tab's was untested: a gate reading a host folder's settings would have passed.",
+			"component": "patch 0061: terminal auto replies from tab windows",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
