@@ -3,7 +3,10 @@
 //
 // It calls workspace.findFiles for the run's needle file and records facts only: whether the
 // call returned within the bound, how many results, and whether every result is on this
-// workspace folder's own scheme and authority, under its path. Without the search restoration the tab's
+// workspace folder's own scheme and authority, under its path. For patch 0060 (SRCH-3) it also
+// records, as booleans, whether this tab sees the host user's canary exclude patterns in its
+// configuration, the tab's own workspace exclude (the control), and which of the run's excluded
+// files findFiles returns. Without the search restoration the tab's
 // search provider registration is denied and the call never returns, which the bound turns
 // into a fact. The only file it writes is its marker in its own workspace.
 //
@@ -56,6 +59,17 @@ exports.activate = async function () {
 				&& (u.path + '/').startsWith(folder.uri.path.replace(/\/?$/, '/'))),
 			ms: Date.now() - started,
 		};
+		// Patch 0060 (SRCH-3): the run's file names carry its id, the first 12 hex of the nonce.
+		const id = String(targets.arm).slice(0, 12);
+		const keys = (section) => Object.keys(vscode.workspace.getConfiguration(section, folder.uri).get('exclude') || {});
+		facts.configHostFilesExclude = keys('files').some(k => k.includes(`seclabcanary_hx${id}`));
+		facts.configHostSearchExclude = keys('search').some(k => k.includes(`seclabcanary_hs${id}`));
+		facts.configTabExclude = keys('files').some(k => k.includes(`seclab-tabexcl-${id}`));
+		const others = await Promise.race([vscode.workspace.findFiles(`**/*${id}*`, undefined, 20).then(r => r, () => null), new Promise(resolve => setTimeout(() => resolve(undefined), 30000))]);
+		const names = Array.isArray(others) ? others.map(u => path.posix.basename(u.path)) : [];
+		facts.excludesReturned = Array.isArray(others);
+		facts.foundHostFilesExcluded = names.includes(`seclabcanary_hx${id}.txt`);
+		facts.foundTabExcluded = names.includes(`seclab-tabexcl-${id}.txt`);
 		try {
 			fs.mkdirSync(out, { recursive: true });
 			fs.writeFileSync(path.join(out, 'findfiles'), safety.recordJson(facts));
