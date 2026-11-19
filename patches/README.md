@@ -230,9 +230,9 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   user's (review AR-5; [EDR](../docs/edr/20261119-tab-auto-replies.md)).
 - `0053-seclab-no-host-terminal-settings-for-tabs.patch`: a new
   `contrib/terminal/common/seclabTabTerminalSettings.ts`, `remoteTerminalChannel.ts`,
-  `terminalProfileService.ts`, both `terminalProfileResolverService.ts` files, `terminalActions.ts`,
-  `terminal.autoReplies.contribution.ts` and `mainThreadTerminalService.ts`. In a tab window the restricted terminal settings come only from
-  the layers the tab owns: defaults, the REH's remote user settings, and the workspace's only when
+  `terminalProfileService.ts`, both `terminalProfileResolverService.ts` files, `terminalActions.ts`
+  and `mainThreadTerminalService.ts`. In a tab window the restricted terminal settings come only
+  from the layers the tab owns: defaults, the REH's remote user settings, and the workspace's only when
   it is the tab's own (0036's test). Upstream's recursive merge is kept. That covers:
   - `env.<os>` and `cwd` in `createProcess`;
   - `profiles.<os>` in `getProfiles`;
@@ -241,8 +241,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   - the automation and agent-host profiles, which reach the tab's extension host in
     `$acceptDefaultProfile`;
   - a new terminal's cwd for a tab folder, the process switches (shell integration, suggest,
-    ConPTY, locale) in the process options, `inheritEnv` in the launch config, and the auto
-    replies installed on the REH.
+    ConPTY, locale) in the process options, and `inheritEnv` in the launch config.
 
   The window's own extension host is sent no default profile there. The resolver reads the
   window's authority from the environment, not the connection. The helper returns a fresh copy,
@@ -250,7 +249,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   matching the filter module's `seclab+` test in any case, including 0034's resolution guard,
   which this patch's hunk rewrites. Patch 0036 already withholds the host user's values of these
   from the tab's extension host (reviews DOCSYNC-R5, RFU1R-2, RFU1R2-1, R5-1, R5-3, R5-5, R5-10,
-  R5-13, R5-21, R5-22, R5-23, R5-26, R5-29, R5-30, R5-31;
+  R5-13, R5-21, R5-22, R5-23, R5-26, R5-29, R5-30;
   [EDR](../docs/edr/20261118-tab-terminal-settings.md)).
 - `0054-seclab-tab-own-terminal-env-collections.patch`: `environmentVariableService.ts` and
   `mainThreadTerminalService.ts`. In a tab window each extension host gets only the environment

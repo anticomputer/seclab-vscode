@@ -1,7 +1,7 @@
 # Security review: a tab window sends its tab no host terminal settings (patches 0053-0058)
 
 - **Date:** 2026-11-18 to 2026-11-19
-- **Reviewer:** independent `security-review` agent (an Opus-class model), ten rounds.
+- **Reviewer:** independent `security-review` agent (an Opus-class model), eleven rounds.
 - **Subject:** patches 0053 to 0058 on `anticomputer-rpc-docsync-r5`, which close DOCSYNC-R5,
   RFU1R-2, RFU1R2-1 and RFU1R-3, their unit suite and the reh-push probes
   ([EDR](../edr/20261118-tab-terminal-settings.md)).
@@ -13,8 +13,10 @@ Two highs, both on main and both fixed here: choosing a terminal profile in a ta
 tab's REH-chosen profile into the host user's settings (R5-14), and the terminal hover rendered
 tab text as markdown, so an image in it was fetched by the trusted window (R5-18). Round 4 also
 found R5-17, a high in how the window takes its server's environment, which became its own change
-(patch 0059, [review](20261118-tab-server-environment.md)). Rounds 5 onwards found no high or
-critical. Every finding here is fixed.
+(patch 0059, [review](20261118-tab-server-environment.md)). Round 10 found R5-32, a high on main:
+a tab window installed auto replies the tab's server can set on the local pty host every window
+shares. It landed first as patch 0061, which also fixes round 9's R5-31
+([review](20261119-tab-auto-replies.md)). Round 11 found nothing. Every finding here is fixed.
 
 ## How the evidence was made
 The unit test (`test/containment/terminal-settings.test.ts`) runs upstream's own terminal methods
@@ -57,7 +59,7 @@ proof on main's containment build reproduced both terminal-settings probes and R
 | R5-28 | Low | tests | The suite didn't model the window's resolution, and pinned only the helper's tab test to the filter module's. | fixed | Both now. | none |
 | R5-29 | Low | profiles | The tab-layer helper returned a configuration model's own object when one layer set the key, so the contributed-profile write edited the window's defaults in place. | fixed | A fresh copy. | test/containment/terminal-settings.test.ts "a contributed profile write leaves the window's defaults unchanged" |
 | R5-30 | Low | settings | The launch's `useShellEnvironment`, which reaches the REH, was filled from the host user's `terminal.integrated.inheritEnv`. | fixed | From the tab's layers. | test/containment/terminal-settings.test.ts "a tab gets none of the host terminal settings" |
-| R5-31 | Medium | settings | The window installed the host user's `terminal.integrated.autoReplies` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | fixed | A tab window installs only the tab's own. | test/containment/terminal-settings.test.ts "a tab gets none of the host terminal settings" |
+| R5-31 | Medium | settings | The window installed the host user's `terminal.integrated.autoReplies` prompts and replies on every terminal backend, the tab's REH included, at start and on every change. | fixed | Patch 0061: a tab's backend installs only pairs in the tab's own settings. | test/containment/auto-replies.test.ts "a tab window installs no auto reply on the shared local pty host" |
 
 Not changed here: the case-sensitive tab tests in other patches' files (SRCH3-14, deferred) and the
 unfiltered `mergedCollection`, whose consumers are outside tabs' reach (EDR, Consequences).
