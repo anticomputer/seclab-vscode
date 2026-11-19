@@ -158,7 +158,11 @@ function load(file: string, label: string, required: boolean): void {
 }
 // A selection of REH probes only needs the REH evidence; any rogue-extension probe in it
 // still needs the rogue extension's.
-load('rpc-probes.json', 'rogue extension', !only || only.some(id => id in (expectations.probes as Record<string, unknown>)));
+// A probe a harness measures itself (a `runner` in the rogue-extension section) comes from that
+// harness's own record, not the rogue extension's.
+const ownRunner = (id: string) => typeof (expectations.probes as Record<string, { runner?: unknown }>)[id]?.runner === 'string';
+load('rpc-probes.json', 'rogue extension', !only || only.some(id => id in (expectations.probes as Record<string, unknown>) && !ownRunner(id)));
+load('harness-probes.json', 'harness-measured', !!only && only.some(id => id in (expectations.probes as Record<string, unknown>) && ownRunner(id)));
 // The restart probe runs last, once, in its own record (it can restart the extension host
 // that runs it). An attempt that no new host settled has no outcome: inconclusive, never a pass.
 {
@@ -244,6 +248,12 @@ const deniedRefs = new Set(denials.map(d => d.policyRef ?? ''));
 // free-text "also assert ..." notes, which asserted nothing -- auth-get-session
 // in particular would have passed while handing a live token to the tab.
 const predicates: Record<string, (r: Result) => string | null> = {
+	// Patch 0015: the tab window never dials the agent host the tab named, its gate logs the
+	// refusal, and the same kind of entry in an empty window does dial (the positive control).
+	'ai-remote-agent-host-dial': r =>
+		fact(r, 'controlDialled') !== true ? 'the control window never dialled, so a quiet listener proves nothing'
+			: fact(r, 'hostDialled') !== false || fact(r, 'tabDialled') !== false ? 'the tab window dialled the agent host the tab named'
+			: typeof fact(r, 'gateRefusals') !== 'number' || (fact(r, 'gateRefusals') as number) < 1 ? 'no refusal in the gate log' : null,
 	'auth-get-session': r => {
 		if (r.outcome !== 'succeeded' || fact(r, 'present') !== true) { return null; }
 		const len = Number(fact(r, 'tokenLength') ?? 0);
@@ -316,6 +326,8 @@ function partitionReason(escaped: number, ran: number): string | null {
 // An unpatched run must show the escape itself, not just a return value: these probes
 // "succeed" on both builds, so the outcome alone proves nothing.
 const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
+	'ai-remote-agent-host-dial': r =>
+		fact(r, 'controlDialled') === true && fact(r, 'hostDialled') === true ? null : 'the tab window did not dial the agent host the tab named from the host',
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
 	'provider-completion-host-file': r =>

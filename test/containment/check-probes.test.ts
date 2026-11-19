@@ -56,7 +56,7 @@ const GOOD_DENIALS = ['rpc:MainThreadClipboard.$readText', 'chan:download'];
 let n = 0;
 /** One run of the real checker over a fresh fixture. */
 function run(opts: {
-	rpc?: unknown; reh?: unknown | null; denials?: string[] | null; beacon?: boolean;
+	rpc?: unknown; reh?: unknown | null; harness?: unknown; denials?: string[] | null; beacon?: boolean;
 	expectations?: unknown; args?: string[]; mode?: 'patched' | 'unpatched';
 }): { status: number | null; out: string } {
 	const dir = path.join(root, `case-${++n}`);
@@ -65,6 +65,9 @@ function run(opts: {
 	fs.writeFileSync(path.join(ev, 'rpc-probes.json'), JSON.stringify(opts.rpc ?? GOOD_RPC));
 	if (opts.reh !== null) {
 		fs.writeFileSync(path.join(ev, 'reh-probes.json'), JSON.stringify(opts.reh ?? GOOD_REH));
+	}
+	if (opts.harness !== undefined) {
+		fs.writeFileSync(path.join(ev, 'harness-probes.json'), JSON.stringify(opts.harness));
 	}
 	const exp = path.join(dir, 'expectations.json');
 	fs.writeFileSync(exp, JSON.stringify(opts.expectations ?? EXPECTATIONS()));
@@ -274,6 +277,24 @@ const tests: Array<[string, () => void]> = [
 		// Its own harness selects it, and then a missing result fails.
 		const selected = run({ expectations: exp, reh: { results: [] }, args: ['--only', 'reh-profile-config-host-setting'] });
 		assert.ok(failed(selected.out, /reh-profile-config-host-setting ran/), selected.out);
+	}],
+	['the agent-host dial is judged from its harness\'s record, with the empty-window control', () => {
+		const id = 'ai-remote-agent-host-dial';
+		const spec = { required: true, runner: 'reh-push', surface: 'client-push', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, [id]: spec }, rehProbes: {} };
+		const harness = (facts: Record<string, unknown>) => ({ results: [{ id, policyRef: spec.policyRef, outcome: 'succeeded', facts: { hostDialled: false, tabDialled: false, controlDialled: true, gateRefusals: 2, ...facts } }] });
+		const judge = (h: unknown, mode: 'patched' | 'unpatched' = 'patched') => run({ mode, expectations: exp, rpc: { results: [] }, reh: { results: [] }, harness: h, args: ['--only', id] });
+		const good = judge(harness({}));
+		assert.equal(good.status, 0, good.out.split('\n').filter(l => /\bFAIL\b|exit|Error/.test(l)).join(' | ') || good.out.slice(-600));
+		for (const bad of [{ controlDialled: false }, { hostDialled: true }, { tabDialled: true }, { gateRefusals: 0 }, { gateRefusals: '2' }, { hostDialled: undefined }]) {
+			assert.ok(failed(judge(harness(bad)).out, /ai-remote-agent-host-dial patched predicate holds/), JSON.stringify(bad));
+		}
+		// Its record is required when it is selected, and the rogue extension's is not.
+		assert.ok(failed(judge(undefined).out, /harness-measured evidence present/));
+		// The baseline shows the dial itself, with the control.
+		assert.ok(!failed(judge(harness({ hostDialled: true, gateRefusals: 0 }), 'unpatched').out, /ai-remote-agent-host-dial/));
+		assert.ok(failed(judge(harness({}), 'unpatched').out, /ai-remote-agent-host-dial shows the escape itself/));
+		assert.ok(failed(judge(harness({ hostDialled: true, controlDialled: false }), 'unpatched').out, /ai-remote-agent-host-dial shows the escape itself/));
 	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
