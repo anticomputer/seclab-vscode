@@ -1,7 +1,7 @@
 # The host user's search and watcher excludes stay on the host
 
 - **Date:** 2026-11-18
-- **Status:** proposed: the runtime proof is pending (see Proof).
+- **Status:** accepted. Proof passed, unit and runtime (2026-11-19).
 - **Owner:** the RPC follow-ups session (register owner `rpc`).
 - **Related:** [search in tabs](20261117-search-in-tabs.md) (0051),
   [configuration snapshot](20261112-tab-configuration-snapshot.md) (0036),
@@ -65,8 +65,16 @@ so a new one fails until it is wrapped or listed as local-only.
   tab of the containment test build. The host user settings exclude two canary files by name, one
   through `files.exclude` and one through `search.exclude`; the tab's own workspace settings exclude
   a third. The probe extension records whether the host patterns are in its configuration and which
-  files `findFiles` returns; Quick Open looks for the `search.exclude` file. Pending: a baseline run
-  on main's build and a patched run on this branch's.
+  files `findFiles` returns; Quick Open looks for the `search.exclude` file. Both runs passed 14/14
+  with every positive control (the probe ran, both searches were typed, the tab's own exclude held)
+  and a clean teardown:
+  - Baseline: Actions run 44439744560, main `b3c6525c`. The host patterns were in the tab's
+    configuration, `findFiles` in the tab didn't return the `files.exclude` file, and Quick Open
+    didn't find the `search.exclude` one.
+  - Patched: Actions run 44448577665, this branch at `9930790d`. Neither host pattern was in the tab's
+    configuration, `findFiles` returned the `files.exclude` file and Quick Open found the
+    `search.exclude` one. The later change on this branch (PR68-1) only lets the tab id parser take
+    the prefix in any case; it touches none of the exclude paths.
 
 ## Consequences
 - A tab's search, file watching and extensions follow the defaults and the tab's own exclude

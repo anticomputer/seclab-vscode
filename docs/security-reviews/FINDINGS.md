@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 291 | 459 | 61 | 923 |
+| fixed | 14 | 98 | 291 | 460 | 61 | 924 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 188 | 81 | 337 |
+| fixed-untested | 0 | 5 | 63 | 189 | 81 | 338 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 4 | 34 |
 | open | 0 | 2 | 11 | 14 | 8 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 391 | 748 | 208 | 1480 |
+| **all** | 18 | 115 | 391 | 750 | 208 | 1482 |
 
 ## Baseline: open high and critical findings
 
@@ -508,6 +508,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R-3** | low | open | remote terminal channel (remoteTerminalChannel.createProcess) | activeFileResource may be a host file: or vscode-userdata: document, and its path goes to the tab's REH on every createProcess. | No patch yet: a host document's path reaches the tab's REH in createProcess. |
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R2-1** | low | open | terminal default profile push (MainThreadTerminalService._updateDefaultProfile) | In a tab window the host user's raw terminal.integrated.automationProfile.&lt;os&gt; object (env and args included) goes to the tab's extension host in $acceptDefaultProfile, unfiltered, though 0036 withholds it from the tab's configuration. | No patch or probe yet: the host automation profile reaches the tab's extension host. |
 | [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH-6** | low | fixed-untested | test/containment/search-probe.ts | The search proof could pass vacuously: before passed if nothing was typed and needed no logged deny. | The harness itself; its runs are the evidence (EDR search-in-tabs). |
+| [20261118-host-search-excludes](20261118-host-search-excludes.md) **PR68-2** | low | fixed-untested | patch 0060: host exclude and watcher settings in tabs | The structural guard picked files by upstream's text, so a patch that makes a file its first caller of \`getExcludes\` was never scanned. | A test correction; nothing to test. |
 | [20261118-host-search-excludes](20261118-host-search-excludes.md) **SRCH3-12** | low | fixed-untested | patch 0060: host exclude and watcher settings in tabs | The guard missed namespace imports of search's module and files a patch makes callers. | A test correction; nothing to test. |
 | [20261118-host-search-excludes](20261118-host-search-excludes.md) **SRCH3-15** | low | fixed-untested | patch 0060: host exclude and watcher settings in tabs | The guard read upstream's files only, not those the series' patches create. | A test correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-52** | low | deferred | patch 0059: tab server locations and host extension management | Extension feature access is kept by claimed id in host-shared storage; no caller reaches it today. | follow-up: Latent: no feature asks for consent or can be toggled, and the one caller has no caller. Needs the same guard if that changes. |
@@ -2526,6 +2527,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | SRCH3-14 | info | deferred | Seven \`seclab+\` prefix tests outside 0060 (in \`ipc.ts\`, \`mainThreadConfiguration.ts\`, \`seclabDocumentOrigin.ts\`, \`seclabFixedSettings.ts\`, \`seclabAhpGateCheck.ts\`, \`seclabChatSessions.ts\`) still compare case-sensitively, so a mixed-case window authority would be a tab to the filter and not to them; nothing lets a tab set a window's authority. | follow-up: Centralise every \`seclab+\` prefix test on \`seclabIsTabAuthority\` in a follow-up across the patches that own them (rpc session). |
 | SRCH3-15 | low | fixed-untested | The guard read upstream's files only, not those the series' patches create. | A test correction; nothing to test. |
 | SRCH3-13 | low | fixed | Round 3's case fix was local to 0060; the filter module's tab test stayed case-sensitive for its other callers. | patch:155dc26f24afa78c24f13bd42531c35390620c3a · `test/containment/search-excludes.test.ts` "a window that is not a tab's keeps upstream's settings" |
+| PR68-1 | low | fixed | With the tab test case-insensitive (SRCH3-13), the tab id parser still took only a lowercase prefix, so a mixed-case tab authority was a tab whose filter and storage partition couldn't be derived (both threw). | patch:2875a0c3e31a2ce524ef5a2030c00f9f47e85619 · `test/containment/filter-module.test.ts` "attachment fails closed: unparseable tab throws, unknown remote is deny-all, local is unfiltered" |
+| PR68-2 | low | fixed-untested | The structural guard picked files by upstream's text, so a patch that makes a file its first caller of \`getExcludes\` was never scanned. | A test correction; nothing to test. |
 
 ### [20261118-tab-server-environment](20261118-tab-server-environment.md)
 
