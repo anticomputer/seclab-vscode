@@ -79,6 +79,8 @@ interface Spec {
 	hostEffect?: string; hostEffectAbsolute?: string;
 	/** Run only by this harness's selection (the payload arms it on that path alone). */
 	runner?: string;
+	/** Why this probe has no unpatched baseline, and what in the patched run stands in for one. */
+	noUnpatchedBaseline?: string;
 }
 
 /**
@@ -143,6 +145,17 @@ function effectTarget(spec: { hostEffect?: string; hostEffectAbsolute?: string }
 
 // ---------------------------------------------------------------- evidence
 const results = new Map<string, Result>();
+/** The one record a registered probe's result may come from (undefined: not registered). */
+function recordFor(id: string): string | undefined {
+	const probes = expectations.probes as Record<string, { runner?: unknown }>;
+	if (id in (expectations.rehProbes as Record<string, unknown>) && id !== 'note') {
+		return 'reh-probes.json';
+	}
+	if (id in probes && id !== 'note') {
+		return typeof probes[id]?.runner === 'string' ? 'harness-probes.json' : 'rpc-probes.json';
+	}
+	return undefined;
+}
 function load(file: string, label: string, required: boolean): void {
 	const p = path.join(evidence, file);
 	if (!fs.existsSync(p)) {
@@ -152,6 +165,17 @@ function load(file: string, label: string, required: boolean): void {
 	}
 	const run = JSON.parse(fs.readFileSync(p, 'utf8')) as { results: Result[] };
 	for (const r of run.results) {
+		// Each record speaks only for its own probes: the tab's REH record can't stand in for a
+		// host-measured one, and no id may come from two records (PR review, AID-1).
+		const owner = recordFor(r.id);
+		if (owner && owner !== file) {
+			c('probes', false, `${label} evidence names ${r.id}, which only ${owner} may record`, file);
+			continue;
+		}
+		if (results.has(r.id)) {
+			c('probes', false, `${r.id} is recorded twice`, file);
+			continue;
+		}
 		results.set(r.id, r);
 	}
 	c('probes', true, `${label} evidence present (${file})`, `${run.results.length} results`);
@@ -252,7 +276,8 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	// refusal, and the same kind of entry in an empty window does dial (the positive control).
 	'ai-remote-agent-host-dial': r =>
 		fact(r, 'controlDialled') !== true ? 'the control window never dialled, so a quiet listener proves nothing'
-			: fact(r, 'hostDialled') !== false || fact(r, 'tabDialled') !== false ? 'the tab window dialled the agent host the tab named'
+			: fact(r, 'tabListenerLive') !== true ? 'the tab-side listener was never shown live'
+			: fact(r, 'hostDialled') !== false ? 'the tab window dialled the agent host the tab named, from the host'
 			: typeof fact(r, 'gateRefusals') !== 'number' || (fact(r, 'gateRefusals') as number) < 1 ? 'no refusal in the gate log' : null,
 	'auth-get-session': r => {
 		if (r.outcome !== 'succeeded' || fact(r, 'present') !== true) { return null; }
@@ -326,8 +351,6 @@ function partitionReason(escaped: number, ran: number): string | null {
 // An unpatched run must show the escape itself, not just a return value: these probes
 // "succeed" on both builds, so the outcome alone proves nothing.
 const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
-	'ai-remote-agent-host-dial': r =>
-		fact(r, 'controlDialled') === true && fact(r, 'hostDialled') === true ? null : 'the tab window did not dial the agent host the tab named from the host',
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
 	'provider-completion-host-file': r =>
@@ -424,6 +447,10 @@ for (const [id, spec] of Object.entries(specs)) {
 		continue;
 	}
 
+	if (mode === 'unpatched' && typeof spec.noUnpatchedBaseline === 'string') {
+		c('probes-waived', true, `${id} has no unpatched baseline`, spec.noUnpatchedBaseline);
+		continue;
+	}
 	if (mode === 'unpatched') {
 		// ERROR is not a pass: that is the whole reason this run exists.
 		c('probes', r.outcome === 'succeeded' || !spec.required,

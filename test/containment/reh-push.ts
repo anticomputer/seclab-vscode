@@ -57,7 +57,9 @@ const PUSH_PROBES = ['ai-remote-agent-host-dial', 'reh-onexecutecommand-windowop
 
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
-const JUDGED = argv.includes('--judge') ? argv[argv.indexOf('--judge') + 1].split(',').filter(Boolean) : PUSH_PROBES;
+// The baseline build already ships patch 0015, so the dial has no unpatched baseline here: its
+// in-run empty-window control stands in, and a baseline run doesn't select it (AID-2).
+const JUDGED = argv.includes('--judge') ? argv[argv.indexOf('--judge') + 1].split(',').filter(Boolean) : PUSH_PROBES.filter(id => mode === 'patched' || id !== 'ai-remote-agent-host-dial');
 if (!JUDGED.length || JUDGED.some(id => !PUSH_PROBES.includes(id))) {
 	console.error(`--judge takes push probes only: ${PUSH_PROBES.join(',')}`);
 	process.exit(2);
@@ -171,6 +173,8 @@ const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = '') => checks.push({ vector, ok, name, detail });
 
 // ------------------------------------------------------------------ run
+// Host-verified: the tab-side listener answered this run's liveness request before anything dialled.
+let tabListenerLive = false;
 try {
 	beacon = spawn(process.execPath, beaconArgv, { stdio: 'ignore' });
 	ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, env: { SECLAB_EDITOR_CANARY: canary.value } });
@@ -187,6 +191,7 @@ try {
 			await sleep(2000);
 		}
 	}
+	tabListenerLive = tabListener;
 	c('setup', tabListener, 'the tab-side listener is up on the dial port');
 
 	// Stage the REH payload first, push probes only: it learns the terminal the window creates.
@@ -341,7 +346,9 @@ const gateRefusals = (() => {
 // The dial as a judged probe (ai-remote-agent-host-dial): what the run measured, facts only.
 fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ results: [{
 	id: 'ai-remote-agent-host-dial', policyRef: 'ai-setting:chat.workspaceRemoteAgentHosts', outcome: 'succeeded',
-	facts: { hostDialled, tabDialled, controlDialled, gateRefusals },
+	// tabDialledClaimed comes from a log inside the tab's own workspace, so it is reported and
+	// never judged; everything judged is measured on the host (PR review, AID-3).
+	facts: { hostDialled, tabDialledClaimed: tabDialled, tabListenerLive, controlDialled, gateRefusals },
 }] }, null, '\t'));
 const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
 	'--only', JUDGED.join(','), '--denials', path.join(base, 'denials.jsonl'), '--beacon', hostBeaconLog],

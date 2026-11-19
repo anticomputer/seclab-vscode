@@ -45,7 +45,8 @@
       "why": "the tab writes chat.workspaceRemoteAgentHosts pointing at a local beacon, through both .vscode/settings.json and remote user settings. The host renderer would dial it from the host network, bypassing the broker, and the dialled connection is not seclab+ so the authority predicate never fires",
       "runner": "reh-push",
       "patchedOutcome": "succeeded",
-      "measuredBy": "test/containment/reh-push.ts: listeners on both sides of the boundary, an empty window dialling the same kind of entry as the positive control, and patch 0015's gate log; written to harness-probes.json and judged here."
+      "measuredBy": "test/containment/reh-push.ts: listeners on both sides of the boundary, an empty window dialling the same kind of entry as the positive control, and patch 0015's gate log; written to harness-probes.json and judged here.",
+      "noUnpatchedBaseline": "Every containment build ships patch 0015, so no build here dials; the same run's empty-window control, which must dial the host listener with the same kind of entry, shows the path would fire."
     },
     "ai-settings-reenable": {
       "required": false,
