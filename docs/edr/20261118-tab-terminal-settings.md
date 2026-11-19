@@ -21,7 +21,7 @@ All of `terminal.integrated.env.<os>`, `cwd`, `profiles.<os>`, `defaultProfile.<
 never lets a host value of theirs reach the tab's extension host. The terminal code read them with
 `getValue`, which merges the host user's layers in, and sent them on by other paths.
 
-Eleven review rounds of the fix (an Opus-class model) widened it: a tab's REH chooses the profiles a
+Twelve review rounds of the fix (an Opus-class model) widened it: a tab's REH chooses the profiles a
 tab window shows, so their names, paths and icons are tab data, and upstream let them into a host
 settings write (R5-14, a high on main), a CSS `url()` the window fetches (R5-9) and markdown the
 Settings editor renders (R5-15). The terminal hover rendered the title and command line the tab's
