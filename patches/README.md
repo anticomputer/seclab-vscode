@@ -221,6 +221,13 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   caller's own patterns are untouched), and the snapshot never lets their host values cross.
   Applies after 0036
   (review SRCH-3; project owner, 2026-11-18; [EDR](../docs/edr/20261118-host-search-excludes.md)).
+- `0061-seclab-no-tab-auto-replies-on-the-local-pty-host.patch`: `localTerminalBackend.ts` and
+  `remoteTerminalBackend.ts`. In a tab window the local backend installs no terminal auto reply,
+  whoever asks: every window registers it, its pty host is shared by every window and applies each
+  reply to all its terminals, and a tab window's settings include those the tab's server serves,
+  so a tab could type a command into a normal window's local shell (review R5-32, a high on main).
+  The tab's own backend installs only pairs in the tab's own settings (0060's rule), never the host
+  user's (review AR-5; [EDR](../docs/edr/20261119-tab-auto-replies.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
