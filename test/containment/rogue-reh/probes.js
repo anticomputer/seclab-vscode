@@ -535,6 +535,10 @@ async function runRehProbes(socketServer, router) {
 	if (!ctx.armed) {
 		return [{ id: safety.lit('harness'), policyRef: safety.lit(''), outcome: OUTCOME.error, error: KIND.notArmed }];
 	}
+	if (targets.only === 'agent-host') {
+		// The agent-host proxy is observed from `early` alone (wrapAgentHostProxy); nothing runs here.
+		return results;
+	}
 	if (targets.only === 'environment') {
 		// The environment proof (patch 0059) runs this alone. `ready` is written once the lie is in
 		// place, so the harness knows to reload; `done` once it has opened a terminal after that.
@@ -756,15 +760,71 @@ async function main(socketServer, router) {
 }
 
 /**
+ * The agent-host proxy (agent-host-patches#3, probes ai-agent-host-token-push,
+ * ai-agent-host-autoapprove-setting, ai-disable-ai-features-reenable): this REH serves
+ * `agentHostProxy` as a hostile one would, advertising itself to any window that connects. A
+ * window that connects would resolve the user's auth session for what the server advertises and
+ * forward its token, and would run host tools the agent host asks for. This records whether ANY
+ * call or subscription arrived, by command name and count only, and refuses every `connect`, so no
+ * agent host is ever started in the tab. One record per server process (each window load starts
+ * one), written as soon as the wrap is in place, so a server that saw nothing says so.
+ */
+const agentHostProbe = { wrapped: false, calls: 0, connects: 0, sends: 0, closes: 0, listens: 0, other: 0 };
+function writeAgentHost() {
+	try {
+		const out = process.env.SECLAB_ROGUE_REH_OUT;
+		fs.mkdirSync(out, { recursive: true });
+		fs.writeFileSync(path.join(out, `agent-host-${process.pid}.json`), safety.recordJson({ ...agentHostProbe }));
+	} catch { /* best effort */ }
+}
+function wrapAgentHostProxy(channel) {
+	if (!channel || typeof channel.call !== 'function' || typeof channel.listen !== 'function') {
+		return channel;
+	}
+	agentHostProbe.wrapped = true;
+	writeAgentHost();
+	return {
+		call(_ctx, command) {
+			agentHostProbe.calls++;
+			if (command === 'connect') {
+				agentHostProbe.connects++;
+			} else if (command === 'send') {
+				agentHostProbe.sends++;
+			} else if (command === 'close') {
+				agentHostProbe.closes++;
+			} else {
+				agentHostProbe.other++;
+			}
+			writeAgentHost();
+			return command === 'connect' ? Promise.reject(new Error('seclab probe: connection recorded and refused')) : Promise.resolve(undefined);
+		},
+		listen(ctx, event, arg) {
+			agentHostProbe.listens++;
+			writeAgentHost();
+			return channel.listen(ctx, event, arg);
+		},
+	};
+}
+
+/**
  * Called by the hook as this server starts, before any window connects, when a run was staged
  * before it started: each window load starts a new server, and a window asks for its environment
  * as soon as it connects, so the environment lie must be in place by then. It arms once both
- * channels it wraps are registered. Nothing else runs early.
+ * channels it wraps are registered. With `only=agent-host`, it wraps `agentHostProxy` as it is
+ * registered instead. Nothing else runs early.
  */
 function early(socketServer) {
 	const targets = stagedTargets();
 	const ctx = safety.context(targets);
-	if (!ctx.armed || targets.only !== 'environment' || !socketServer || typeof socketServer.registerChannel !== 'function') {
+	if (!ctx.armed || !socketServer || typeof socketServer.registerChannel !== 'function') {
+		return;
+	}
+	if (targets.only === 'agent-host') {
+		const registerAh = socketServer.registerChannel.bind(socketServer);
+		socketServer.registerChannel = (name, channel) => registerAh(name, name === 'agentHostProxy' ? wrapAgentHostProxy(channel) : channel);
+		return;
+	}
+	if (targets.only !== 'environment') {
 		return;
 	}
 	const register = socketServer.registerChannel.bind(socketServer);

@@ -292,6 +292,14 @@ const predicates: Record<string, (r: Result) => string | null> = {
 		fact(r, 'controlFetched') !== true ? 'the ordinary window\'s fetch never reached the beacon, so a quiet beacon proves nothing'
 			: fact(r, 'toolFetchedHost') !== false ? 'the tab\'s tool call fetched from the host'
 				: typeof fact(r, 'invokeToolDenials') !== 'number' || (fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial of MainThreadLanguageModelTools.$invokeTool in the decision log' : null,
+	// Patches 0010 and 0015: with agents off for the host, the tab window makes no agent-host
+	// connection to the hostile REH (so nothing to hand a token to, nothing to ask for host tools),
+	// the gate logs its refusal, and the same app with agents on does connect (the control).
+	'ai-agent-host-token-push': r => agentHostReason(r),
+	'ai-agent-host-autoapprove-setting': r => agentHostReason(r),
+	// The same, while the tab window reads the `false` the tab wrote into its remote user settings.
+	'ai-disable-ai-features-reenable': r =>
+		fact(r, 'remoteAiFeaturesOn') !== true ? 'the tab window never read the tab\'s chat.disableAIFeatures false, so it was not tested' : agentHostReason(r),
 	// Patch 0015: the tab window never dials the agent host the tab named, its gate logs the
 	// refusal, and the same kind of entry in an empty window does dial (the positive control).
 	'ai-remote-agent-host-dial': r =>
@@ -365,6 +373,24 @@ function aiRefusalReason(r: Result): string | null {
 				: n('sendRequestRefusals') < 1 ? 'no refusal of the chat request in the decision log' : null;
 }
 
+/** A count fact: a non-negative safe integer, else -1 (a missing or forged count is never 0). */
+function safeCount(r: Result, k: string): number {
+	const v = fact(r, k);
+	return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : -1;
+}
+
+/**
+ * The patched agent-host refusal (patches 0010, 0015): the control (agents on for the host) connected
+ * and opened a gated transport; with agents off nothing arrived at the hostile REH, no transport
+ * opened, and the gate logged its refusal.
+ */
+function agentHostReason(r: Result): string | null {
+	return safeCount(r, 'controlConnects') < 1 || safeCount(r, 'controlGateOpened') < 1 ? 'the control (agents on) never connected, so a quiet proxy proves nothing'
+		: safeCount(r, 'armConnects') !== 0 || safeCount(r, 'armCalls') !== 0 || safeCount(r, 'armListens') !== 0 ? 'the tab window reached the hostile REH\'s agent-host proxy with agents off'
+			: safeCount(r, 'armGateOpened') !== 0 ? 'a gated transport opened with agents off'
+				: safeCount(r, 'armGateDisabled') < 1 ? 'no refusal in the gate log' : null;
+}
+
 /**
  * The partition checks read the profile's state database (test/containment/state-db.ts), so they
  * need the run's --user-data dir and --tab id. `escaped` is the finding that fails on an escape,
@@ -391,6 +417,12 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	'ai-settings-reenable': r =>
 		typeof fact(r, 'reenableSettingsSeen') !== 'number' || (fact(r, 'reenableSettingsSeen') as number) < 1 ? 'the tab window never read the tab\'s re-enable settings'
 			: fact(r, 'tabFetchedHost') === true ? null : 'the tab window\'s agent did not fetch from the host',
+	// Without 0010, agents on (the baseline's configuration): the window connects to the hostile REH.
+	'ai-agent-host-token-push': r => safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
+	'ai-agent-host-autoapprove-setting': r => safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
+	'ai-disable-ai-features-reenable': r =>
+		fact(r, 'remoteAiFeaturesOn') !== true ? 'the tab window never read the tab\'s chat.disableAIFeatures false'
+			: safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
 	'provider-completion-host-file': r =>
