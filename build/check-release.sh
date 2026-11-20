@@ -3,9 +3,13 @@
 #   build/check-release.sh [--desktop] PATH...   (.app/Contents/Resources/app dir, a dir, or .tar.gz/.zip)
 # Fails on:
 #   - test-hook markers: SECLAB_TEST_ONLY / seclab-test-hook / rogue-reh / rogue-extension
-#     (any code meant only for tests must carry SECLAB_TEST_ONLY so this finds it), and
+#     (any code meant only for tests must carry SECLAB_TEST_ONLY so this finds it), the
+#     `seclab-test.` extension ids test variants add, and
 #     `seclabTestBuild`, the positive marker every test build variant's product.json carries
 #     (build/test-variant.sh; EDR test-build-variants);
+#   - the defaultChatParticipant proposal granted by an app product.json or asked for by a built-in
+#     extension's manifest (it makes an extension the window's chat agent; only the containment
+#     variant's fake model has it);
 #   - environment-controlled module loading: require()/import() of a path taken from
 #     process.env (a classic test hook that becomes a backdoor in a release);
 #   - an app product.json without `"enableTelemetry": false` on its own line in the root object (JSON
@@ -145,6 +149,25 @@ if [ "${1:-}" = "--self-test" ]; then
 	grep -q 'enable\\u0054elemetry' "$T/root/product.json" || { echo "check-release self-test: escaped key not injected" >&2; exit 1; }
 	run "$T/with5" fail "product.json with an escaped duplicate enableTelemetry true (review TEL-1)"
 	stamp "$hab"; run "$T/with5" pass "the REH again, enableTelemetry false at the top level"
+	# The containment variant's fake model (hook fake-model): its marker, its id in product.json, a
+	# product.json grant of defaultChatParticipant, or a built-in manifest asking for it, each
+	# refused alone; an extension manifest without it passes.
+	mkdir -p "$T/root/extensions/seclab-test-fake-model"
+	printf '{\n\t"name": "x",\n\t"enabledApiProposals": ["resolvers"]\n}\n' > "$T/root/extensions/seclab-test-fake-model/package.json"
+	run "$T/with5" pass "control: a built-in extension manifest without defaultChatParticipant"
+	echo 'const MARKER = "SECLAB_TEST_ONLY:fake-model";' > "$T/root/extensions/seclab-test-fake-model/extension.js"
+	run "$T/with5" fail "the fake model's code (SECLAB_TEST_ONLY:fake-model)"
+	rm "$T/root/extensions/seclab-test-fake-model/extension.js"
+	printf '{\n\t"name": "x",\n\t"enabledApiProposals": ["defaultChatParticipant"]\n}\n' > "$T/root/extensions/seclab-test-fake-model/package.json"
+	run "$T/with5" fail "a built-in extension asking for defaultChatParticipant"
+	rm -rf "$T/root/extensions"
+	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "extensionEnabledApiProposals": {"some.ext": ["defaultChatParticipant"]},/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	grep -q defaultChatParticipant "$T/root/product.json" || { echo "check-release self-test: grant not injected" >&2; exit 1; }
+	run "$T/with5" fail "product.json granting defaultChatParticipant"
+	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "extensionKind": {"seclab-test.fake-model": ["ui"]},/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	grep -q 'seclab-test\.fake-model' "$T/root/product.json" || { echo "check-release self-test: extension kind not injected" >&2; exit 1; }
+	run "$T/with5" fail "product.json listing a seclab-test extension"
+	stamp "$hab"; run "$T/with5" pass "the REH again, after the fake-model cases"
 	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
 	run "$T/no5" fail "no product.json at all"
 	echo "check-release self-test: ok"
@@ -188,7 +211,17 @@ if [ "${1:-}" = "--inner" ]; then
 	}
 	while IFS= read -r d; do
 		[ -n "$(find "$d" -type f -name "*.js" | head -1)" ] || { echo "check-release: no JS files under $d (wrong path?)"; bad=1; }
-		scan "SECLAB_TEST_ONLY|seclab-test-hook|rogue-reh|rogue-extension|seclabTestBuild" "test-hook marker"
+		scan "SECLAB_TEST_ONLY|seclab-test-hook|rogue-reh|rogue-extension|seclabTestBuild|seclab-test\." "test-hook marker"
+		# The defaultChatParticipant proposal makes an extension the window's chat agent. Only the
+		# containment variant's fake model (SECLAB_TEST_ONLY:fake-model) may have it: no app
+		# product.json grants it, and no built-in extension's manifest asks for it (a built-in keeps
+		# the proposals its own package.json names).
+		set +e
+		grants=$(find "$d" -type f \( -name product.json -o -path "*/extensions/*/package.json" \) -not -path "*/node_modules/*" -exec grep -lF defaultChatParticipant {} + 2>&1)
+		rc=$?
+		set -e
+		if [ "$rc" -gt 1 ]; then echo "check-release: scan error (defaultChatParticipant)"; bad=1
+		elif [ -n "$grants" ]; then echo "check-release: defaultChatParticipant proposal granted:"; echo "$grants" | head -20; bad=1; fi
 		scan "(require|import)\([[:space:]]*process\.env(\.[A-Za-z_]+|\[)[^)]{0,80}\)" "env-controlled module load"
 		# The RPC filter stamp (prepare.sh step 7), both directions, in every app product.json.
 		prods=$(find "$d" -type f -name product.json -not -path "*/extensions/*" -not -path "*/node_modules/*" 2>/dev/null)
