@@ -187,4 +187,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-19 | [the agent-host dial as a judged probe (ai-remote-agent-host-dial)](20261119-ai-dial-probe.md) | see record | see record |
 | 2026-11-19 | [every tab test agrees with the RPC filter's (SRCH3-14)](20261119-tab-authority-case.md) | see record | see record |
 | 2026-11-19 | [no tab auto reply on the shared local pty host (patch 0061)](20261119-tab-auto-replies.md) | see record | see record |
+| 2026-11-20 | [broker Python base image 3.13 to 3.15 (round 21)](20261120-broker-python-315.md) | "deps: broker python base image 3.13 to 3.15". The broker's Python tool images move | see record |
 <!-- index:end -->

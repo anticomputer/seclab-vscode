@@ -22578,6 +22578,17 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test or record correction; nothing to test."
+		},
+		{
+			"record": "20261120-broker-python-315.md",
+			"anchor": "BRK21-1",
+			"round": "Round 21",
+			"severity": "low",
+			"summary": "The python image's register entry and broker/deps.json usedBy left out the CFS path test that runs it; no gate affected.",
+			"component": "dependency register (python tool image)",
+			"owner": "broker",
+			"status": "fixed-untested",
+			"gap": "The entry now names every user, but nothing checks a register entry's used list against the tree (build/deps.ts validates pins only), so no test can pin it."
 		}
 	]
 }
