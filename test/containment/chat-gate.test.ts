@@ -87,6 +87,18 @@ tests.push(['the injection is imported, from the filter module', () => {
 		assert.match(l, /from '\.\.\/\.\.\/\.\.\/\.\.\/services\/extensions\/common\/seclabRpcFilter\.js';$/);
 	}
 }]);
+tests.push(['seclabRefuseAi logs only the closed set of keys 0009 uses, with a fixed reason', () => {
+	const src = readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
+	const type = src.match(/export type SeclabRefusedAi =([^;]+);/);
+	assert.ok(type, 'SeclabRefusedAi is missing');
+	const keys = [...type[1].matchAll(/'([^']+)'/g)].map(m => m[1]).sort();
+	assert.deepEqual(keys, GUARDS.map(g => g.ref).sort());
+	const fn = src.match(/export function seclabRefuseAi\(remoteAuthority: string \| null \| undefined, ref: SeclabRefusedAi\): void \{([\s\S]*?)\n\}/);
+	assert.ok(fn, 'seclabRefuseAi has changed its signature');
+	assert.match(fn[1], /surface: 'ai', id: ref, ref,/);
+	assert.match(fn[1], /verdict: 'deny', reason: '[^']+', at: Date\.now\(\)/);
+	assert.doesNotMatch(fn[1], /\$\{|\+ ref|\+ remoteAuthority/, 'the reason must be fixed text');
+}]);
 tests.push(['each rule fails on a mutant of the real patch', () => {
 	const mutants: Array<[string, (p: string) => string]> = [
 		['the tool-data guard removed', p => p.replace(/\+\t\tif \(seclabAiDisabled\(this\._seclabEnvironmentService\.remoteAuthority\)\) \{\n(\+\t\t\t\/\/[^\n]*\n)*\+\t\t\tseclabRefuseAi\([^\n]*\n\+\t\t\treturn Disposable\.None;\n\+\t\t\}\n/, '')],
