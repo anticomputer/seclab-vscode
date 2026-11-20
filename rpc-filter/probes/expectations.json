@@ -7,28 +7,31 @@
   },
   "probes": {
     "ai-agent-host-autoapprove-setting": {
-      "required": false,
+      "required": true,
       "surface": "client-push",
-      "policyRef": "ai-tool:run_in_terminal",
-      "why": "a rogue agent host asserts _meta.autoApproveBySetting for a host tool; 0009's invokeTool refusal must hold regardless of what the host claims",
-      "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "policyRef": "push:agentHostProxy:frame",
+      "why": "a rogue agent host asserts _meta.autoApproveBySetting for a host tool. With agents off for the host (the default, and the only configuration this build opens) a tab window makes no agent-host connection, so no agent host can ask for anything; the tool-call leg itself needs chat open in tab windows, which is not (project owner decision, 2026-11-17)",
+      "runner": "ai-agent-host-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
     },
     "ai-agent-host-token-push": {
-      "required": false,
+      "required": true,
       "surface": "client-push",
-      "policyRef": "push:agentHostProxy",
+      "policyRef": "push:agentHostProxy:frame",
       "why": "a rogue REH serves agentHostProxy and advertises api.github.com in protectedResources; the client would resolve the user's auth session and forward the real accessToken. Client->server, so neither the RPC choke point nor the channel guard sees it",
-      "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "runner": "ai-agent-host-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
     },
     "ai-disable-ai-features-reenable": {
-      "required": false,
+      "required": true,
       "surface": "client-push",
       "policyRef": "ai-setting:chat.disableAIFeatures",
       "why": "chat.disableAIFeatures is WINDOW scope and the tab supplies remote user settings, so a tab-written false must not revive the agent host client",
-      "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "runner": "ai-agent-host-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
     },
     "ai-instructions-tool-call": {
       "required": true,

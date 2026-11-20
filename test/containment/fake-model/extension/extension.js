@@ -126,7 +126,7 @@ function activate(context) {
 	// globalStorage/<extension id> is under the profile's User directory.
 	const userDir = path.resolve(dir, '..', '..');
 	const kind = windowKind(vscode.env.remoteName);
-	const facts = { marker: MARKER, kind: kind ?? 'other', armed: false, triggered: 0, triggerFailed: false, requests: 0, references: 0, referencesRead: 0, referencesSkipped: 0, matched: false, fetchToolVisible: false, invoked: false, invokeOk: false, invokeRefused: false, invokeOtherError: false, modelResponses: 0, reenableSettingsSeen: 0 };
+	const facts = { marker: MARKER, kind: kind ?? 'other', armed: false, triggered: 0, triggerFailed: false, requests: 0, references: 0, referencesRead: 0, referencesSkipped: 0, matched: false, fetchToolVisible: false, invoked: false, invokeOk: false, invokeRefused: false, invokeOtherError: false, modelResponses: 0, reenableSettingsSeen: 0, remoteAiFeaturesOn: false };
 	const armOf = () => {
 		if (!kind || !isTestProfile(dir)) {
 			return undefined;
@@ -235,8 +235,12 @@ function activate(context) {
 		if (kind === 'tab') {
 			const c = vscode.workspace.getConfiguration();
 			const seen = REENABLE_KEYS.filter(k => c.inspect(k)?.workspaceValue !== undefined).length;
-			if (seen !== facts.reenableSettingsSeen) {
+			// And whether it reads `chat.disableAIFeatures: false` from the remote user settings the
+			// tab supplies (ai-disable-ai-features-reenable's in-run control).
+			const remoteOn = c.inspect('chat.disableAIFeatures')?.userRemoteValue === false;
+			if (seen !== facts.reenableSettingsSeen || remoteOn !== facts.remoteAiFeaturesOn) {
 				facts.reenableSettingsSeen = seen;
+				facts.remoteAiFeaturesOn = remoteOn;
 				record();
 			}
 		}

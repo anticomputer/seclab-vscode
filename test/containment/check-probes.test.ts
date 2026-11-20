@@ -345,6 +345,35 @@ const tests: Array<[string, () => void]> = [
 		assert.ok(failed(contained.out, /ai-instructions-tool-call shows the escape itself on the unpatched build/), contained.out);
 		assert.ok(failed(contained.out, /ai-settings-reenable shows the escape itself on the unpatched build/), contained.out);
 	}],
+	['the agent-host probes need the agents-on control, a quiet proxy and the gate\'s refusal', () => {
+		const ids = ['ai-agent-host-token-push', 'ai-agent-host-autoapprove-setting', 'ai-disable-ai-features-reenable'];
+		const base = { required: true, runner: 'ai-agent-host-probe', surface: 'client-push', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const specs: Record<string, Record<string, unknown>> = {
+			'ai-agent-host-token-push': { ...base, policyRef: 'push:agentHostProxy:frame' },
+			'ai-agent-host-autoapprove-setting': { ...base, policyRef: 'push:agentHostProxy:frame' },
+			'ai-disable-ai-features-reenable': { ...base, policyRef: 'ai-setting:chat.disableAIFeatures' },
+		};
+		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, ...specs }, rehProbes: {} };
+		const facts = { armConnects: 0, armCalls: 0, armListens: 0, armGateOpened: 0, armGateDisabled: 2, controlConnects: 1, controlGateOpened: 1, remoteAiFeaturesOn: true };
+		const results = (over: Record<string, unknown> = {}) => ({ results: ids.map(id => ({ id, policyRef: specs[id].policyRef, outcome: 'succeeded', facts: { ...facts, ...over } })) });
+		const judge = (h: unknown, mode: 'patched' | 'unpatched' = 'patched') => run({ mode, expectations: exp, rpc: { results: [] }, harness: h, args: ['--only', ids.join(','), '--no-reh'] });
+		const good = judge(results());
+		assert.equal(good.status, 0, good.out.split('\n').filter(l => /\bFAIL\b|exit|Error/.test(l)).join(' | ') || good.out.slice(-600));
+		for (const over of [{ controlConnects: 0 }, { controlGateOpened: 0 }, { armConnects: 1 }, { armListens: 1 }, { armCalls: 2 }, { armGateOpened: 1 }, { armGateDisabled: 0 }, { armConnects: '0' }, { armConnects: undefined }]) {
+			const out = judge(results(over)).out;
+			for (const id of ids) {
+				assert.ok(failed(out, new RegExp(`${id} patched predicate holds`)), `${id} ${JSON.stringify(over)}`);
+			}
+		}
+		assert.ok(failed(judge(results({ remoteAiFeaturesOn: false })).out, /ai-disable-ai-features-reenable patched predicate holds/));
+		// Baseline: the window connects to the hostile REH.
+		const escaped = judge(results({ armConnects: 2, armGateOpened: 1 }), 'unpatched');
+		assert.equal(escaped.status, 0, escaped.out.split('\n').filter(l => /\bFAIL\b/.test(l)).join(' | '));
+		const quiet = judge(results(), 'unpatched');
+		for (const id of ids) {
+			assert.ok(failed(quiet.out, new RegExp(`${id} shows the escape itself on the unpatched build`)), quiet.out);
+		}
+	}],
 	["the tab's REH record can't stand in for the host's dial measurement", () => {
 		// AID-1: the host's record shows an escape; the tab's REH writes a clean one under the same id.
 		const id = 'ai-remote-agent-host-dial';
@@ -398,6 +427,11 @@ const MUTANTS: Array<[string, string, string]> = [
 	['the re-enable settings need not be in effect', "(fact(r, 'reenableSettingsSeen') as number) < 1\n\t\t\t? 'the tab window never read", "false\n\t\t\t? 'the tab window never read"],
 	['the tab-side call needs no filter denial', "(fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial", "false ? 'no denial"],
 	['the AI chat baseline predicate is gutted', ": fact(r, 'tabFetchedHost') === true ? null : 'the tab window\\'s agent did not fetch from the host',\n\t'ai-settings-reenable'", ": true ? null : 'the tab window\\'s agent did not fetch from the host',\n\t'ai-settings-reenable'"],
+	['the agent-host control is not required', "return safeCount(r, 'controlConnects') < 1 || safeCount(r, 'controlGateOpened') < 1 ? 'the control", "return false ? 'the control"],
+	['a quiet proxy is not required', ": safeCount(r, 'armConnects') !== 0 || safeCount(r, 'armCalls') !== 0 || safeCount(r, 'armListens') !== 0 ? 'the tab window reached", ": false ? 'the tab window reached"],
+	['the gate refusal is not required', ": safeCount(r, 'armGateDisabled') < 1 ? 'no refusal in the gate log'", ": false ? 'no refusal in the gate log'"],
+	['a forged count reads as zero', '? v : -1;', '? v : 0;'],
+	['the agent-host baseline predicate is gutted', "'ai-agent-host-token-push': r => safeCount(r, 'armConnects') > 0 ? null", "'ai-agent-host-token-push': r => true ? null"],
 ];
 const source = fs.readFileSync(CHECKER_SOURCE, 'utf8');
 // Mutants live in a scratch mirror of the checker's import closure (same relative layout), so
