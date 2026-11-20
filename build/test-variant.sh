@@ -44,18 +44,31 @@ jq -e --arg v "$variant" 'has($v) and ($v | startswith("$") | not)' "$MANIFEST" 
 [[ "$target" == desktop || "$target" == reh ]] || die "target must be desktop or reh"
 
 # This target's hooks, validated: an id, a regular file under test/ (no traversal, no symlink),
-# a marker that is a plain token, and the bundle (path in the target's app root) its code is
-# built into. Prints "id<TAB>patch<TAB>marker<TAB>bundle" lines.
+# a marker that is a plain token, the bundle (path in the target's app root) its code is built
+# into, and an optional ui-kind built-in extension it adds. Prints
+# "id<TAB>patch<TAB>marker<TAB>bundle<TAB>uiExtension" lines ("-" for none).
 hooks() {
-	jq -r --arg v "$variant" --arg t "$target" '.[$v].hooks // error("no hooks list") | .[] | select(.target == $t) | [.id, .patch, .marker, .bundle] | @tsv' "$MANIFEST" \
-		| while IFS=$'\t' read -r id patch marker bundle; do
+	jq -r --arg v "$variant" --arg t "$target" '.[$v].hooks // error("no hooks list") | .[] | select(.target == $t) | [.id, .patch, .marker, .bundle, (.uiExtension // "-")] | @tsv' "$MANIFEST" \
+		| while IFS=$'\t' read -r id patch marker bundle ui; do
 			[[ "$id" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || die "bad hook id '$id'"
 			[[ "$patch" =~ ^test/[A-Za-z0-9._/-]+\.patch$ && "$patch" != *..* ]] || die "$id: hook patch must be a .patch under test/"
 			[[ -f "$ROOT/$patch" && ! -L "$ROOT/$patch" ]] || die "$id: $patch is missing or not a regular file"
 			[[ "$marker" =~ ^SECLAB_TEST_ONLY:[a-z0-9-]{1,48}$ ]] || die "$id: marker must be SECLAB_TEST_ONLY:<name>"
 			grep -qF "$marker" "$ROOT/$patch" || die "$id: $patch does not contain its marker $marker"
-			[[ "$bundle" =~ ^out/[A-Za-z0-9._/-]+\.(c|m)?js$ && "$bundle" != *..* ]] || die "$id: bundle must be an out/**.js path"
-			printf '%s\t%s\t%s\t%s\n' "$id" "$patch" "$marker" "$bundle"
+			[[ "$bundle" =~ ^(out|extensions/seclab-test-[a-z0-9-]+)/[A-Za-z0-9._/-]+\.(c|m)?js$ && "$bundle" != *..* ]] || die "$id: bundle must be an out/**.js path, or a .js in a seclab-test- extension"
+			if [[ "$ui" != - ]]; then
+				# Only a seclab-test extension this hook's own patch adds as a new built-in, in the
+				# directory its bundle names, may be made ui-kind.
+				[[ "$ui" =~ ^seclab-test\.([a-z0-9-]{1,32})$ ]] || die "$id: uiExtension must be seclab-test.<name>"
+				uiname="${BASH_REMATCH[1]}"
+				[[ "$target" == desktop ]] || die "$id: only a desktop hook can add a ui-kind extension"
+				ext="${bundle#extensions/}"; ext="${ext%%/*}"
+				[[ "$bundle" == extensions/* ]] || die "$id: a uiExtension hook's bundle must be in its extension"
+				grep -qxF "+++ b/extensions/$ext/package.json" "$ROOT/$patch" || die "$id: $patch does not add extensions/$ext/package.json"
+				grep -qxE '\+[[:space:]]*"publisher": "seclab-test",?' "$ROOT/$patch" && grep -qxE "\+[[:space:]]*\"name\": \"$uiname\",?" "$ROOT/$patch" \
+					|| die "$id: extensions/$ext/package.json is not $ui"
+			fi
+			printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$patch" "$marker" "$bundle" "$ui"
 		done
 }
 # Every hook of the variant targets desktop or reh; a typo must not silently drop one.
@@ -65,9 +78,15 @@ jq -e --arg v "$variant" '[.[$v].hooks[] | select(.target != "desktop" and .targ
 record() {
 	# No marker here (review CCC-1): product.json is inlined into the bundles, so a marker in the
 	# record would make the presence check match the record instead of the hook's code.
-	hooks | while IFS=$'\t' read -r id patch marker bundle; do
+	hooks | while IFS=$'\t' read -r id patch marker bundle ui; do
 		jq -nc --arg id "$id" --arg p "$patch" --arg s "$(sha256 "$ROOT/$patch")" '{id: $id, patch: $p, sha256: $s}'
 	done | jq -sc --arg v "$variant" --arg t "$target" '{variant: $v, target: $t, hooks: .}'
+}
+# The ui-kind extensions this target's hooks add, as a JSON array of ids.
+ui_extensions() {
+	hooks | while IFS=$'\t' read -r id patch marker bundle ui; do
+		[[ "$ui" == - ]] || printf '%s\n' "$ui"
+	done | jq -Rsc 'split("\n") | map(select(length > 0))'
 }
 
 case "$cmd" in
@@ -76,19 +95,23 @@ apply)
 	src="${4:?usage: test-variant.sh apply VARIANT TARGET SRC}"
 	[[ -f "$src/product.json" ]] || die "no product.json in $src"
 	jq -e 'has("seclabTestBuild") | not' "$src/product.json" >/dev/null || die "$src is already a test build; run prepare.sh first"
-	hooks | while IFS=$'\t' read -r id patch marker bundle; do
+	hooks | while IFS=$'\t' read -r id patch marker bundle ui; do
 		git -C "$src" apply --check "$ROOT/$patch" || die "$id: $patch does not apply"
 		git -C "$src" apply --whitespace=nowarn "$ROOT/$patch"
 		echo "test-variant: applied $id ($patch)" >&2
 	done
 	rec="$(record)"
+	ui="$(ui_extensions)"
 	# The positive marker (check-release fails on `seclabTestBuild`), and for the desktop app an
 	# identity that can't be mistaken for the release or share its data: name, bundle id, data
 	# folder and URL scheme. The REH keeps its server names (tabd and the tab image use them).
+	# A hook's built-in extension that the window must run locally is ui-kind here, and only
+	# here: the release's product.json lists no seclab-test extension (check-release).
 	tmp="$src/product.json.seclab-test"
-	jq --tab --argjson rec "$rec" --arg t "$target" --arg v "$variant" \
+	jq --tab --argjson rec "$rec" --arg t "$target" --arg v "$variant" --argjson ui "$ui" \
 		--arg sha "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" '
 		.seclabTestBuild = ($rec + {repoSha: $sha, warning: "UNSAFE TEST BUILD: contains test-only hooks; never use as a release"})
+		| reduce $ui[] as $id (.; .extensionKind[$id] = ["ui"])
 		| if $t == "desktop" then
 			.nameShort = "seclab-vscode-TEST-\($v)"
 			| .nameLong = "seclab-vscode UNSAFE TEST BUILD (\($v))"
@@ -103,7 +126,7 @@ apply)
 verify)
 	out="${4:?usage: test-variant.sh verify VARIANT TARGET OUTDIR}"
 	[[ -d "$out" ]] || die "no output directory $out"
-	hooks | while IFS=$'\t' read -r id patch marker bundle; do
+	hooks | while IFS=$'\t' read -r id patch marker bundle ui; do
 		# The marker in the hook's own bundle (review CCC-1: product.json is inlined elsewhere, and
 		# the record carries no marker). The app root: the REH dir, or the .app's Resources/app.
 		base="$out"; [[ "$target" == desktop ]] && base="$out/Contents/Resources/app"
@@ -118,6 +141,10 @@ verify)
 	jq -e --arg v "$variant" --arg t "$target" --argjson w "$want" \
 		'.seclabTestBuild.variant == $v and .seclabTestBuild.target == $t and (.seclabTestBuild.hooks | map(.id)) == $w' "$prod" >/dev/null \
 		|| die "$prod: seclabTestBuild does not record $variant/$target with hooks $want"
+	# Exactly the hooks' ui extensions are ui-kind seclab-test extensions in the built product.json.
+	ui="$(ui_extensions)"
+	jq -e --argjson ui "$ui" '[.extensionKind // {} | to_entries[] | select(.key | startswith("seclab-test.")) | select(.value == ["ui"]) | .key] | sort == ($ui | sort)' "$prod" >/dev/null \
+		|| die "$prod: the ui-kind seclab-test extensions are not exactly $ui"
 	# The release gate refuses this artifact, on the test markers and nothing else (an agent
 	# runtime or an env-controlled module load would fail a release for another reason).
 	mode=release; [[ "$target" == desktop ]] && mode=desktop
@@ -129,8 +156,16 @@ verify)
 	set -e
 	rm -rf "$crw"
 	[[ "$rc" -ne 0 ]] || die "check-release passed a test build (it must fail on seclabTestBuild)"
-	other="$(printf '%s\n' "$res" | grep '^check-release: ' | grep -v '^check-release: test-hook marker:$' || true)"
+	# What check-release may refuse a test build for: its markers, plus the defaultChatParticipant
+	# grant when a hook adds a ui extension (the fake model's own manifest), and nothing else.
+	allowed='^check-release: test-hook marker:$'
+	[[ "$ui" == '[]' ]] || allowed="$allowed|^check-release: defaultChatParticipant proposal granted:$"
+	other="$(printf '%s\n' "$res" | grep '^check-release: ' | grep -vE "$allowed" || true)"
 	[[ -z "$other" ]] || { printf '%s\n' "$res" >&2; die "check-release found more than the test markers"; }
+	# A granted proposal is allowed only in a seclab-test extension's own manifest.
+	grants="$(printf '%s\n' "$res" | sed -n '/^check-release: defaultChatParticipant proposal granted:$/,/^check-release: /p' | grep -v '^check-release: ' || true)"
+	[[ -z "$(printf '%s\n' "$grants" | grep -v '^$' | grep -vE '/extensions/seclab-test-[a-z0-9-]+/package\.json$' || true)" ]] \
+		|| { printf '%s\n' "$res" >&2; die "defaultChatParticipant granted outside a seclab-test extension"; }
 	printf '%s\n' "$res" | grep -qF 'seclabTestBuild' || die "check-release did not flag the seclabTestBuild marker"
 	echo "test-variant: $variant/$target verified; check-release refuses it" >&2
 	;;

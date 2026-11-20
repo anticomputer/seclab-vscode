@@ -1,0 +1,50 @@
+{
+	"name": "fake-model",
+	"displayName": "seclab TEST ONLY fake model and scripted agent",
+	"description": "SECLAB_TEST_ONLY:fake-model. Containment test variant only: a scripted language model and default chat participant that stand in for an agent in the window. Inert unless a harness run armed it; its only action is the fetch tool against the run's loopback beacon.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"private": true,
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"extensionKind": [
+		"ui"
+	],
+	"enabledApiProposals": [
+		"defaultChatParticipant"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./extension.js",
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "seclab-test-fake",
+				"displayName": "seclab TEST ONLY fake model"
+			}
+		],
+		"chatParticipants": [
+			{
+				"id": "seclab-test.fake-agent",
+				"name": "seclabfake",
+				"fullName": "seclab TEST ONLY scripted agent",
+				"description": "Scripted stand-in for an agent (containment tests only)",
+				"isDefault": true,
+				"modes": [
+					"agent",
+					"ask",
+					"edit"
+				]
+			}
+		]
+	}
+}
