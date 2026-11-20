@@ -3,7 +3,8 @@
 // beacon. A containment fixture, run only by test/containment/ai-probe.ts against our own test
 // builds, in a tab.
 //
-// The tab's call crosses the RPC boundary as MainThreadLanguageModelTools.$invokeTool, which the
+// The tab's call crosses the RPC boundary as MainThreadLanguageModelTools.$invokeTool (wire sid
+// MainThreadChatSkills), which the
 // filter denies; patch 0009 refuses invokeTool behind it. Whether the fetch ran is read on the host
 // (the beacon), and the refusal from the window's decision log: what this writes is the tab's own
 // claim, facts only (probe-safety.js), never judged.

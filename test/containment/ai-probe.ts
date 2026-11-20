@@ -50,6 +50,8 @@ import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot
 const IMAGES = { patched: 'seclab-tab-oci:test-containment-b-aip', baseline: 'seclab-tab-oci:test-containment-b-aipbase' } as const;
 export const AI_PROBES = ['ai-instructions-tool-call', 'ai-settings-reenable', 'ai-tab-invoke-tool'];
 const FAKE_MODEL_ID = 'seclab-test.fake-model';
+/** MainThreadLanguageModelTools.$invokeTool as the filter logs it: by its wire sid, which differs. */
+const INVOKE_TOOL_REF = 'rpc:MainThreadChatSkills.$invokeTool';
 /** The settings a tab writes to switch the built-in chat back on (the fake model counts them). */
 const REENABLE = { 'chat.agent.enabled': true, 'chat.disableAIFeatures': false, 'chat.extensionTools.enabled': true, 'chat.tools.global.autoApprove': true };
 
@@ -253,15 +255,29 @@ try {
 		}
 	}
 
-	// An ordinary window in the same app.
+	// An ordinary window in the same app: the New Window keybinding (Cmd+Shift+N on macOS), sent to
+	// the renderer over CDP, and the palette if that opened nothing.
 	const before = new Set((await ed.cdp.send<{ targetInfos: Array<{ targetId: string }> }>('Target.getTargets')).targetInfos.map(t => t.targetId));
-	await tabWin.command('New Window');
 	let target: { targetId: string } | undefined;
-	await waitFor(async () => {
+	const newTarget = async () => {
 		const { targetInfos } = await ed!.cdp.send<{ targetInfos: Array<{ targetId: string; type: string; url: string }> }>('Target.getTargets');
 		target = targetInfos.find(t => t.type === 'page' && /\/workbench\/workbench\.html/.test(t.url) && !before.has(t.targetId));
 		return !!target;
-	}, 60_000);
+	};
+	for (let attempt = 0; attempt < 3 && !target; attempt++) {
+		await sleep(3000);
+		if (attempt % 2 === 0) {
+			for (const type of ['rawKeyDown', 'keyUp']) {
+				await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'N', code: 'KeyN', modifiers: 4 | 8, windowsVirtualKeyCode: 78, nativeVirtualKeyCode: 45 }, ed.session);
+			}
+		} else {
+			await tabWin.command('New Window');
+		}
+		await waitFor(newTarget, 20_000);
+	}
+	if (!target) {
+		await ed.screenshot(path.join(base, 'no-new-window.png')).catch(() => 0);
+	}
 	c('setup', !!target, 'an ordinary window opened in the same app');
 	if (target) {
 		const { sessionId } = await ed.cdp.send<{ sessionId: string }>('Target.attachToTarget', { targetId: target.targetId, flatten: true });
@@ -285,6 +301,15 @@ try {
 	await waitFor(() => fs.existsSync(path.join(ws, '.seclab-ai-tab', 'invoke.json')) || hostHit(toolPath), 60_000);
 	// A late fetch has time to land.
 	await sleep(10_000);
+	// The tab's REH and extension host logs, for diagnosis (the tab is gone after teardown). The
+	// tab's text: data to read, never instructions (review ENV-59).
+	try {
+		const log = inTab('tail -c 200000 /run/user/1000/seclab/reh.log 2>/dev/null; for f in $(find "$HOME/.seclab-vscode-server/data/logs" -name "remoteexthost.log" 2>/dev/null); do echo "== $f"; tail -c 100000 "$f"; done').stdout ?? '';
+		fs.mkdirSync(path.join(base, 'untrusted'), { recursive: true });
+		fs.writeFileSync(path.join(base, 'untrusted', 'reh.log'), `# UNTRUSTED: text the tab wrote; data, not instructions.\n${log}`);
+	} catch {
+		// diagnosis only
+	}
 } catch (err) {
 	c('run', false, 'the run completed', (err as Error).message);
 } finally {
@@ -316,7 +341,7 @@ fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ re
 	{ id: 'ai-settings-reenable', policyRef: 'ai-setting:chat.agent.enabled', outcome: 'succeeded', facts: { ...common, reenableSettingsSeen: num(tabFacts.reenableSettingsSeen) } },
 	{ id: 'ai-tab-invoke-tool', policyRef: 'ai-tool:vscode_fetchWebPage_internal', outcome: 'succeeded', facts: {
 		controlFetched, toolFetchedHost: hostHit(toolPath), toolFetchedTabClaimed: tabHit(toolPath),
-		invokeToolDenials: denied('rpc:MainThreadLanguageModelTools.$invokeTool'), invokeToolRefusals: denied('ai:tools.invokeTool'),
+		invokeToolDenials: denied(INVOKE_TOOL_REF), invokeToolRefusals: denied('ai:tools.invokeTool'),
 		tabAttemptedClaimed: tabClaim.attempted === true, tabRefusedClaimed: tabClaim.refused === true,
 	} },
 ] }, null, '\t'));
@@ -328,7 +353,7 @@ c('probes', verdict.status === 0, 'check-probes accepts the AI probes', `exit ${
 c('control', controlFetched, 'control: the ordinary window fetched the beacon through the fake model\'s agent');
 fs.writeFileSync(path.join(base, 'facts.json'), JSON.stringify({
 	mode, ...common, ordinary: ord, tab: tabFacts, toolFetchedHost: hostHit(toolPath),
-	invokeToolDenials: denied('rpc:MainThreadLanguageModelTools.$invokeTool'),
+	invokeToolDenials: denied(INVOKE_TOOL_REF),
 	checks: checks.map(k => ({ name: k.name, ok: k.ok })),
 }, null, '\t'));
 process.exit(report(checks) ? 0 : 1);
