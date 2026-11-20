@@ -27,7 +27,7 @@ case "${1:-}" in
 esac
 command -v gh >/dev/null || { echo "verify-images: gh is required to verify image attestations" >&2; exit 1; }
 list=$(docker run --rm -i --network none --entrypoint python \
-  python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 -c '
+  python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 -c '
 import json, re, sys
 images = [i for i in json.load(sys.stdin)["images"] if i["tier"] == "attested"]
 if not images:

@@ -14,7 +14,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 broker=$(cd "$here/../.." && pwd)
 root=$(cd "$broker/.." && pwd)
 NODE_IMAGE=node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be
-PY_IMAGE=python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+PY_IMAGE=python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 id=$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')
 # Scratch outside any git repository (the config refuses one inside), never the repo.
 base=${RUNNER_TEMP:-$HOME/.cache}
