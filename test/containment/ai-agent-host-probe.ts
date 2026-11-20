@@ -232,11 +232,11 @@ if (fs.existsSync(path.join(userData, 'logs'))) {
 c('setup', arm.serverWrapped > 0, 'the hostile REH served agentHostProxy to the window (its wrap was in place)');
 
 // ------------------------------------------------------------------ judge
-// The REH's counts are the measuring instrument inside the tab, corroborated host-side by the gate
-// log: a transport opened (or refused) is recorded there by the window itself.
+// The REH's counts are the tab's claim, reported and never judged (reviews AID-1, AIP-5): what is
+// judged is host-side, the gate log, where the window itself records a transport opened or refused.
 const facts = {
-	armConnects: arm.rehConnects, armCalls: arm.rehCalls, armListens: arm.rehListens, armGateOpened: arm.gateOpened, armGateDisabled: arm.gateDisabled,
-	controlConnects: control?.rehConnects ?? -1, controlGateOpened: control?.gateOpened ?? -1,
+	armConnectsClaimed: arm.rehConnects, armCallsClaimed: arm.rehCalls, armListensClaimed: arm.rehListens, armGateOpened: arm.gateOpened, armGateDisabled: arm.gateDisabled,
+	controlConnectsClaimed: control?.rehConnects ?? -1, controlGateOpened: control?.gateOpened ?? -1,
 };
 fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ results: [
 	{ id: 'ai-agent-host-token-push', policyRef: 'push:agentHostProxy:frame', outcome: 'succeeded', facts },

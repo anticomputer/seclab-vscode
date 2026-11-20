@@ -7,3 +7,4 @@ test/containment/benign-extension/probe-safety.js
 test/containment/response-probe/probe-safety.js
 test/containment/search-probe/probe-safety.js
 test/containment/ai-tab-probe/probe-safety.js
+test/containment/ai-tab-probe/run.json

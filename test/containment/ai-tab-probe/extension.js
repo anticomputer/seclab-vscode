@@ -10,11 +10,13 @@
 // claim, facts only (probe-safety.js), never judged.
 //
 // Inert unless armed: the workspace's .seclab/targets must carry this run's nonce, a run directory
-// that contains the workspace, an unexpired `until` and the beacon port.
+// that contains the workspace and an unexpired `until`; the nonce and the beacon port it may call
+// come from run.json, which the harness packages into this extension on the host (review AIP-2).
 const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
 const safety = require('./probe-safety.js');
+const { tabToolUrl } = require('./target.js');
 
 const FETCH_TOOL = 'vscode_fetchWebPage_internal';
 
@@ -44,11 +46,19 @@ exports.activate = async function () {
 			continue;
 		}
 		const ctx = safety.context(targets);
-		const port = Number(targets.tabtoolPort);
-		if (!ctx.armed || !Number.isSafeInteger(port) || port < 1024 || port > 65535) {
+		let run;
+		try {
+			run = JSON.parse(fs.readFileSync(path.join(__dirname, 'run.json'), 'utf8'));
+		} catch {
 			continue;
 		}
-		const url = safety.safeUrl(ctx, `http://127.0.0.1:${port}/ai-tabtool-${targets.arm}`, 'tab tool call');
+		const target = tabToolUrl(run, targets);
+		if (!ctx.armed || !target) {
+			continue;
+		}
+		// The beacon's port pins safeUrl too, from the packaged record (never the workspace).
+		ctx.beaconPort = run.port;
+		const url = safety.safeUrl(ctx, target, 'tab tool call');
 		const mark = facts => {
 			try {
 				fs.mkdirSync(path.join(root, '.seclab-ai-tab'), { recursive: true });
