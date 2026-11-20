@@ -73,3 +73,15 @@ test('window kinds: a seclab tab, an ordinary window, and nothing else', () => {
 	assert.equal(fm.windowKind('seclab'), 'tab');
 	assert.equal(fm.windowKind('ssh-remote'), null);
 });
+
+test('it reads only a tab workspace file or one in the test profile, never the real home', () => {
+	const user = '/h/.seclab-test/ai/User';
+	assert.equal(fm.mayRead({ scheme: 'vscode-remote', authority: 'seclab+t1', path: '/w/.github/copilot-instructions.md' }, user), true);
+	assert.equal(fm.mayRead({ scheme: 'file', path: `${user}/prompts/a.instructions.md` }, user), true);
+	assert.equal(fm.mayRead({ scheme: 'vscode-userdata', path: `${user}/prompts/a.instructions.md` }, user), true);
+	assert.equal(fm.mayRead({ scheme: 'file', path: '/h/.copilot/instructions/a.instructions.md' }, user), false);
+	assert.equal(fm.mayRead({ scheme: 'file', path: `${user}/../../../.copilot/instructions/a.md` }, user), false);
+	assert.equal(fm.mayRead({ scheme: 'vscode-remote', authority: 'ssh-remote+h', path: '/a' }, user), false);
+	assert.equal(fm.mayRead({ scheme: 'file', path: '/h/Library/User/prompts/a.md' }, '/h/Library/User'), false);
+	assert.equal(fm.mayRead({ scheme: 'untitled', path: 'x' }, user), false);
+});

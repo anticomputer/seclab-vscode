@@ -1,0 +1,13 @@
+{
+	"name": "ai-tab-probe",
+	"displayName": "Tab-side tool call probe (seclab containment fixture)",
+	"description": "From the tab's extension host, asks the window to run its built-in fetch tool on the run's loopback beacon. Inert unless a harness run armed the workspace.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}
