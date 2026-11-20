@@ -5,7 +5,7 @@ index 0842031c..40adf57d 100644
 @@ -37,6 +37,8 @@ import { isVirtualWorkspace } from '../../../../../platform/workspace/common/vir
  import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
  import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
- import { seclabAiDisabled } from '../../../../services/extensions/common/seclabRpcFilter.js';
+ import { seclabAiDisabled, seclabRefuseAi } from '../../../../services/extensions/common/seclabRpcFilter.js';
 +import { SECLAB_AGENTS_ENABLED_SETTING, seclabAgentsEnabled, seclabAhpEmit } from '../../../../../platform/agentHost/common/seclabAhpGateCheck.js';
 +import { seclabChatSessionEvent, seclabChatSessionVerdict, type SeclabChatSessionVerdict } from '../../../../../platform/agentHost/common/seclabChatSessions.js';
  import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';

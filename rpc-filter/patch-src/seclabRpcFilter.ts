@@ -74,7 +74,7 @@ export interface SeclabDenial {
  * authorization, and a UI must present it as "claims to be X".
  */
 export interface SeclabDecision {
-	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data' | 'push';
+	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data' | 'push' | 'ai';
 	readonly id: string;
 	readonly ref: string;
 	readonly tabId: string;
@@ -967,6 +967,30 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
 		surface: 'push', id: ref, ref,
 		tabId: seclabResolveTabId(remoteAuthority ?? '') ?? 'unparsed',
 		verdict: 'deny', reason: 'server-initiated push refused in a tab window', at: Date.now(),
+	});
+}
+
+/**
+ * The built-in AI entry points a tab window refuses in code (patch 0009), by policy key. A closed
+ * set, so a caller cannot log a tab-chosen string as the ref.
+ */
+export type SeclabRefusedAi =
+	| 'ai:chat.sendRequest'
+	| 'ai:tools.invokeTool'
+	| 'ai:tools.registerToolData'
+	| 'ai:tools.registerToolImplementation';
+
+/**
+ * Record that a tab window refused a built-in AI entry point (patch 0009), so a refusal is a line
+ * in the decision log rather than only something that didn't happen. The line carries the policy
+ * key and a fixed reason only: never the request text, the tool id or its input, which a tab can
+ * shape. Repeats collapse into one follow-up with a count, like every other key.
+ */
+export function seclabRefuseAi(remoteAuthority: string | null | undefined, ref: SeclabRefusedAi): void {
+	seclabRecord({
+		surface: 'ai', id: ref, ref,
+		tabId: seclabResolveTabId(remoteAuthority ?? '') ?? 'unparsed',
+		verdict: 'deny', reason: 'built-in AI refused in a tab window', at: Date.now(),
 	});
 }
 
