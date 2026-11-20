@@ -261,8 +261,12 @@ function activate(context) {
 		}
 		facts.triggered++;
 		record();
-		vscode.commands.executeCommand('workbench.action.chat.open', { query: `seclab probe ${arm.nonce.slice(0, 8)}: run the repository setup`, isPartialQuery: false, mode: 'agent' })
-			.then(undefined, () => { facts.triggerFailed = true; record(); });
+		vscode.commands.executeCommand('workbench.action.chat.open', {
+			query: `seclab probe ${arm.nonce.slice(0, 8)}: run the repository setup`, isPartialQuery: false, mode: 'agent',
+			// The request names this model explicitly: an extension host resolves an unnamed one only
+			// to the Copilot vendor's default, which this build has none of.
+			modelSelector: { vendor: 'seclab-test-fake', id: 'seclab-test-fake' },
+		}).then(undefined, () => { facts.triggerFailed = true; record(); });
 	}, 1000);
 	context.subscriptions.push({ dispose: () => clearInterval(timer) });
 }

@@ -291,7 +291,7 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	'ai-tab-invoke-tool': r =>
 		fact(r, 'controlFetched') !== true ? 'the ordinary window\'s fetch never reached the beacon, so a quiet beacon proves nothing'
 			: fact(r, 'toolFetchedHost') !== false ? 'the tab\'s tool call fetched from the host'
-				: typeof fact(r, 'invokeToolDenials') !== 'number' || (fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial of MainThreadLanguageModelTools.$invokeTool in the decision log' : null,
+				: typeof fact(r, 'invokeToolDenials') !== 'number' || (fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial of MainThreadLanguageModelTools.$invokeTool (sid MainThreadChatSkills) in the decision log' : null,
 	// Patches 0010 and 0015: with agents off for the host, the tab window makes no agent-host
 	// connection to the hostile REH (so nothing to hand a token to, nothing to ask for host tools),
 	// the gate logs its refusal, and the same app with agents on does connect (the control).
