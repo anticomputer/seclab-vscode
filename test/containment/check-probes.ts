@@ -278,6 +278,20 @@ const deniedRefs = new Set(denials.map(d => d.policyRef ?? ''));
 // free-text "also assert ..." notes, which asserted nothing -- auth-get-session
 // in particular would have passed while handing a live token to the tab.
 const predicates: Record<string, (r: Result) => string | null> = {
+	// Patch 0009 (agent-host-patches#3): the ordinary window's agent fetched from the host (the
+	// path fires where nothing gates it), the tab window asked, and its request was refused and
+	// logged with nothing fetched on the host.
+	'ai-instructions-tool-call': r => aiRefusalReason(r),
+	// The same refusal while the tab's re-enable settings are in effect in the tab window.
+	'ai-settings-reenable': r =>
+		typeof fact(r, 'reenableSettingsSeen') !== 'number' || (fact(r, 'reenableSettingsSeen') as number) < 1
+			? 'the tab window never read the tab\'s re-enable settings, so they were not tested' : aiRefusalReason(r),
+	// The tab's own call: the tool fetches in the ordinary window, and the tab's call to it is
+	// refused by the filter with nothing fetched on the host.
+	'ai-tab-invoke-tool': r =>
+		fact(r, 'controlFetched') !== true ? 'the ordinary window\'s fetch never reached the beacon, so a quiet beacon proves nothing'
+			: fact(r, 'toolFetchedHost') !== false ? 'the tab\'s tool call fetched from the host'
+				: typeof fact(r, 'invokeToolDenials') !== 'number' || (fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial of MainThreadLanguageModelTools.$invokeTool in the decision log' : null,
 	// Patch 0015: the tab window never dials the agent host the tab named, its gate logs the
 	// refusal, and the same kind of entry in an empty window does dial (the positive control).
 	'ai-remote-agent-host-dial': r =>
@@ -339,6 +353,19 @@ function served(r: Result): number {
 }
 
 /**
+ * The patched AI chat refusal (patch 0009): the ordinary window's control fetched from the host, the
+ * tab window's fake model opened chat, the request was refused in the decision log, and nothing was
+ * fetched from the host for the tab.
+ */
+function aiRefusalReason(r: Result): string | null {
+	const n = (k: string) => { const v = fact(r, k); return typeof v === 'number' && Number.isSafeInteger(v) ? v : 0; };
+	return fact(r, 'controlFetched') !== true ? 'the ordinary window\'s agent never fetched the beacon, so a quiet beacon proves nothing'
+		: n('tabTriggered') < 1 ? 'the tab window never asked chat'
+			: fact(r, 'tabFetchedHost') !== false ? 'the tab window\'s agent fetched from the host'
+				: n('sendRequestRefusals') < 1 ? 'no refusal of the chat request in the decision log' : null;
+}
+
+/**
  * The partition checks read the profile's state database (test/containment/state-db.ts), so they
  * need the run's --user-data dir and --tab id. `escaped` is the finding that fails on an escape,
  * `ran` the one that shows the write landed in the partition.
@@ -356,6 +383,14 @@ function partitionReason(escaped: number, ran: number): string | null {
 // An unpatched run must show the escape itself, not just a return value: these probes
 // "succeed" on both builds, so the outcome alone proves nothing.
 const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
+	// Without 0009 (and 0018 behind it) the tab's instructions steer the window's agent into the
+	// host tool: the fetch reaches the host listener (agent-host-patches#3).
+	'ai-instructions-tool-call': r =>
+		fact(r, 'controlFetched') !== true ? 'the ordinary window\'s control never fetched'
+			: fact(r, 'tabFetchedHost') === true ? null : 'the tab window\'s agent did not fetch from the host',
+	'ai-settings-reenable': r =>
+		typeof fact(r, 'reenableSettingsSeen') !== 'number' || (fact(r, 'reenableSettingsSeen') as number) < 1 ? 'the tab window never read the tab\'s re-enable settings'
+			: fact(r, 'tabFetchedHost') === true ? null : 'the tab window\'s agent did not fetch from the host',
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
 	'provider-completion-host-file': r =>

@@ -31,12 +31,13 @@
       "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
     },
     "ai-instructions-tool-call": {
-      "required": false,
+      "required": true,
       "surface": "trusted-ai",
-      "policyRef": "ai-tool:fetch_webpage",
-      "why": "a workspace instructions file steers the trusted-side agent into a host tool; the tab never makes an RPC call, so the filter cannot see it",
-      "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "policyRef": "ai-tool:vscode_fetchWebPage_internal",
+      "why": "a workspace instructions file steers a window-side agent into a host tool; the tab never makes an RPC call, so the filter cannot see it, and only patch 0009 (with 0018 behind it) refuses the request",
+      "runner": "ai-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-probe.ts: listeners on both sides of the boundary, an ordinary window in the same app whose agent (the containment variant's fake model) fetches the beacon as the positive control, and the window's decision log; written to harness-probes.json and judged here."
     },
     "ai-remote-agent-host-dial": {
       "required": true,
@@ -49,12 +50,23 @@
       "noUnpatchedBaseline": "Every containment build ships patch 0015, so no build here dials; the same run's empty-window control, which must dial the host listener with the same kind of entry, shows the path would fire."
     },
     "ai-settings-reenable": {
-      "required": false,
+      "required": true,
       "surface": "trusted-ai",
       "policyRef": "ai-setting:chat.agent.enabled",
       "why": "the tab writes .vscode/settings.json to switch its own containment back on; the disable is in code precisely so a setting cannot reach it",
-      "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "runner": "ai-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-probe.ts: listeners on both sides of the boundary, an ordinary window in the same app whose agent (the containment variant's fake model) fetches the beacon as the positive control, and the window's decision log; written to harness-probes.json and judged here."
+    },
+    "ai-tab-invoke-tool": {
+      "required": true,
+      "surface": "trusted-ai",
+      "policyRef": "ai-tool:vscode_fetchWebPage_internal",
+      "why": "an extension in the tab asks the window to run its built-in fetch tool (vscode.lm.invokeTool), which fetches from the host network; the RPC filter refuses MainThreadLanguageModelTools.$invokeTool, and patch 0009 refuses invokeTool behind it",
+      "runner": "ai-probe",
+      "patchedOutcome": "succeeded",
+      "measuredBy": "test/containment/ai-probe.ts: the tab-side extension test/containment/ai-tab-probe calls the tool on the run's beacon; the host listener, the ordinary window's fetch of the same tool (the positive control) and the filter's denial line are judged here.",
+      "noUnpatchedBaseline": "The RPC filter (patch 0005) is in every containment build, including the baseline without 0009, so no build here lets the call through; the same run's ordinary-window fetch shows the tool reaches the beacon, and the filter's denial line shows the call arrived and was refused."
     },
     "as-external-uri": {
       "required": true,
