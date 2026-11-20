@@ -8,7 +8,8 @@
 //
 // What it does, and only when a harness run has armed it:
 //   - the participant reads the instruction files core attached to the request (references) as
-//     DATA. A file "matches" only if it holds, as a whole line, one of the exact canary lines the
+//     DATA, and only those in a seclab tab's workspace or the test profile (never the user's real
+//     home). A file "matches" only if it holds, as a whole line, one of the exact canary lines the
 //     run armed, each carrying the run's nonce. Nothing in the text is followed: the matched line
 //     only selects one of the actions the run armed, and the action's URL comes from the arming
 //     record, never from the text;
@@ -31,6 +32,8 @@ const NONCE = /^[0-9a-f]{32}$/;
 const KINDS = ['ordinary', 'tab'];
 const MAX_TEXT = 64 * 1024;
 const MAX_ARM_SECONDS = 3600;
+/** The settings a tab writes to switch the built-in chat back on (ai-settings-reenable). */
+const REENABLE_KEYS = ['chat.agent.enabled', 'chat.disableAIFeatures', 'chat.extensionTools.enabled', 'chat.tools.global.autoApprove'];
 
 /** A harness-made test profile: never arm in a real one. */
 function isTestProfile(dir) {
@@ -83,6 +86,25 @@ function windowKind(remoteName) {
 	return remoteName === 'seclab' ? 'tab' : null;
 }
 
+/**
+ * Whether a referenced file may be read: one in a seclab tab's workspace, or one under the test
+ * profile's User directory. Anything else (instructions in the user's real home, such as
+ * ~/.copilot/instructions, which core also attaches) is never opened.
+ */
+function mayRead(uri, userDir) {
+	if (!uri || typeof uri.scheme !== 'string') {
+		return false;
+	}
+	if (uri.scheme === 'vscode-remote') {
+		return typeof uri.authority === 'string' && uri.authority.startsWith('seclab+');
+	}
+	if (uri.scheme === 'file' || uri.scheme === 'vscode-userdata') {
+		const p = path.posix.normalize(uri.path ?? '');
+		return isTestProfile(userDir) && p.startsWith(userDir + '/') && !p.includes('/../');
+	}
+	return false;
+}
+
 /** The armed action for this window whose exact line one of the texts holds as a whole line. */
 function selectAction(arm, kind, texts) {
 	for (const action of arm.actions) {
@@ -101,8 +123,10 @@ function selectAction(arm, kind, texts) {
 function activate(context) {
 	const vscode = require('vscode');
 	const dir = context.globalStorageUri.fsPath;
+	// globalStorage/<extension id> is under the profile's User directory.
+	const userDir = path.resolve(dir, '..', '..');
 	const kind = windowKind(vscode.env.remoteName);
-	const facts = { marker: MARKER, kind: kind ?? 'other', armed: false, triggered: 0, requests: 0, references: 0, referencesRead: 0, matched: false, fetchToolVisible: false, invoked: false, invokeOk: false, invokeRefused: false, invokeOtherError: false, modelResponses: 0 };
+	const facts = { marker: MARKER, kind: kind ?? 'other', armed: false, triggered: 0, triggerFailed: false, requests: 0, references: 0, referencesRead: 0, referencesSkipped: 0, matched: false, fetchToolVisible: false, invoked: false, invokeOk: false, invokeRefused: false, invokeOtherError: false, modelResponses: 0, reenableSettingsSeen: 0 };
 	const armOf = () => {
 		if (!kind || !isTestProfile(dir)) {
 			return undefined;
@@ -153,6 +177,10 @@ function activate(context) {
 			const v = ref.value;
 			try {
 				if (v instanceof vscode.Uri) {
+					if (!mayRead(v, userDir)) {
+						facts.referencesSkipped++;
+						continue;
+					}
 					const bytes = await vscode.workspace.fs.readFile(v);
 					texts.push(Buffer.from(bytes.subarray(0, MAX_TEXT)).toString('utf8'));
 					facts.referencesRead++;
@@ -202,6 +230,16 @@ function activate(context) {
 			facts.armed = true;
 			record();
 		}
+		// Whether this window reads the settings a tab wrote to switch chat back on (the
+		// settings-reenable probe's in-run control): a count of keys whose workspace value is set.
+		if (kind === 'tab') {
+			const c = vscode.workspace.getConfiguration();
+			const seen = REENABLE_KEYS.filter(k => c.inspect(k)?.workspaceValue !== undefined).length;
+			if (seen !== facts.reenableSettingsSeen) {
+				facts.reenableSettingsSeen = seen;
+				record();
+			}
+		}
 		const trigger = path.join(dir, `trigger-${kind}`);
 		let t;
 		try {
@@ -227,4 +265,4 @@ function activate(context) {
 
 function deactivate() { }
 
-module.exports = { activate, deactivate, parseArm, selectAction, windowKind, isTestProfile, MARKER, FETCH_TOOL };
+module.exports = { activate, deactivate, parseArm, selectAction, windowKind, isTestProfile, mayRead, MARKER, FETCH_TOOL, REENABLE_KEYS };
