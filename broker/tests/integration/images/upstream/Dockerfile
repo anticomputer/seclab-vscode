@@ -2,13 +2,13 @@
 # HTTP/2, WebSocket) answering for several test hostnames, a git smart-HTTP
 # backend, and a logging DNS server used by the DNS-exfiltration test.
 # Build context: broker/ (wheels are fetched as in broker/Dockerfile).
-FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS wheels
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS wheels
 ARG PIP_SOURCE
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY tests/integration/images/upstream/requirements.txt /opt/pipfetch/requirements.txt
 RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
 
-FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git openssl \
  && rm -rf /var/lib/apt/lists/*

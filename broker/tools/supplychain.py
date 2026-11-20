@@ -447,7 +447,7 @@ def self_test() -> list[str]:
         f"# comment\npkg==1.0 \\\n    --hash=sha256:{h} \\\n    --hash=sha256:{good}\n    # via other\n",
         f"Pkg.Name_x==2.0rc1 --hash=sha256:{h}  # trailing comment",
     ]
-    ref = f"python:3.13-slim-trixie@sha256:{h}"
+    ref = f"python:3.15-slim-trixie@sha256:{h}"
     ref2 = f"debian:trixie-slim@sha256:{good}"
     canon = " ".join(CANONICAL)
     fetch = " ".join(FETCH_FLAGS)
@@ -525,7 +525,7 @@ def self_test() -> list[str]:
         head + "COPY pip.conf /etc/pip.conf",
         head + 'RUN ["pip", "install", "pkg"]',
         head + "ONBUILD RUN true",
-        "FROM python:3.13-slim-trixie\n",
+        "FROM python:3.15-slim-trixie\n",
         f"FROM unregistered@sha256:{h}\n",
     ]
     df_good = [

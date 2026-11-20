@@ -102,13 +102,13 @@
       "gap": "Docker Official Images are not signed."
     },
     {
-      "id": "img-python-3.13",
-      "name": "python:3.13-slim-trixie",
+      "id": "img-python-3.15",
+      "name": "python:3.15-slim-trixie",
       "kind": "oci-image",
       "publisher": "Docker Official Images (docker-library)",
       "official": true,
       "purpose": "Broker integration test harness and upstream images; broker attestation verifier image.",
-      "pins": ["python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90"],
+      "pins": ["python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928"],
       "used": ["broker/tests/integration/images/harness/Dockerfile", "broker/tests/integration/images/upstream/Dockerfile", "broker/tools/attest/Dockerfile", "broker/tools/verify-images.sh"],
       "provenance": "Unsigned BuildKit provenance/SBOM.",
       "verify": "Digest pin; broker/deps.json entry, checked by broker/tools/pin_check.py (broker/docs-check.sh) and broker/provenance-check.sh.",

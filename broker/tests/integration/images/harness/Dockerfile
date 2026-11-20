@@ -4,13 +4,13 @@
 # Build context: broker/ (wheels are fetched as in broker/Dockerfile).
 FROM docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d AS cli
 
-FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS wheels
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS wheels
 ARG PIP_SOURCE
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY tests/integration/images/harness/requirements.txt /opt/pipfetch/requirements.txt
 RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
 
-FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 COPY --from=cli /usr/local/bin/docker /usr/local/bin/docker
 COPY tests/integration/images/harness/requirements.txt /opt/harness/requirements.txt
 RUN --mount=type=bind,from=wheels,source=/wheels,target=/opt/wheels pip install --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index --find-links /opt/wheels -r /opt/harness/requirements.txt
