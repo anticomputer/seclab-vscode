@@ -305,6 +305,46 @@ const tests: Array<[string, () => void]> = [
 		assert.match(baseline.out, /ai-remote-agent-host-dial has no unpatched baseline/);
 		assert.doesNotMatch(baseline.out, /ai-remote-agent-host-dial succeeds on the unpatched build/);
 	}],
+	['the AI chat probes are judged from their harness\'s record, with the ordinary-window control', () => {
+		const ids = ['ai-instructions-tool-call', 'ai-settings-reenable', 'ai-tab-invoke-tool'];
+		const base = { required: true, runner: 'ai-probe', surface: 'trusted-ai', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const specs = {
+			'ai-instructions-tool-call': { ...base, policyRef: 'ai-tool:vscode_fetchWebPage_internal' },
+			'ai-settings-reenable': { ...base, policyRef: 'ai-setting:chat.agent.enabled' },
+			'ai-tab-invoke-tool': { ...base, policyRef: 'ai-tool:vscode_fetchWebPage_internal', noUnpatchedBaseline: 'synthetic: the filter is in every build' },
+		};
+		const exp = { schema: 1, probes: { ...GOOD_EXPECT_PROBES, ...specs }, rehProbes: {} };
+		const chat = { controlFetched: true, tabTriggered: 1, tabFetchedHost: false, tabFetchedTabClaimed: false, sendRequestRefusals: 1 };
+		const goodFacts: Record<string, Record<string, unknown>> = {
+			'ai-instructions-tool-call': chat,
+			'ai-settings-reenable': { ...chat, reenableSettingsSeen: 3 },
+			'ai-tab-invoke-tool': { controlFetched: true, toolFetchedHost: false, toolFetchedTabClaimed: false, invokeToolDenials: 1 },
+		};
+		const results = (over: Record<string, Record<string, unknown>> = {}) => ({ results: ids.map(id => ({ id, policyRef: specs[id as keyof typeof specs].policyRef, outcome: 'succeeded', facts: { ...goodFacts[id], ...(over[id] ?? {}) } })) });
+		const judge = (h: unknown, mode: 'patched' | 'unpatched' = 'patched') => run({ mode, expectations: exp, rpc: { results: [] }, harness: h, args: ['--only', ids.join(','), '--no-reh'] });
+		const good = judge(results());
+		assert.equal(good.status, 0, good.out.split('\n').filter(l => /\bFAIL\b|exit|Error/.test(l)).join(' | ') || good.out.slice(-600));
+		const bad: Array<[string, Record<string, unknown>]> = [
+			['ai-instructions-tool-call', { controlFetched: false }], ['ai-instructions-tool-call', { tabFetchedHost: true }],
+			['ai-instructions-tool-call', { sendRequestRefusals: 0 }], ['ai-instructions-tool-call', { tabTriggered: 0 }],
+			['ai-instructions-tool-call', { tabFetchedHost: undefined }],
+			['ai-settings-reenable', { reenableSettingsSeen: 0 }], ['ai-settings-reenable', { tabFetchedHost: true }], ['ai-settings-reenable', { controlFetched: false }],
+			['ai-tab-invoke-tool', { controlFetched: false }], ['ai-tab-invoke-tool', { toolFetchedHost: true }], ['ai-tab-invoke-tool', { invokeToolDenials: 0 }],
+		];
+		for (const [id, over] of bad) {
+			assert.ok(failed(judge(results({ [id]: over })).out, new RegExp(`${id} patched predicate holds`)), `${id} ${JSON.stringify(over)}`);
+		}
+		// A claim from inside the tab is reported, never judged.
+		assert.equal(judge(results({ 'ai-instructions-tool-call': { tabFetchedTabClaimed: true } })).status, 0);
+		// Baseline: the escape itself is required; the tab-side call has no baseline and names its waiver.
+		const escaped = { tabFetchedHost: true, sendRequestRefusals: 0 };
+		const baseline = judge(results({ 'ai-instructions-tool-call': escaped, 'ai-settings-reenable': escaped }), 'unpatched');
+		assert.equal(baseline.status, 0, baseline.out.split('\n').filter(l => /\bFAIL\b/.test(l)).join(' | '));
+		assert.match(baseline.out, /ai-tab-invoke-tool has no unpatched baseline/);
+		const contained = judge(results(), 'unpatched');
+		assert.ok(failed(contained.out, /ai-instructions-tool-call shows the escape itself on the unpatched build/), contained.out);
+		assert.ok(failed(contained.out, /ai-settings-reenable shows the escape itself on the unpatched build/), contained.out);
+	}],
 	["the tab's REH record can't stand in for the host's dial measurement", () => {
 		// AID-1: the host's record shows an escape; the tab's REH writes a clean one under the same id.
 		const id = 'ai-remote-agent-host-dial';
@@ -353,6 +393,11 @@ const MUTANTS: Array<[string, string, string]> = [
 	['an id may be recorded twice', '		if (results.has(r.id)) {', '		if (false) {'],
 	['a waived probe needs no reason', "if (mode === 'unpatched' && typeof spec.noUnpatchedBaseline === 'string') {", "if (mode === 'unpatched') {"],
 	['the dial control is not required', "fact(r, 'controlDialled') !== true ? 'the control window never dialled", "false ? 'the control window never dialled"],
+	['the AI chat control is not required', "return fact(r, 'controlFetched') !== true ? 'the ordinary window", "return false ? 'the ordinary window"],
+	['the AI chat refusal need not be logged', "n('sendRequestRefusals') < 1 ? 'no refusal", "false ? 'no refusal"],
+	['the re-enable settings need not be in effect', "(fact(r, 'reenableSettingsSeen') as number) < 1\n\t\t\t? 'the tab window never read", "false\n\t\t\t? 'the tab window never read"],
+	['the tab-side call needs no filter denial', "(fact(r, 'invokeToolDenials') as number) < 1 ? 'no denial", "false ? 'no denial"],
+	['the AI chat baseline predicate is gutted', ": fact(r, 'tabFetchedHost') === true ? null : 'the tab window\\'s agent did not fetch from the host',\n\t'ai-settings-reenable'", ": true ? null : 'the tab window\\'s agent did not fetch from the host',\n\t'ai-settings-reenable'"],
 ];
 const source = fs.readFileSync(CHECKER_SOURCE, 'utf8');
 // Mutants live in a scratch mirror of the checker's import closure (same relative layout), so

@@ -1,29 +1,36 @@
 #!/usr/bin/env bash
 # Build the OCI tab images from the container-built REH: seclab-tab-oci:local, the tab broker
 # seclab-broker:dev (broker/build.sh) and seclab-broker-placeholder:local (`--broker none`).
-# Usage: sandbox/oci/build-images.sh [--test-variant VARIANT | --tag b-NAME]
+# Usage: sandbox/oci/build-images.sh [--test-variant VARIANT] [--tag b-NAME]
 #   --test-variant: the tab image only, from a test build variant's REH (.work/test-builds/,
 #   `./seclab fetch macos-VARIANT` or `SECLAB_TEST_VARIANT=VARIANT ./seclab build linux reh`),
 #   tagged seclab-tab-oci:test-VARIANT; never :local (EDR test-build-variants).
 #   --tag b-NAME: the tab image only, from this worktree's release REH, tagged
 #   seclab-tab-oci:b-NAME, so a proof build (an upstream bump, say) never swaps the shared :local
 #   tag under other sessions. Harnesses take it through SECLAB_TAB_IMAGE.
+#   Both: the variant's REH, tagged seclab-tab-oci:test-VARIANT-b-NAME, so a branch's test build
+#   (a baseline without some patches, say) never swaps the shared test-VARIANT tag either.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ARCH="${ARCH:-$(uname -m | sed -e s/aarch64/arm64/ -e s/x86_64/x64/)}"
 VARIANT=""
 PERBUILD=""
-if [[ "${1:-}" == --test-variant ]]; then
-	VARIANT="${2:-}"
-	[[ "$VARIANT" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || { echo "usage: build-images.sh --test-variant VARIANT" >&2; exit 2; }
-elif [[ "${1:-}" == --tag ]]; then
-	PERBUILD="${2:-}"
-	[[ "$PERBUILD" =~ ^b-[a-z0-9][a-z0-9.-]{0,40}$ ]] || { echo "usage: build-images.sh --tag b-NAME (lowercase letters, digits, . and -)" >&2; exit 2; }
-fi
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--test-variant)
+			VARIANT="${2:-}"
+			[[ "$VARIANT" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || { echo "usage: build-images.sh --test-variant VARIANT" >&2; exit 2; } ;;
+		--tag)
+			PERBUILD="${2:-}"
+			[[ "$PERBUILD" =~ ^b-[a-z0-9][a-z0-9.-]{0,40}$ ]] || { echo "usage: build-images.sh --tag b-NAME (lowercase letters, digits, . and -)" >&2; exit 2; } ;;
+		*) echo "usage: build-images.sh [--test-variant VARIANT] [--tag b-NAME]" >&2; exit 2 ;;
+	esac
+	shift 2
+done
 REH_TGZ="$ROOT/.work/out/seclab-reh-linux-${ARCH}.tar.gz"
 TAG=seclab-tab-oci:local
 [[ -z "$VARIANT" ]] || { REH_TGZ="$ROOT/.work/test-builds/$VARIANT/seclab-reh-linux-${ARCH}-test-${VARIANT}.tar.gz"; TAG="seclab-tab-oci:test-$VARIANT"; }
-[[ -z "$PERBUILD" ]] || TAG="seclab-tab-oci:$PERBUILD"
+[[ -z "$PERBUILD" ]] || TAG="seclab-tab-oci:${VARIANT:+test-$VARIANT-}$PERBUILD"
 CTX="$ROOT/.work/oci-ctx${VARIANT:+-test-$VARIANT}${PERBUILD:+-$PERBUILD}"
 [[ -f "$REH_TGZ" ]] || { echo "missing $REH_TGZ; run ./seclab build linux reh" >&2; exit 1; }
 if [[ -n "$VARIANT" ]]; then
