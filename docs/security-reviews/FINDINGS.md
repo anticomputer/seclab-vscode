@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 101 | 307 | 477 | 62 | 961 |
 | fixed-before-landing | 2 | 8 | 0 | 0 | 0 | 10 |
-| fixed-untested | 0 | 5 | 65 | 206 | 82 | 358 |
+| fixed-untested | 0 | 5 | 65 | 207 | 82 | 359 |
 | accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 14 | 3 | 33 |
 | open | 0 | 2 | 9 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 27 | 28 |
-| **all** | 18 | 119 | 407 | 783 | 209 | 1536 |
+| **all** | 18 | 119 | 407 | 784 | 209 | 1537 |
 
 ## Baseline: open high and critical findings
 
@@ -186,6 +186,7 @@ broker/: the per-tab mitmproxy broker, policy, credentials, CFS feeds, egress pr
 | [20261106-broker-cfs-feeds](20261106-broker-cfs-feeds.md) **13-7** | low | accepted-residual | broker credential budget | Budget counters are keyed by credential id, so a policy.load that renames the credential starts a new counter; budgets were also invisible to the controller. | accepted by an agent: The rename residual is accepted because only the trusted controller sets ids and budgets; the visibility half was fixed (health reports credentialBudgets, asserted in test_credential_budget_is_validated_and_counts_parent, commit afa7082). |
 | [20261106-broker-redirect-follow](20261106-broker-redirect-follow.md) **R15-4** | low | accepted-residual | broker redirect follow (provider host pattern) | The declared storage pattern names an Azure Storage namespace Microsoft does not reserve, so an unused &lt;xyz&gt;vsblobprodcus&lt;NNN&gt; name could be claimed. | accepted by an agent: Using it needs control of a Location on a credentialed response under the provider (a feed open redirect, or a user-approved binding to an attacker host, which already gives that host the tab's traffic); narrowing the digits would break installs when CFS adds an account. |
 | [20261106-broker-redirect-follow](20261106-broker-redirect-follow.md) **R15-5** | low | accepted-residual | broker redirect follow | With no byte budget a followed redirect can buffer up to 512 MiB and hold the tab's connection for up to 300 s. | accepted by an agent: Recorded as a residual; CFS policies always carry a byte budget, which bounds it. |
+| [20261120-broker-python-315](20261120-broker-python-315.md) **BRK21-1** | low | fixed-untested | dependency register (python tool image) | The python image's register entry and broker/deps.json usedBy left out the CFS path test that runs it; no gate affected. | The entry now names every user, but nothing checks a register entry's used list against the tree (build/deps.ts validates pins only), so no test can pin it. |
 | [docs/adr/20261105-broker-model-access.md](../../docs/adr/20261105-broker-model-access.md) **MODEL-R2** | low | accepted-residual | broker backstop exception check | Opaque credentials: value checks only recognise known token shapes and URL userinfo, so a prefix-less secret under an allowlisted key reaches the tab. | accepted by an agent: Controls are the credential-name heuristic, the strict field allowlists and dropFields, not detection of the value; the upstream here is GitHub's own API reached with the user's credential. |
 | [docs/adr/20261105-broker-model-access.md](../../docs/adr/20261105-broker-model-access.md) **MODEL-R3** | low | accepted-residual | broker model body policy | With the measured body fields a tab can spend the user's Copilot quota on inference of its choosing, up to the per-tab model budget. | accepted by an agent: Accepted in the ADR: the tab cannot make the provider fetch, run or store anything for it; the spend is bounded by the per-tab model budget. |
 | [20261104-broker-docs-drift-and-fixtures](20261104-broker-docs-drift-and-fixtures.md) **5** | info | fixed-untested | broker docs-check | CHECKED_DOCS listed this review record before it existed, so docs-check (and test.sh) failed. | Enforced only by \`broker/tools/docs.py\` ("docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md"), which is not a regression test: no test fails if the fix is reverted. |
@@ -2701,6 +2702,12 @@ Every other commit the register cites is on main's history, or on the branch its
 | AR-4 | low | fixed-untested | The harness recorded whether the local terminal ran cat but kept going if it didn't. | A test correction; nothing to test. |
 | AR-5 | medium | fixed | A tab window installed the host user's auto-reply pairs on the tab's own backend, whose server reads them; the setting is restricted, so patch 0036 withholds it from the tab's extension host. | patch:1086dfa390637603bf9af595af03797ac06fe795 · `test/containment/auto-replies.test.ts` "a tab window installs no auto reply on the shared local pty host" |
 | AR-6 | low | fixed-untested | The unit test's settings stub ignored the resource, so which folder's settings the tab's backend counts as the tab's was untested: a gate reading a host folder's settings would have passed. | A test correction; nothing to test. |
+
+### [20261120-broker-python-315](20261120-broker-python-315.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| BRK21-1 | low | fixed-untested | The python image's register entry and broker/deps.json usedBy left out the CFS path test that runs it; no gate affected. | The entry now names every user, but nothing checks a register entry's used list against the tree (build/deps.ts validates pins only), so no test can pin it. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

@@ -27,7 +27,9 @@
    "usedBy": [
     "test upstream image",
     "test harness image",
-    "attestation verifier image"
+    "attestation verifier image",
+    "CFS path test (stub feed, pip-fetch)",
+    "verify-images.sh register reader"
    ],
    "tier": "hash-pinned",
    "note": "Carries in-registry BuildKit SLSA provenance bound to the index digest, but no publisher signature (no cosign/sigstore artifacts)."
