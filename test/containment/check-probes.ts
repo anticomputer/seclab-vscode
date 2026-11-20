@@ -380,15 +380,14 @@ function safeCount(r: Result, k: string): number {
 }
 
 /**
- * The patched agent-host refusal (patches 0010, 0015): the control (agents on for the host) connected
- * and opened a gated transport; with agents off nothing arrived at the hostile REH, no transport
- * opened, and the gate logged its refusal.
+ * The patched agent-host refusal (patches 0010, 0015), judged host-side from the gate log only: the
+ * control (agents on for the host) opened a gated transport; with agents off none opened and the
+ * gate logged its refusal. The hostile REH's counts are the tab's claim, reported only (AIP-5).
  */
 function agentHostReason(r: Result): string | null {
-	return safeCount(r, 'controlConnects') < 1 || safeCount(r, 'controlGateOpened') < 1 ? 'the control (agents on) never connected, so a quiet proxy proves nothing'
-		: safeCount(r, 'armConnects') !== 0 || safeCount(r, 'armCalls') !== 0 || safeCount(r, 'armListens') !== 0 ? 'the tab window reached the hostile REH\'s agent-host proxy with agents off'
-			: safeCount(r, 'armGateOpened') !== 0 ? 'a gated transport opened with agents off'
-				: safeCount(r, 'armGateDisabled') < 1 ? 'no refusal in the gate log' : null;
+	return safeCount(r, 'controlGateOpened') < 1 ? 'the control (agents on) opened no transport, so a quiet gate proves nothing'
+		: safeCount(r, 'armGateOpened') !== 0 ? 'the tab window opened an agent-host transport with agents off'
+			: safeCount(r, 'armGateDisabled') < 1 ? 'no refusal in the gate log' : null;
 }
 
 /**
@@ -417,12 +416,13 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	'ai-settings-reenable': r =>
 		typeof fact(r, 'reenableSettingsSeen') !== 'number' || (fact(r, 'reenableSettingsSeen') as number) < 1 ? 'the tab window never read the tab\'s re-enable settings'
 			: fact(r, 'tabFetchedHost') === true ? null : 'the tab window\'s agent did not fetch from the host',
-	// Without 0010, agents on (the baseline's configuration): the window connects to the hostile REH.
-	'ai-agent-host-token-push': r => safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
-	'ai-agent-host-autoapprove-setting': r => safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
+	// Without 0010, agents on (the baseline's configuration): the window opens a transport to the
+	// hostile REH's agent-host proxy, recorded host-side in the gate log (AIP-5).
+	'ai-agent-host-token-push': r => safeCount(r, 'armGateOpened') > 0 ? null : 'the window opened no agent-host transport',
+	'ai-agent-host-autoapprove-setting': r => safeCount(r, 'armGateOpened') > 0 ? null : 'the window opened no agent-host transport',
 	'ai-disable-ai-features-reenable': r =>
 		fact(r, 'remoteAiFeaturesOn') !== true ? 'the tab window never read the tab\'s chat.disableAIFeatures false'
-			: safeCount(r, 'armConnects') > 0 ? null : 'the window did not connect to the hostile REH\'s agent-host proxy',
+			: safeCount(r, 'armGateOpened') > 0 ? null : 'the window opened no agent-host transport',
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
 	'provider-completion-host-file': r =>

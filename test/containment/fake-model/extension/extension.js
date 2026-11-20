@@ -69,13 +69,19 @@ function parseArm(text, nowSec) {
 		if (typeof x.line !== 'string' || x.line.length > 200 || /[\r\n]/.test(x.line) || !x.line.includes(a.nonce) || x.line.trim() !== x.line) {
 			return { reason: 'bad line' };
 		}
-		const m = typeof x.url === 'string' ? /^http:\/\/127\.0\.0\.1:(\d{4,5})\/ai-([a-z]+)-([0-9a-f]{32})$/.exec(x.url) : null;
+		const m = typeof x.url === 'string' ? x.url.match(/^http:\/\/127\.0\.0\.1:(\d{4,5})\/ai-([a-z]+)-([0-9a-f]{32})$/) : null;
 		if (!m || Number(m[1]) < 1024 || Number(m[1]) > 65535 || m[3] !== a.nonce || m[2] !== (x.window === 'ordinary' ? 'ord' : 'tab')) {
 			return { reason: 'bad url' };
 		}
 		actions.push({ window: x.window, line: x.line, url: x.url });
 	}
 	return { nonce: a.nonce, until: a.until, actions };
+}
+
+/** A trigger's sequence number: `<nonce> <n>` for this run's nonce and 1 <= n <= 1000, else 0. */
+function triggerSeq(text, nonce) {
+	const m = typeof text === 'string' ? text.match(/^([0-9a-f]{32}) ([1-9][0-9]{0,2}|1000)$/) : null;
+	return m && m[1] === nonce ? Number(m[2]) : 0;
 }
 
 /** Which kind of window this extension host serves: a seclab tab window, an ordinary one, or neither. */
@@ -166,6 +172,7 @@ function activate(context) {
 
 	const participant = vscode.chat.createChatParticipant('seclab-test.fake-agent', async (request, _chatContext, stream, token) => {
 		facts.requests++;
+		record();
 		const arm = armOf();
 		if (!arm) {
 			stream.markdown('seclab fake agent: not armed');
@@ -194,9 +201,11 @@ function activate(context) {
 		}
 		const action = selectAction(arm, kind, texts);
 		facts.matched = facts.matched || !!action;
+		record();
 		if (action) {
 			facts.fetchToolVisible = vscode.lm.tools.some(t => t.name === FETCH_TOOL);
 			facts.invoked = true;
+			record();
 			try {
 				await vscode.lm.invokeTool(FETCH_TOOL, { input: { urls: [action.url] }, toolInvocationToken: request.toolInvocationToken }, token);
 				facts.invokeOk = true;
@@ -221,6 +230,7 @@ function activate(context) {
 	context.subscriptions.push(participant);
 
 	// The harness's trigger for this window: one chat request with a fixed query, once per trigger.
+	let handled = 0;
 	const timer = setInterval(() => {
 		const arm = armOf();
 		if (!arm) {
@@ -244,6 +254,7 @@ function activate(context) {
 				record();
 			}
 		}
+		// The trigger holds `<nonce> <n>`; each n is acted on once, and nothing is deleted.
 		const trigger = path.join(dir, `trigger-${kind}`);
 		let t;
 		try {
@@ -251,14 +262,11 @@ function activate(context) {
 		} catch {
 			return;
 		}
-		try {
-			fs.unlinkSync(trigger);
-		} catch {
+		const seq = triggerSeq(t, arm.nonce);
+		if (seq <= handled) {
 			return;
 		}
-		if (t !== arm.nonce) {
-			return;
-		}
+		handled = seq;
 		facts.triggered++;
 		record();
 		vscode.commands.executeCommand('workbench.action.chat.open', {
@@ -273,4 +281,4 @@ function activate(context) {
 
 function deactivate() { }
 
-module.exports = { activate, deactivate, parseArm, selectAction, windowKind, isTestProfile, mayRead, MARKER, FETCH_TOOL, REENABLE_KEYS };
+module.exports = { activate, deactivate, parseArm, selectAction, windowKind, isTestProfile, mayRead, triggerSeq, MARKER, FETCH_TOOL, REENABLE_KEYS };

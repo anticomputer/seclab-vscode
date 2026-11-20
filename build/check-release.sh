@@ -160,6 +160,9 @@ if [ "${1:-}" = "--self-test" ]; then
 	rm "$T/root/extensions/seclab-test-fake-model/extension.js"
 	printf '{\n\t"name": "x",\n\t"enabledApiProposals": ["defaultChatParticipant"]\n}\n' > "$T/root/extensions/seclab-test-fake-model/package.json"
 	run "$T/with5" fail "a built-in extension asking for defaultChatParticipant"
+	printf '{\n\t"name": "x",\n\t"enabledApiProposals": ["\\u0064efaultChatParticipant"]\n}\n' > "$T/root/extensions/seclab-test-fake-model/package.json"
+	grep -qF '\u0064efault' "$T/root/extensions/seclab-test-fake-model/package.json" || { echo "check-release self-test: escaped proposal not injected" >&2; exit 1; }
+	run "$T/with5" fail "a built-in extension asking for an escaped defaultChatParticipant (review AIP-3)"
 	rm -rf "$T/root/extensions"
 	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "extensionEnabledApiProposals": {"some.ext": ["defaultChatParticipant"]},/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
 	grep -q defaultChatParticipant "$T/root/product.json" || { echo "check-release self-test: grant not injected" >&2; exit 1; }
@@ -215,13 +218,19 @@ if [ "${1:-}" = "--inner" ]; then
 		# The defaultChatParticipant proposal makes an extension the window's chat agent. Only the
 		# containment variant's fake model (SECLAB_TEST_ONLY:fake-model) may have it: no app
 		# product.json grants it, and no built-in extension's manifest asks for it (a built-in keeps
-		# the proposals its own package.json names).
+		# the proposals its own package.json names). A manifest may hold no \u escape, which could spell
+		# the name past the text match (as TEL-1 for product.json, review AIP-3). Every match is listed.
 		set +e
 		grants=$(find "$d" -type f \( -name product.json -o -path "*/extensions/*/package.json" \) -not -path "*/node_modules/*" -exec grep -lF defaultChatParticipant {} + 2>&1)
 		rc=$?
+		escaped=$(find "$d" -type f -path "*/extensions/*/package.json" -not -path "*/node_modules/*" -exec grep -lF '\u' {} + 2>&1)
+		erc=$?
 		set -e
-		if [ "$rc" -gt 1 ]; then echo "check-release: scan error (defaultChatParticipant)"; bad=1
-		elif [ -n "$grants" ]; then echo "check-release: defaultChatParticipant proposal granted:"; echo "$grants" | head -20; bad=1; fi
+		if [ "$rc" -gt 1 ] || [ "$erc" -gt 1 ]; then echo "check-release: scan error (defaultChatParticipant)"; bad=1
+		else
+			if [ -n "$grants" ]; then echo "check-release: defaultChatParticipant proposal granted:"; echo "$grants"; bad=1; fi
+			if [ -n "$escaped" ]; then echo "check-release: a \\u escape in a built-in extension manifest:"; echo "$escaped"; bad=1; fi
+		fi
 		scan "(require|import)\([[:space:]]*process\.env(\.[A-Za-z_]+|\[)[^)]{0,80}\)" "env-controlled module load"
 		# The RPC filter stamp (prepare.sh step 7), both directions, in every app product.json.
 		prods=$(find "$d" -type f -name product.json -not -path "*/extensions/*" -not -path "*/node_modules/*" 2>/dev/null)

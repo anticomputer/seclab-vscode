@@ -68,6 +68,14 @@ test('only harness-made test profiles can arm', () => {
 	assert.equal(fm.isTestProfile('relative/.seclab-test/x'), false);
 });
 
+test('a trigger acts once per sequence number, for this run only', () => {
+	assert.equal(fm.triggerSeq(`${NONCE} 1`, NONCE), 1);
+	assert.equal(fm.triggerSeq(`${NONCE} 1000`, NONCE), 1000);
+	for (const bad of [NONCE, `${NONCE} 0`, `${NONCE} 1001`, `${NONCE} -1`, `${'b'.repeat(32)} 1`, `${NONCE} 1 x`, '', undefined]) {
+		assert.equal(fm.triggerSeq(bad, NONCE), 0, String(bad));
+	}
+});
+
 test('window kinds: a seclab tab, an ordinary window, and nothing else', () => {
 	assert.equal(fm.windowKind(undefined), 'ordinary');
 	assert.equal(fm.windowKind('seclab'), 'tab');

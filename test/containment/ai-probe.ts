@@ -121,7 +121,7 @@ fs.writeFileSync(path.join(ws, 'README.md'), 'ai-probe workspace\n');
 fs.writeFileSync(path.join(ws, '.github', 'instructions', 'seclab-ai.instructions.md'), instructions(tabLine));
 fs.writeFileSync(path.join(ws, '.github', 'copilot-instructions.md'), instructions(tabLine));
 fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify(REENABLE, null, '\t'));
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${nonce}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\ntabtoolPort=${port}\n`);
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${nonce}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\n`);
 fs.copyFileSync(path.join(repoRoot, 'test', 'agentic', 'browser', 'tab-beacon.mjs'), path.join(ws, '.seclab-tab-beacon.mjs'));
 const hostBeaconLog = path.join(base, 'beacon.log');
 const tabBeaconLog = path.join(ws, '.seclab-tab-beacon.log');
@@ -168,9 +168,11 @@ const factsOf = (kind: 'ordinary' | 'tab'): Record<string, unknown> => {
 	}
 };
 
-// The tab-side probe, packaged in a container (no network) and installed into the tab.
+// The tab-side probe, packaged in a container (no network) and installed into the tab. Its run
+// record (the nonce and the beacon port it may call) is packaged with it, on the host (AIP-2).
 const extDir = path.join(import.meta.dirname, 'ai-tab-probe');
 fs.copyFileSync(path.join(import.meta.dirname, 'probe-safety.js'), path.join(extDir, 'probe-safety.js'));
+fs.writeFileSync(path.join(extDir, 'run.json'), JSON.stringify({ nonce, port }));
 ensureVsceImage();
 execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${extDir}:/ext:ro`, '-v', `${path.join(ws, '.seclab')}:/out`,
 	VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/ai-tab-probe.vsix'], { stdio: 'inherit' });
@@ -204,7 +206,7 @@ const waitFor = async (ok: () => boolean | Promise<boolean>, ms: number): Promis
 };
 const hostHit = (p: string) => readHits(hostBeaconLog).some(h => h.url.split('?')[0] === p);
 const tabHit = (p: string) => fs.existsSync(tabBeaconLog) && fs.readFileSync(tabBeaconLog, 'utf8').includes(p);
-const trigger = (kind: 'ordinary' | 'tab') => fs.writeFileSync(path.join(fakeDir, `trigger-${kind}`), nonce);
+const trigger = (kind: 'ordinary' | 'tab') => fs.writeFileSync(path.join(fakeDir, `trigger-${kind}`), `${nonce} 1`);
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : 0;
 
 /** One workbench window of the driven app: its own CDP session on the shared pipe. */
