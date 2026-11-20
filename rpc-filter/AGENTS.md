@@ -101,12 +101,13 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 <!-- seclab:begin probes -->
 | Probe | Fixture | Policy entry | Patched expectation |
 |---|---|---|---|
-| `ai-agent-host-autoapprove-setting` | rogue extension | `ai-tool:run_in_terminal` | denied |
-| `ai-agent-host-token-push` | rogue extension | `push:agentHostProxy` | denied |
-| `ai-disable-ai-features-reenable` | rogue extension | `ai-setting:chat.disableAIFeatures` | denied |
-| `ai-instructions-tool-call` | rogue extension | `ai-tool:fetch_webpage` | denied |
+| `ai-agent-host-autoapprove-setting` | rogue extension | `push:agentHostProxy:frame` | succeeded |
+| `ai-agent-host-token-push` | rogue extension | `push:agentHostProxy:frame` | succeeded |
+| `ai-disable-ai-features-reenable` | rogue extension | `ai-setting:chat.disableAIFeatures` | succeeded |
+| `ai-instructions-tool-call` | rogue extension | `ai-tool:vscode_fetchWebPage_internal` | succeeded |
 | `ai-remote-agent-host-dial` | rogue extension | `ai-setting:chat.workspaceRemoteAgentHosts` | succeeded |
-| `ai-settings-reenable` | rogue extension | `ai-setting:chat.agent.enabled` | denied |
+| `ai-settings-reenable` | rogue extension | `ai-setting:chat.agent.enabled` | succeeded |
+| `ai-tab-invoke-tool` | rogue extension | `ai-tool:vscode_fetchWebPage_internal` | succeeded |
 | `as-external-uri` | rogue extension | `rpc:MainThreadWindow.$asExternalUri` | denied |
 | `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |
 | `clipboard-read` | rogue extension | `rpc:MainThreadClipboard.$readText` | denied |

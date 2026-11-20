@@ -5708,7 +5708,7 @@
 			"component": "containment probes (trusted AI surface)",
 			"owner": "rpc",
 			"status": "open",
-			"gap": "Five of the six ai-* probes are still not-implemented. ai-remote-agent-host-dial is judged from reh-push's own record (review 20261119-ai-dial-probe.md); the rest need the host-side fake model and a build without 0009 and 0010 (coordinator plan, 2026-11-19)."
+			"gap": "All six ai-* probes are now implemented and required: the dial in reh-push (review 20261119-ai-dial-probe.md); the other five in test/containment/ai-probe.ts and ai-agent-host-probe.ts on the containment variant's scripted stand-in agent (EDR 20261120-ai-probes, review 20261120-ai-probes.md). The high closes in a follow-up once that change is on main; the autoapprove probe's tool-call leg is deferred (AIP-6)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
@@ -22589,6 +22589,99 @@
 			"owner": "broker",
 			"status": "fixed-untested",
 			"gap": "The entry now names every user, but nothing checks a register entry's used list against the tree (build/deps.ts validates pins only), so no test can pin it."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-1",
+			"round": "round 1",
+			"severity": "medium",
+			"summary": "The probe-payload lint failed on the change: the fake model deleted its trigger file and used RegExp.exec, and the tab probe's guard copy was neither exempt nor divergence-checked.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "The probe-payload lint (rpc-filter/tools/lint.sh, in the required unit check) is the check: 7 violations on the reviewed commit, none on the fix."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-2",
+			"round": "round 1",
+			"severity": "medium",
+			"summary": "The tab-side probe took the port the window fetches from the tab-writable targets file, so its request was not pinned to the run's beacon.",
+			"component": "fixture: test/containment/ai-tab-probe",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:e15567df90bffb20762a7ccf72f1df920d42bd77",
+			"test": {
+				"file": "test/containment/ai-tab-probe.test.ts",
+				"name": "the target is the packaged beacon port, confirmed by the workspace nonce"
+			},
+			"preFix": "patch:63d83f58ed2bfcfc990856b3af41a507bca71814",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-ai-probes.md",
+				"quote": "the case \"the target is the packaged beacon port, confirmed by the workspace nonce\" fails there"
+			}
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-3",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "The defaultChatParticipant release gate matched literal text in built-in manifests, so a \\u escape could pass it, and it listed only 20 grants.",
+			"component": "build/check-release.sh",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:e15567df90bffb20762a7ccf72f1df920d42bd77",
+			"test": {
+				"file": "build/check-release.sh",
+				"name": "a built-in extension asking for an escaped defaultChatParticipant (review AIP-3)"
+			},
+			"preFix": "patch:63d83f58ed2bfcfc990856b3af41a507bca71814",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-ai-probes.md",
+				"quote": "the check-release self-test case \"a built-in extension asking for an escaped defaultChatParticipant (review AIP-3)\" fails there"
+			}
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-4",
+			"round": "round 1",
+			"severity": "medium",
+			"summary": "The RPC filter's denial errors reach the tab with their host-side stack: the host user's home path and app location, and frames that tell a policy denial apart from an unsupported operation.",
+			"component": "rpc filter (seclabRpcFilter denial errors)",
+			"owner": "rpc",
+			"status": "open",
+			"gap": "Predates the AI-probes change, which surfaced it in a run's logs; given to its own session (coordinator, 2026-11-20)."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-5",
+			"round": "round 1",
+			"severity": "medium",
+			"summary": "The agent-host probes' baseline was judged only from the hostile REH's own count, a record the tab writes.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:e15567df90bffb20762a7ccf72f1df920d42bd77",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the agent-host probes are judged host-side: the agents-on control, no transport opened and the gate refusal"
+			},
+			"preFix": "patch:63d83f58ed2bfcfc990856b3af41a507bca71814",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-ai-probes.md",
+				"quote": "the case \"the agent-host probes are judged host-side: the agents-on control, no transport opened and the gate refusal\" fails there"
+			}
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP-6",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "ai-agent-host-autoapprove-setting is measured by its precondition only (no agent-host transport in a tab window); the tool-call leg is not exercised.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "deferred",
+			"followUp": "The tool-call leg needs chat open in tab windows, which it is not (project owner decision, 2026-11-17); deferred to the chat-in-tabs increment (coordinator, 2026-11-20)."
 		}
 	]
 }
