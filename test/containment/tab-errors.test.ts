@@ -330,6 +330,19 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 		// A function with a toJSON of its own, as a field and as what toJSON returns.
 		fnfield: () => ({ kept: `fnfield ${NONCE}`, detail: Object.assign(() => 0, { toJSON: () => ({ stack: hostStack }) }) }),
 		fnjson: () => ({ toJSON: () => Object.assign(() => 0, { toJSON: () => ({ stack: hostStack }) }) }),
+		// Species and an own `map`: a buffer subclass whose copies carry a stack, an array whose map
+		// returns one, an array subclass whose copies have a toJSON.
+		abspecies: () => new (class EvilBuffer extends ArrayBuffer {
+			static override get [Symbol.species]() { return class extends ArrayBuffer { detail = { stack: hostStack }; }; }
+		})(2),
+		arrmap: () => Object.assign([1], { map: () => [{ stack: hostStack }] }),
+		arrspecies: () => {
+			const a = new (class EvilArray extends Array {
+				static override get [Symbol.species]() { return class extends Array { toJSON() { return { stack: hostStack }; } }; }
+			})();
+			a.push(1);
+			return a;
+		},
 		cyclic: () => {
 			const a: Record<string, unknown> = { kept: `cyclic ${NONCE}` };
 			a.self = a;
@@ -449,7 +462,7 @@ const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 // On a tree without 0062 (main before it) the "patched" case runs that tree's own series, and fails.
 const p0062 = existsSync(join(REPO, 'patches', P0062)) ? patchText(P0062) : undefined;
-const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-binary', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-fnfield', 'rpc-odd-fnjson', 'rpc-odd-foreign', 'rpc-odd-json2', 'rpc-odd-plain', 'rpc-odd-selfjson', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-abspecies', 'rpc-odd-arrmap', 'rpc-odd-arrspecies', 'rpc-odd-binary', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-fnfield', 'rpc-odd-fnjson', 'rpc-odd-foreign', 'rpc-odd-json2', 'rpc-odd-plain', 'rpc-odd-selfjson', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
 // Main's window can fail to answer (an unreadable error throws inside upstream's reply); that is a
 // result here, not a crash of the suite.
 let unanswered = 0;
@@ -494,6 +507,8 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['binary data passes as it is', p => p.replace('+\t\t\t\treturn new Uint8Array(e.buffer, e.byteOffset, e.byteLength).slice();', '+\t\t\t\treturn e;'), /^rpc-odd-binary: the window sent/],
 	['a function field is kept', p => p.replace("+\t\tif (typeof error === 'function') {\n+\t\t\treturn undefined;", "+\t\tif (typeof error === 'function') {\n+\t\t\treturn error;"), /^rpc-odd-fnfield: the window sent/],
 	['a function from toJSON is kept', p => p.replace("+\t\t\tif (typeof v === 'function') {\n+\t\t\t\treturn undefined;", "+\t\t\tif (typeof v === 'function') {\n+\t\t\t\treturn v;"), /^rpc-odd-fnjson: the window sent/],
+	['a buffer is copied by its species', p => p.replace('+\t\t\t\treturn new Uint8Array(e).slice().buffer;', '+\t\t\t\treturn e.slice(0);'), /^rpc-odd-abspecies: the window sent/],
+	['an array is copied by its own map', p => p.replace('+\t\t\t\treturn Array.from({ length: v.length }, (_, i) => seclabErrorForTab(v[i], depth + 1));', '+\t\t\t\treturn v.map(x => seclabErrorForTab(x, depth + 1));'), /^rpc-odd-arr(map|species): the window sent/],
 ];
 mutants.forEach(([name, mutate, expected], i) => {
 	test(`rejects the mutant "${name}"`, async () => {

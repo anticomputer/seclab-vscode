@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 --- a/src/vs/base/common/errors.ts	2026-11-20 21:26:11
-+++ b/src/vs/base/common/errors.ts	2026-11-20 21:40:46
-@@ -172,6 +172,63 @@
++++ b/src/vs/base/common/errors.ts	2026-11-20 22:13:10
+@@ -172,6 +172,65 @@
  	return error;
  }
  
@@ -36,12 +36,13 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +			if (depth >= 8) {
 +				return undefined;
 +			}
-+			// Binary data as bytes only: a view or buffer can carry properties of its own too.
++			// Binary data as bytes only, in fresh base types: a view or buffer can carry properties of its
++			// own, and a subclass's species could add some to a copy (PR review on #78).
 +			if (ArrayBuffer.isView(e)) {
 +				return new Uint8Array(e.buffer, e.byteOffset, e.byteLength).slice();
 +			}
 +			if (e instanceof ArrayBuffer) {
-+				return e.slice(0);
++				return new Uint8Array(e).slice().buffer;
 +			}
 +			// As JSON: `toJSON` once, its result walked but not asked again.
 +			const v: unknown = typeof (e as { toJSON?: unknown }).toJSON === 'function' ? (e as { toJSON(): unknown }).toJSON() : e;
@@ -52,7 +53,8 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +				return v;
 +			}
 +			if (Array.isArray(v)) {
-+				return v.map(x => seclabErrorForTab(x, depth + 1));
++				// A plain array, read by index: never the input's own `map` or species.
++				return Array.from({ length: v.length }, (_, i) => seclabErrorForTab(v[i], depth + 1));
 +			}
 +			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
 +		}
