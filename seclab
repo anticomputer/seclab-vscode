@@ -1816,6 +1816,7 @@ hooks_problems() {
 	[[ "$active" != /* && -n "$active" ]] && active="$(git -C "$ROOT" rev-parse --show-toplevel)/$active"
 	[[ -n "$active" && "$(cd "$active" 2>/dev/null && pwd -P)" == "$dir" ]] || echo "core.hooksPath here is not $dir"
 	grep -q publish_gate "$dir/pre-push" 2>/dev/null || echo "the pre-push hook has no publish gate"
+	grep -q refuse_main_push "$dir/pre-push" 2>/dev/null || echo "the pre-push hook predates the refusal of pushes to main"
 	[[ -f "$dir/.installed" && "$(sed -n 1p "$dir/.installed")" =~ ^[0-9a-f]{64}$ && "$(sed -n 1p "$dir/.installed")" == "$(sha256_of "$dir/pre-push")" ]] \
 		|| echo "the pre-push hook is not the one the installer wrote"
 	mode="$(stat -c '%a' "$dir" 2>/dev/null || stat -f '%Lp' "$dir" 2>/dev/null)"

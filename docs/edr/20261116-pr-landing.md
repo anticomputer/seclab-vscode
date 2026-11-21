@@ -97,3 +97,18 @@ queues need an organisation-owned repository, and this one stays under its user 
   `gh pr merge --auto --rebase` and merged by rebase as `main` f7d98c09, with no push to `main`.
   On that SHA every workflow ran as a `push` and passed, workflow-lint run 43978400806 among
   them, with its `denylist` job green.
+
+## Addendum (2026-11-20): the pre-push hook refuses pushes to `main`
+A branch whose upstream was reset to `origin/main` made a bare `git push` target `main`. The
+ruleset refused it; the hook should refuse it first, on the machine. The shared
+pre-push hook (`build/hooks/pre-push`, `refuse_main_push`) now refuses any ref line whose remote
+ref is `refs/heads/main`, deletes included, before any scan, on every remote: this clone's work
+reaches main only through a PR, and a remote's name doesn't say which repository it is. It names
+the fix: push a branch and open a PR, or unset the upstream. The refusal never depends on its
+message being written (review RMP-1). `./seclab hooks check`, and the warning every `./seclab` command
+prints, report an installed hook that predates the refusal until it is reinstalled from main.
+Decided by the coordinator, 2026-11-20. Test: `test/hooks/hook-lock.test.sh` (a push to main from
+another branch, from `main`, a delete and one with stderr closed are refused; in a push of main
+and a branch, the branch is scanned and the push fails; a branch named `main-notes` is scanned; a
+hook without the refusal is reported).
+
