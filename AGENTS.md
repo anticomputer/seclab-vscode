@@ -157,7 +157,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
   `main` takes changes only through a pull request, merged by rebase, once the required checks
   `unit` (ci-unit), `lint` (workflow-lint), `docs` (docs-check) and `patch-build` are green on a
   head that contains current `main` and every review thread is resolved. Copilot reviews every
-  PR, and again on each push. Nobody pushes to `main`, and there are no bypass actors.
+  PR, and again on each push. Nobody pushes to `main`, and there are no bypass actors;
+  the pre-push hook refuses a push to `main` before it reaches the ruleset.
   1. Rebase onto `origin/main`. Cite your unlanded commits in the register as `patch:<id>`
      (`./seclab findings remap --branch <yours> --patch`); a SHA that isn't on `main` fails.
      If you minted finding IDs, `./seclab findings clashes` checks them against open PRs' heads.

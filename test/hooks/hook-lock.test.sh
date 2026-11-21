@@ -116,5 +116,31 @@ out="$(PATH="$work/bin:$PATH" SECLAB_DENYLIST_FILE="$work/list" bash "$hookdir/p
 [[ "$rc" == 0 && "$out" == *'nothing was checked and nothing is published'* && "$out" != *'ref(s) checked'* ]] \
 	&& ok 'a push with no ref lines says nothing was checked, never "0 ref(s) checked" (GATE-13)' || { bad "a push with no ref lines: rc $rc"; echo "$out" | tail -2; }
 
+# A push to main is refused before any scan, a delete of main too, whatever the local ref; a push
+# to a branch goes on to the scans. Same fully installed hook and stub docker as above.
+git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m base
+sha="$(git rev-parse HEAD)"
+push() { PATH="$work/bin:$PATH" SECLAB_DENYLIST_FILE="$work/list" bash "$hookdir/pre-push" origin x 2>&1; }
+for line in "refs/heads/topic $sha refs/heads/main $z64" "(delete) $z64 refs/heads/main $sha" "refs/heads/main $sha refs/heads/main $sha"; do
+	out="$(printf '%s\n' "$line" | push)"; rc=$?
+	[[ "$rc" == 1 && "$out" == *'refusing to push to main (refs/heads/main)'*'open a PR'* && "$out" != *'secrets clean'* ]] \
+		&& ok "a push to main is refused before any scan: ${line%% *} -> main" || { bad "a push to main went on: ${line%% *}, rc $rc"; echo "$out" | tail -2; }
+done
+# (The stub docker can't run the publish gate, so it blocks: what matters is the scan was reached.)
+out="$(printf 'refs/heads/main %s refs/heads/main-notes %s\n' "$sha" "$sha" | push)"; rc=$?
+[[ "$out" != *'refusing to push to main'* && "$out" == *'secrets clean'* ]] && ok 'a push to another branch is not refused as main, and goes on to the scans' || { bad "a push to a branch named main-notes was refused or not scanned: rc $rc"; echo "$out" | tail -2; }
+# With main and a branch in one push, the branch is still scanned and the whole push fails.
+out="$(printf 'refs/heads/topic %s refs/heads/topic %s\nrefs/heads/topic %s refs/heads/main %s\n' "$sha" "$sha" "$sha" "$sha" | push)"; rc=$?
+[[ "$rc" == 1 && "$out" == *'secrets clean'* && "$out" == *'1 ref(s) checked, 1 refused'* ]] && ok 'a push of main and a branch: the branch is scanned, main refused, the push fails' || { bad "a push of main and a branch: rc $rc"; echo "$out" | tail -2; }
+# RMP-1: with the hook's stderr closed the refusal message can't be written; the push still fails.
+out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$sha" "$sha" | PATH="$work/bin:$PATH" SECLAB_DENYLIST_FILE="$work/list" bash "$hookdir/pre-push" origin x 2>&-)"; rc=$?
+[[ "$rc" == 1 && "$out" != *'secrets clean'* ]] && ok 'a push to main with stderr closed is still refused (RMP-1)' || { bad "a push to main with stderr closed went on: rc $rc"; echo "$out" | tail -2; }
+# hooks check knows this version: a hook that predates the refusal is reported.
+publish_gate_unlock_hooks "$hookdir"
+grep -v refuse_main_push "$hookdir/pre-push" >"$work/old-hook" && cp "$work/old-hook" "$hookdir/pre-push"
+printf '%s\n%s\n' "$(sha256 <"$hookdir/pre-push")" "$z64" >"$hookdir/.installed"
+publish_gate_lock_hooks "$hookdir"
+[[ "$(hp)" == *'predates the refusal of pushes to main'* ]] && ok 'hooks check: a hook without the refusal of pushes to main is reported' || { bad 'hooks check passed a hook without the refusal'; hp; }
+
 [[ "$fail" == 0 ]] && echo "hook-lock: downgrade protection holds"
 exit "$fail"

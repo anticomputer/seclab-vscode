@@ -9,6 +9,10 @@
 # A hit, or a scan that can't run, blocks the push. Lines that may record a private conversation
 # block until reviewed: push again with SECLAB_PUBLISH_REVIEWED=<the pushed commit>.
 # git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin.
+# A push to main is refused before any scan (refuse_main_push): main takes changes only through a
+# rebase-merged PR (AGENTS.md, Landing), and a branch whose upstream was reset to origin/main
+# makes a bare `git push` target it. On every remote, by design: this clone's work reaches main
+# only through a PR, and a remote's name doesn't say which repository it is.
 set -euo pipefail
 IMAGE='@GITLEAKS_IMAGE@'
 BIN_SHA256='@GITLEAKS_SHA256@'
@@ -44,8 +48,20 @@ got="$(run --entrypoint sha256sum "$IMAGE" /usr/bin/gitleaks </dev/null 2>/dev/n
 zero='^0+$'
 status=0
 refs=0
+refused=0
+refuse_main_push() { # REMOTE_REF: 0 (refused) for main, deletes included
+	[[ "$1" == refs/heads/main ]] || return 1
+	# The verdict never depends on the message: with stderr closed the echo fails (review RMP-1).
+	echo "pre-push: refusing to push to main ($1): main changes only through a pull request. Push a branch (git push origin HEAD:refs/heads/<branch>) and open a PR (AGENTS.md, Landing); if a bare git push got here, the branch's upstream is origin/main (git branch --unset-upstream)" >&2 || true
+	return 0
+}
 while read -r _lref lsha rref rsha; do
 	refs=$((refs + 1))
+	if refuse_main_push "$rref"; then
+		status=1
+		refused=$((refused + 1))
+		continue
+	fi
 	[[ "$lsha" =~ $zero ]] && continue # a delete pushes no content
 	# A new remote ref (or one we don't have) scans from the merge base with origin/main.
 	base="$rsha"
@@ -84,5 +100,9 @@ if [[ "$refs" -eq 0 ]]; then
 	echo "pre-push: no ref lines (nothing to push), so nothing was checked and nothing is published"
 	exit "$status"
 fi
-echo "pre-push: $refs ref(s) checked"
+if [[ "$refused" -gt 0 ]]; then
+	echo "pre-push: $((refs - refused)) ref(s) checked, $refused refused"
+else
+	echo "pre-push: $refs ref(s) checked"
+fi
 exit "$status"
