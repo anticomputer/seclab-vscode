@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 --- a/src/vs/base/common/errors.ts	2026-11-20 18:50:56
-+++ b/src/vs/base/common/errors.ts	2026-11-20 19:48:36
-@@ -172,6 +172,49 @@
++++ b/src/vs/base/common/errors.ts	2026-11-20 19:56:15
+@@ -172,6 +172,51 @@
  	return error;
  }
  
@@ -34,13 +34,15 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +			if (ArrayBuffer.isView(e) || e instanceof ArrayBuffer) {
 +				return e;
 +			}
-+			if (typeof (e as { toJSON?: unknown }).toJSON === 'function') {
-+				return seclabErrorForTab((e as { toJSON(): unknown }).toJSON(), depth + 1);
++			// As JSON: `toJSON` once, its result walked but not asked again.
++			const v: unknown = typeof (e as { toJSON?: unknown }).toJSON === 'function' ? (e as { toJSON(): unknown }).toJSON() : e;
++			if (!v || typeof v !== 'object') {
++				return v;
 +			}
-+			if (Array.isArray(e)) {
-+				return e.map(v => seclabErrorForTab(v, depth + 1));
++			if (Array.isArray(v)) {
++				return v.map(x => seclabErrorForTab(x, depth + 1));
 +			}
-+			return Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, v]) => [k, seclabErrorForTab(v, depth + 1)]));
++			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
 +		}
 +		return error;
 +	} catch {
