@@ -16,12 +16,12 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts b
 +		// seclab: in a tab window the REH is untrusted, and this push lets it pick a command for
 +		// the trusted window to run. It crosses no RPC filter, channel guard or command taint, so
 +		// it is refused here: upstream's handler is never registered, and the refusal touches no
-+		// command service, answers at once with an error and logs only the policy key.
++		// command service, answers at once with upstream's own refusal and logs only the policy key.
 +		const seclabTab = seclabIsTabAuthority(remoteAuthority);
 +		if (seclabTab) {
 +			this._register(this._remoteTerminalChannel.onExecuteCommand(e => {
 +				seclabRefusePush(remoteAuthority, 'push:remoteterminal:$onExecuteCommand');
-+				this._remoteTerminalChannel.sendCommandResult(e.reqId, true, 'seclab: denied');
++				this._remoteTerminalChannel.sendCommandResult(e.reqId, true, 'Invalid remote cli command: ' + e.commandId);
 +			}));
 +		}
 +		if (!seclabTab) {

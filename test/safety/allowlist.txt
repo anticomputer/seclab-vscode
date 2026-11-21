@@ -11,6 +11,7 @@ test/containment/rogue-reh/probe-safety.js:persistence
 test/containment/benign-extension/probe-safety.js:persistence
 test/containment/response-probe/probe-safety.js:persistence
 test/containment/search-probe/probe-safety.js:persistence
+test/containment/error-probe/probe-safety.js:persistence
 test/containment/probe-safety.test.ts:non-test-host
 test/containment/probe-safety.test.ts:host-secret-path
 

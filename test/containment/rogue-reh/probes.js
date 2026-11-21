@@ -510,8 +510,10 @@ async function runExecuteCommandProbes(results, ctx, socketServer) {
 				throw new Error('timed out: no reply');
 			}
 			if (!r.ok) {
-				// The refusal's reply is a fixed literal (patch 0030); anything else is upstream failing.
-				throw new Error(r.payload === 'seclab: denied' ? 'seclab: denied' : 'the command failed');
+				// Patch 0030 answers with upstream's own refusal of an unknown command (review AIP-4).
+				// Upstream runs these four, so that answer for one of them can only be the refusal;
+				// anything else is upstream failing.
+				throw new Error(r.payload === 'Invalid remote cli command: ' + v.commandId ? 'seclab: denied' : 'the command failed');
 			}
 			const text = typeof r.payload === 'string' ? r.payload : '';
 			// Facts only: that it ran, and for the status whether it describes a macOS host (the

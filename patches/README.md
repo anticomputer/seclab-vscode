@@ -58,7 +58,9 @@ Current queue:
   built over a filtered channel (default-deny verdict tables pinned by type to upstream's
   protocol), the protocol client refuses any ungated transport, and with
   `seclab.agents.enabled` off (the default) no connection is made. Decisions go to the window's
-  `seclabAhpGate.log`. New files are edited in `agentic/patch-src` and synced with
+  `seclabAhpGate.log`. The gate answers a request from the agent host (in the tab) as upstream's
+  client answers a method it has no handler for, so the reply names no gate (review AIP-4,
+  [EDR](../docs/edr/20261120-tab-errors.md)). New files are edited in `agentic/patch-src` and synced with
   `node agentic/tools/sync-patch.ts --write`
   ([EDR](../docs/edr/20261106-agentic-probe-runner.md), [plan](../docs/plans/agentic-implementation.md) increment 1).
 - `0017-seclab-fixed-tab-settings.patch`: in a `seclab+` window four agent-policy settings a
@@ -153,7 +155,8 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   ([ADR](../docs/adr/20261116-response-side-control.md)).
 - `0030-seclab-no-remote-cli-push-in-tabs.patch`: `remoteTerminalBackend.ts`. In a tab
   window upstream's `onExecuteCommand` handler, which runs a command the REH names, is never
-  registered. A refusing handler answers each push at once with an error, touches no command
+  registered. A refusing handler answers each push at once with upstream's own answer to a
+  command it doesn't run (`Invalid remote cli command: <id>`, review AIP-4), touches no command
   service, and logs the policy key through the filter's decision log (`seclabRefusePush`).
 - `0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch`: `baseTerminalBackend.ts`, and
   the remote backend passes its authority. In a tab window upstream's variable resolver for
@@ -228,6 +231,13 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   so a tab could type a command into a normal window's local shell (review R5-32, a high on main).
   The tab's own backend installs only pairs in the tab's own settings (0060's rule), never the host
   user's (review AR-5; [EDR](../docs/edr/20261119-tab-auto-replies.md)).
+- `0062-seclab-tab-errors-carry-no-host-stack.patch`: `errors.ts`, `ipc.ts` and
+  `rpcProtocol.ts`. An error the window sends a tab, over the RPC protocol of a filtered extension
+  host or a channel served to a tab's server, keeps its name, message, code and cause, and its
+  stack is only its header line (`seclabErrorForTab`): a host stack named the install path under
+  the host user's home and the filter's frames (review AIP-4). An RPC refusal is acknowledged and
+  then answered, upstream's path for a handler that throws, so it reads as an unsupported
+  operation ([EDR](../docs/edr/20261120-tab-errors.md)).
 - `0053-seclab-no-host-terminal-settings-for-tabs.patch`: a new
   `contrib/terminal/common/seclabTabTerminalSettings.ts`, `remoteTerminalChannel.ts`,
   `terminalProfileService.ts`, both `terminalProfileResolverService.ts` files, `terminalActions.ts`

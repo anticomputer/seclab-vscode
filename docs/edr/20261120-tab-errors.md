@@ -1,0 +1,83 @@
+# An error that crosses to a tab carries no host stack, and a refusal reads as upstream's own
+
+- **Date:** 2026-11-20
+- **Status:** accepted. Runtime proof: see below.
+- **Owner:** the RPC follow-ups session (register owner `rpc`).
+- **Related:** [review record](../security-reviews/20261120-tab-errors.md), the AI-feature probes
+  review that found it (AIP-4), [RPC lockdown](../RPC-LOCKDOWN.md) section 8.2 (hard denial reads
+  as an unsupported operation).
+
+## Context
+The RPC filter answers a call it refuses with `new Error('Unsupported operation')`, made host side.
+Upstream serialises an error reply with its stack (`transformErrorForSerialization`), and the
+tab's extension host keeps that stack on the error it rejects with, so an extension that logs it
+wrote the window's stack into the tab's log: the app's install path, which is under the host
+user's home for a fetched build, and the `_deny`/`checkRpc` frames, which tell a policy refusal
+from an ordinary failure (review AIP-4, a medium, found by the AI-feature probes in a run's logs).
+The refusal also took its own route: it answered at once with no acknowledgement, where upstream
+acknowledges every request before it answers, so the message sequence alone marked a refusal.
+
+The same holds for every error the window sends a tab, not only refusals: an allowed handler that
+fails sends its host stack too, and the channel guard's refusals, and every channel failure, go to
+the tab's server the same way over IPC. Two refusals answer a tab themselves, with text of their
+own: patch 0030 told the tab's server `seclab: denied`, and the agent-host gate (0015) answered
+the tab's agent host `Refused by the seclab agent-host gate`.
+
+## Decision
+Patch 0062, and the refusal text of 0030 and 0015:
+- `seclabErrorForTab` (`base/common/errors.ts`) makes the error a tab may get: name, message, code
+  and cause kept, the stack only its header line (`Error: Unsupported operation`), the cause
+  cleaned the same way. Another object loses any `stack`. The original is untouched, so the
+  window's own logs and the decision log keep the detail.
+- The RPC protocol of a filtered extension host (every host that isn't the trusted local kind)
+  sends every error reply through it, and a refusal takes upstream's path for a handler that
+  throws: acknowledged, then answered, after the same microtask an ordinary failure takes.
+- The IPC channel server sends every error reply through it when its context is a tab's
+  (`seclab+`, 0006's test), so the channel guard's refusals and every channel failure the tab's
+  server sees carry no host stack.
+- 0030 answers a refused remote CLI command with upstream's own answer to a command it doesn't
+  run, `Invalid remote cli command: <id>`; the agent-host gate answers a refused reverse request
+  with upstream's own answer to a method it has no handler for, code `-32000` and
+  `Unknown method: <method>`. Both echo only what the tab sent.
+
+Every refusal a tab can receive is now `Error: Unsupported operation` with a one-line stack,
+acknowledged like any failure, or upstream's own text for that request. It is still a failure of a
+call upstream would serve, so the tab knows the call failed; it learns nothing of why, of the
+policy, or of the host.
+
+Not tab-facing, checked: patch 0009's throws reach a tab only as RPC replies (cleaned); 0031
+answers with the text unresolved (no error); 0050's refusal is a launch message shown in the window;
+0059's location refusals and the host extensions channel's refusal go to window code; a tab's
+data command refused on the trusted side (`refuseDataCommand`) answers the trusted UI. The one
+window-to-tab request carrying a serialised error, `$acceptResponseDone`, follows a language-model
+request the policy denies to a tab.
+
+## Proof
+- **Unit:** `test/containment/tab-errors.test.ts` (`./seclab test tab-errors`, in
+  `./seclab test rpc-filter`) runs upstream's real `RPCProtocol`, `ChannelServer` and
+  `ChannelClient`, with every series patch applied, loaded from a virtual install path holding a
+  canary user name. For the filter's refusal, the command taint's, the fail-closed route's, 0009's
+  throw, the unguarded channel refusal, the channel guard's and an ordinary failure on each
+  protocol, it checks the window's raw bytes and the error the tab builds: no canary, install
+  path, frame or filter name; a one-line stack; acknowledged; the ordinary failure's message,
+  code and cause still sent (the control). It also pins 0030's and the gate's answers to
+  upstream's text in the pinned source. On main (`d34da65f`) the case "patched: every refusal and
+  the ordinary failure reach the tab with no host stack (AIP-4)" fails: every call sends its
+  frames, and the refusal names the canary path and `_deny`. Every mutant of 0062 is caught.
+- **Runtime:** `test/containment/error-probe.ts` in a real OCI tab of the containment build. The
+  run clones the app into a directory named for a canary, and a tab extension makes a call the
+  filter refuses, a command it refuses, and an ordinary failing call (the control), logging each
+  stack it receives to its own log. The harness reads the tab's logs in memory and looks for the
+  canary and the app's bundle path.
+  - Baseline: pending.
+  - Patched: pending.
+
+## Consequences
+- Diagnosing a failure a tab sees needs the window's logs: the tab gets the message only. The
+  decision log already holds every refusal.
+- Errors a tab's server sends the window over IPC are cleaned on the server too (the server's
+  connection context is the tab's authority); the window's view of a server failure keeps its
+  message and loses the server's stack.
+- A message can still carry host detail if upstream puts it there (a host file path in an
+  allowed call's failure, say). That is the call's answer, not its stack, and is judged per
+  surface by the policy.

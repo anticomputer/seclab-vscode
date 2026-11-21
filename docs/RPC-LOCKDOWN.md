@@ -124,6 +124,13 @@ will happily resolve inherited properties such as `constructor`; harmless
 today, but the table must not have a hole shaped like "we only enumerated `$`
 methods".
 
+A refusal takes upstream's own path for a handler that throws (acknowledged, then
+answered), and every error reply to a filtered host, a refusal or an ordinary
+failure, carries its name, message, code and cause with a stack of one header line,
+so no host path, user name or filter frame reaches a tab (patch 0062, review AIP-4,
+[EDR](edr/20261120-tab-errors.md)). The same applies to every error a channel
+served to a tab's server sends it.
+
 `rpcProtocol.ts` consults the filter in `_receiveRequest`, before
 `_invokeHandler`, so the rejection path reuses the existing error reply and a
 denied call is indistinguishable from an unsupported operation.

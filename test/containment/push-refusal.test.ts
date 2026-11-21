@@ -10,7 +10,8 @@
  *  - `seclabTab` is `seclabIsTabAuthority(...)` of a host-side authority;
  *  - the refusing handler logs through `seclabRefusePush` with its policy key, answers at once,
  *    and names no command service, resolver, history, environment or tab-chosen field other
- *    than the request id.
+ *    than the request id, except that 0030's answer is upstream's own refusal of an unknown
+ *    command, which echoes the command id back to the tab that sent it (review AIP-4).
  * Every rule is paired with a mutant of the real patch that it must reject, so the checker is
  * shown able to fail.
  */
@@ -41,7 +42,7 @@ const SPECS: Spec[] = [
 		upstream: 'this._register(this._remoteTerminalChannel.onExecuteCommand(async e => {',
 		authority: 'remoteAuthority',
 		policyKey: 'push:remoteterminal:$onExecuteCommand',
-		reply: /this\._remoteTerminalChannel\.sendCommandResult\(e\.reqId, true, 'seclab: denied'\);/,
+		reply: /^\s*this\._remoteTerminalChannel\.sendCommandResult\(e\.reqId, true, 'Invalid remote cli command: ' \+ e\.commandId\);\s*$/,
 	},
 	{
 		title: 'patch 0031: upstream pty-host variable resolver is unreachable in a tab window, and the refusal reaches nothing',
@@ -49,7 +50,7 @@ const SPECS: Spec[] = [
 		upstream: 'this._register(this._ptyHostController.onPtyHostRequestResolveVariables(async e => {',
 		authority: 'seclabPtyHostAuthority',
 		policyKey: 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent',
-		reply: /this\._ptyHostController\.acceptPtyHostResolvedVariables\(e\.requestId, e\.originalText\.map\(t => String\(t\)\)\);/,
+		reply: /^\s*this\._ptyHostController\.acceptPtyHostResolvedVariables\(e\.requestId, e\.originalText\.map\(t => String\(t\)\)\);\s*$/,
 	},
 ];
 
@@ -117,13 +118,18 @@ function check(patch: string, spec: Spec): string[] {
 		problems.push('the refusing handler is not wholly ours');
 	}
 	const text = body.map(l => l.text).join('\n');
-	if (FORBIDDEN_IN_REFUSAL.test(text)) {
-		problems.push(`the refusal names ${text.match(FORBIDDEN_IN_REFUSAL)![0]}`);
+	// The answer is judged whole by `spec.reply`; everything else in the refusal names nothing.
+	const rest = body.map(l => l.text).filter(t => !spec.reply.test(t)).join('\n');
+	if (FORBIDDEN_IN_REFUSAL.test(rest)) {
+		problems.push(`the refusal names ${rest.match(FORBIDDEN_IN_REFUSAL)![0]}`);
+	}
+	if (/seclab/i.test(body.filter(l => spec.reply.test(l.text) || /sendCommandResult|acceptPtyHostResolvedVariables/.test(l.text)).map(l => l.text).join('\n'))) {
+		problems.push('the answer names seclab, so a tab can tell a policy refusal from upstream\'s');
 	}
 	if (!text.includes(`seclabRefusePush(${spec.authority}, '${spec.policyKey}');`)) {
 		problems.push('the refusal does not log its policy key through seclabRefusePush');
 	}
-	if (!spec.reply.test(text)) {
+	if (!body.some(l => spec.reply.test(l.text))) {
 		problems.push('the refusal does not answer at once');
 	}
 	if (/\basync\b|\bawait\b/.test(text)) {
@@ -149,6 +155,10 @@ for (const spec of SPECS) {
 		['refusal does not log', p => p.replace(`seclabRefusePush(${spec.authority}, '${spec.policyKey}');`, '')],
 		['refusal waits', p => p.replace(`seclabRefusePush(${spec.authority}, '${spec.policyKey}');`, `seclabRefusePush(${spec.authority}, '${spec.policyKey}'); await 0;`)],
 		['authority from elsewhere', p => p.replace(`seclabIsTabAuthority(${spec.authority})`, 'seclabIsTabAuthority(undefined)')],
+		...(tag === '0030' ? [
+			['answer names the policy (AIP-4)', (p: string) => p.replace(`'Invalid remote cli command: ' + e.commandId`, `'seclab: denied'`)],
+			['answer echoes the id beside another call', (p: string) => p.replace(`this._remoteTerminalChannel.sendCommandResult(e.reqId, true, 'Invalid remote cli command: ' + e.commandId);`, `void e.commandArgs; this._remoteTerminalChannel.sendCommandResult(e.reqId, true, 'Invalid remote cli command: ' + e.commandId);`)],
+		] as Array<[string, (p: string) => string]> : []),
 	];
 	for (const [name, mutate] of mutants) {
 		test(`${tag}: rejects the mutant "${name}"`, () => {

@@ -238,6 +238,16 @@
 			]
 		},
 		{
+			"id": "fixture:test/containment/error-probe",
+			"runBy": "test/containment/error-probe.ts baseline|patched, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261120-tab-errors.md",
+					"date": "2026-11-20"
+				}
+			]
+		},
+		{
 			"id": "fixture:test/containment/search-probe",
 			"runBy": "test/containment/search-probe.ts before|after|excludes-baseline|excludes-patched, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
 			"evidence": [

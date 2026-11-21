@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { check } from '../../../agentic/tools/sync-patch.ts';
-import { SECLAB_AHP_REFUSED, SeclabAhpFilter, seclabAhpSanitize, type SeclabAhpEvent } from '../../../agentic/patch-src/src/vs/platform/agentHost/common/seclabAhpPolicy.ts';
+import { SECLAB_AHP_REFUSED, SECLAB_AHP_UNKNOWN_METHOD, SeclabAhpFilter, seclabAhpSanitize, type SeclabAhpEvent } from '../../../agentic/patch-src/src/vs/platform/agentHost/common/seclabAhpPolicy.ts';
 import { SECLAB_AHP_TABLES } from '../../../agentic/patch-src/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts';
 import { isSeclabAuthority, seclabAhpBrandTransport, seclabAhpCheckTransport, seclabAhpInstallWindow } from '../../../agentic/patch-src/src/vs/platform/agentHost/common/seclabAhpGateCheck.ts';
 
@@ -43,7 +43,9 @@ test('A16/A5/A26: every agent-host request is refused by the gate itself', () =>
 		assert.equal(out.toUpstream.length, 1);
 		const reply = JSON.parse(out.toUpstream[0]);
 		assert.equal(reply.id, 41);
-		assert.equal(reply.error.code, SECLAB_AHP_REFUSED);
+		// Upstream's own answer to a request it has no handler for, so the tab learns of no gate (AIP-4).
+		assert.deepEqual(reply.error, { code: SECLAB_AHP_UNKNOWN_METHOD, message: `Unknown method: ${method}` });
+		assert.doesNotMatch(out.toUpstream[0], /seclab|gate|refused/i);
 		assert.deepEqual(rules(events), ['ahp-gate.reverse-request:deny']);
 	}
 });

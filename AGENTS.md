@@ -404,6 +404,10 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test window-proof ordinary ~/.seclab-test/wp   # patch 0019 in the shipped build: an ordinary window restores and nothing is nulled
 ./seclab test window-proof tab ~/.seclab-test/wpt       # ...and a real tab window withholds the providers, with the gate log as the evidence (each run is the other's control)
 ./seclab test auto-replies      # patch 0061: a tab window installs no terminal auto reply on the local pty host every window shares, each mutant caught (also in ./seclab test rpc-filter)
+./seclab test tab-errors        # patch 0062 (AIP-4): every error the window sends a tab, refusals and ordinary failures, over RPC and IPC, carries no host stack; main's series fails, each mutant caught (also in ./seclab test rpc-filter)
+# Runtime (AIP-4): the app cloned into a canary-named directory, a tab extension logs the stacks of a refused call, a refused command and an ordinary failure; the harness reads the tab's logs.
+SECLAB_APP_SHA=<main sha> node test/containment/error-probe.ts baseline ~/.seclab-test/ep --app .work/test-builds/containment/<app>.app --image <main tab image>
+node test/containment/error-probe.ts patched ~/.seclab-test/ep --app .work/test-builds/containment/<app>.app --image <branch tab image>
 ./seclab test search-excludes   # patch 0060: the host user's exclude and watcher patterns reach a tab no way (upstream's doSearch, watchWorkspace, 0036's snapshot), each mutant caught (also in ./seclab test rpc-filter)
 ./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)
 # The AI-feature probes (EDR ai-probes): the containment build's fake model in a tab window and an

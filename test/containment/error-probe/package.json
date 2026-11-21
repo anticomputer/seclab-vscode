@@ -1,0 +1,13 @@
+{
+	"name": "error-probe",
+	"displayName": "Error probe (seclab containment fixture)",
+	"description": "Makes calls the trusted window answers with an error, logs the stack each error arrives with to its own log, and records facts about them. Inert unless a harness run armed the workspace.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}
