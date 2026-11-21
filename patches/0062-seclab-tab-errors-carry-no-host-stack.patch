@@ -1,10 +1,12 @@
 diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
---- a/src/vs/base/common/errors.ts	2026-11-20 18:50:56
-+++ b/src/vs/base/common/errors.ts	2026-11-20 19:56:15
-@@ -172,6 +172,51 @@
- 	return error;
- }
+--- a/src/vs/base/common/errors.ts	2026-11-20 21:26:11
++++ b/src/vs/base/common/errors.ts	2026-11-20 21:26:11
+@@ -170,6 +170,56 @@
  
+ 	// return as is
+ 	return error;
++}
++
 +/**
 + * seclab: `error` as it may cross to a sandboxed tab. An error (or error-like object) keeps its name,
 + * message, code and cause, and its stack is only its first line, because a host stack names the
@@ -31,8 +33,12 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +			if (depth >= 8) {
 +				return undefined;
 +			}
-+			if (ArrayBuffer.isView(e) || e instanceof ArrayBuffer) {
-+				return e;
++			// Binary data as bytes only: a view or buffer can carry properties of its own too.
++			if (ArrayBuffer.isView(e)) {
++				return new Uint8Array(e.buffer, e.byteOffset, e.byteLength).slice();
++			}
++			if (e instanceof ArrayBuffer) {
++				return e.slice(0);
 +			}
 +			// As JSON: `toJSON` once, its result walked but not asked again.
 +			const v: unknown = typeof (e as { toJSON?: unknown }).toJSON === 'function' ? (e as { toJSON(): unknown }).toJSON() : e;
@@ -42,20 +48,19 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +			if (Array.isArray(v)) {
 +				return v.map(x => seclabErrorForTab(x, depth + 1));
 +			}
-+			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
++			// No `toJSON` is copied: the serialiser would ask it again, after the cleaning (PR review on #78).
++			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace' && k !== 'toJSON').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
 +		}
 +		return error;
 +	} catch {
 +		return bare('Error', 'Unsupported operation');
 +	}
-+}
-+
+ }
+ 
  export function transformErrorFromSerialization(data: SerializedError): Error {
- 	let error: Error;
- 	if (data.noTelemetry) {
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
---- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 18:50:56
-+++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 19:24:17
+--- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 21:26:11
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 21:26:11
 @@ -8,7 +8,7 @@
  import { VSBuffer } from '../../../common/buffer.js';
  import { CancellationToken, CancellationTokenSource } from '../../../common/cancellation.js';
@@ -77,8 +82,8 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
  				this.sendResponse({
  					id, data: {
 diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/workbench/services/extensions/common/rpcProtocol.ts
---- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 18:50:56
-+++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 19:24:17
+--- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 21:26:11
++++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 21:26:11
 @@ -365,17 +365,15 @@
  		// seclab: RPC capability filter. Runs after transformIncomingURIs, so
  		// validators see the same values the handler will, and before
