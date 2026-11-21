@@ -16,13 +16,13 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 315 | 480 | 62 | 973 |
-| fixed-before-landing | 2 | 8 | 3 | 3 | 0 | 16 |
-| fixed-untested | 0 | 5 | 67 | 211 | 84 | 367 |
-| accepted-residual | 0 | 2 | 13 | 76 | 28 | 119 |
+| fixed-before-landing | 2 | 8 | 3 | 4 | 0 | 17 |
+| fixed-untested | 0 | 5 | 67 | 211 | 87 | 370 |
+| accepted-residual | 0 | 2 | 13 | 76 | 29 | 120 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 10 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 798 | 217 | 1574 |
+| **all** | 18 | 119 | 422 | 799 | 221 | 1579 |
 
 ## Baseline: open high and critical findings
 
@@ -571,6 +571,10 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-59** | info | fixed-untested | patch 0059: tab server locations and host extension management | The saved REH log is the tab's text, unmarked. | A record, harness or test-fixture correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-65** | info | fixed-untested | patch 0059: tab server locations and host extension management | Round 15 made \`_reset\` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | Upstream code restored; nothing of ours to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-7** | info | fixed-untested | patches 0053-0058: terminal settings in tab windows | The change had no EDR. | A record; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-10** | info | accepted-residual | patch 0062: errors that cross to a tab | A rejection that is a string, or a message, could still carry a stack's text; none is produced on the window side. | accepted by an agent: A message is the call's answer, judged per surface by the policy; no window-side producer of a stack-bearing string rejection was found. Recorded in the EDR. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-11** | info | fixed-untested | patch 0062: errors that cross to a tab | The EDR's liveness evidence line said both modes had run while the patched run was pending. | A record correction; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-12** | info | fixed-untested | tests: error probes | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | A test correction; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-13** | info | fixed-untested | tests: error probes | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | A test correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-6** | info | fixed-untested | patch 0062: errors that cross to a tab | The EDR and liveness entry read as complete while the runtime runs were pending. | A record correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-7** | info | accepted-residual | patch 0062: errors that cross to a tab | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted by an agent: Fail-safe: the server's stacks are the tab's own. Recorded in the EDR. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-8** | info | fixed-untested | patch 0062: errors that cross to a tab | One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | A record correction; nothing to test. |
@@ -2778,6 +2782,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | TE-6 | info | fixed-untested | The EDR and liveness entry read as complete while the runtime runs were pending. | A record correction; nothing to test. |
 | TE-7 | info | accepted-residual | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted by an agent: Fail-safe: the server's stacks are the tab's own. Recorded in the EDR. |
 | TE-8 | info | fixed-untested | One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | A record correction; nothing to test. |
+| TE-9 | low | fixed-before-landing | Only plain objects and arrays were walked, so an instance of another class, or a plain object of another realm, crossed whole with any stack below it. | patch:f0d92bae034880d10cb82a20f218a3605f1a0fe4 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:e93f857a2d65adced840f552dd40712d71f7b525 |
+| TE-10 | info | accepted-residual | A rejection that is a string, or a message, could still carry a stack's text; none is produced on the window side. | accepted by an agent: A message is the call's answer, judged per surface by the policy; no window-side producer of a stack-bearing string rejection was found. Recorded in the EDR. |
+| TE-11 | info | fixed-untested | The EDR's liveness evidence line said both modes had run while the patched run was pending. | A record correction; nothing to test. |
+| TE-12 | info | fixed-untested | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | A test correction; nothing to test. |
+| TE-13 | info | fixed-untested | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | A test correction; nothing to test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

@@ -53,8 +53,9 @@ way.
 
 Anything `seclabErrorForTab` can't read (a throwing getter, say) becomes `Error: Unsupported
 operation`, so the tab always gets an answer (TE-2). An error-like object (a string `stack` and a
-`message`, from another realm, say) is cleaned as an error, and a plain object or array loses every
-`stack` and `stacktrace` however deep (TE-1); other objects are sent as upstream sends them.
+`message`, from another realm, say) is cleaned as an error. Any other object, its `toJSON` result
+first as JSON would take it, is copied without a `stack` or `stacktrace` at any level, to a depth
+of eight (TE-1, TE-9); binary data passes as it is.
 
 Not tab-facing, checked: patch 0009's throws reach a tab only as RPC replies (cleaned); 0031
 answers with the text unresolved (no error); 0050's refusal is a launch message shown in the window;
@@ -71,9 +72,11 @@ request the policy denies to a tab.
   throw (its message read from the patch), the unguarded channel refusal, the channel guard's and
   an ordinary failure on each protocol, it checks the window's raw bytes and the error the tab
   builds: no canary, install path, frame or filter name; a one-line stack; acknowledged; the
-  ordinary failure's message, code and cause still sent (the control). Three rejections that aren't
-  plain errors (a plain object with stacks at depth, an error-like object of another class, an
-  error whose message throws) must each be answered with no host detail. It also pins 0030's and
+  ordinary failure's message, code and cause still sent (the control). Five rejections that aren't
+  plain errors (a plain object with stacks at depth, an error of another realm, an error whose
+  message throws, an instance of another class with a stack below it, a cyclic object with a chain
+  deeper than the bound) must each be answered with no host detail, their other fields kept and
+  the reply bounded. It also pins 0030's and
   the gate's answers to upstream's text in the pinned source. On main (`d34da65f`) the case
   "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
   fails: every call sends its frames, the refusal names the canary path and `_deny`, and the
@@ -90,8 +93,8 @@ request the policy denies to a tab.
     canary install path; the control's stack carried them too; the canary and the bundle path are
     in the tab's log. Teardown clean.
   - Patched: pending.
-- **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` in both
-  modes on 2026-11-20 (runs above).
+- **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` baseline
+  on 2026-11-20 (run 44841250059, above); patched pending.
 
 ## Consequences
 - Diagnosing a failure a tab sees needs the window's logs: the tab gets the message only. The
@@ -101,5 +104,6 @@ request the policy denies to a tab.
   message and loses the server's stack. The IPC logger, when tracing is on, sees the cleaned reply
   (review TE-7).
 - A message can still carry host detail if upstream puts it there (a host file path in an
-  allowed call's failure, say). That is the call's answer, not its stack, and is judged per
-  surface by the policy.
+  allowed call's failure, say), and so can a rejection that is a string rather than an error
+  (review TE-10; none found on the window side). That is the call's answer, not its stack, and is
+  judged per surface by the policy.

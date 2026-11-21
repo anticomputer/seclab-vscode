@@ -23139,6 +23139,75 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A record correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-9",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "Only plain objects and arrays were walked, so an instance of another class, or a plain object of another realm, crossed whole with any stack below it.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:f0d92bae034880d10cb82a20f218a3605f1a0fe4",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:e93f857a2d65adced840f552dd40712d71f7b525",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with TE-9's class instance sending the host stack below it"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-10",
+			"round": "round 2",
+			"severity": "info",
+			"summary": "A rejection that is a string, or a message, could still carry a stack's text; none is produced on the window side.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "A message is the call's answer, judged per surface by the policy; no window-side producer of a stack-bearing string rejection was found. Recorded in the EDR.",
+			"ref": {
+				"file": "docs/edr/20261120-tab-errors.md",
+				"quote": "review TE-10; none found on the window side"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-11",
+			"round": "round 2",
+			"severity": "info",
+			"summary": "The EDR's liveness evidence line said both modes had run while the patched run was pending.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-12",
+			"round": "round 2",
+			"severity": "info",
+			"summary": "The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged.",
+			"component": "tests: error probes",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-13",
+			"round": "round 2",
+			"severity": "info",
+			"summary": "The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested.",
+			"component": "tests: error probes",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
 		}
 	]
 }
