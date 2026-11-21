@@ -22599,7 +22599,7 @@
 			"component": "probes: AI features (agent-host-patches#3)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"gap": "The probe-payload lint (rpc-filter/tools/lint.sh, in the required unit check) is the check: 7 violations on the reviewed commit, none on the fix."
+			"gap": "The probe-payload lint (rpc-filter/tools/lint.sh, in the required unit check) is the check: 7 violations on the reviewed commit with a harness run's gitignored guard copy present (2 on a clean checkout), none on the fix."
 		},
 		{
 			"record": "20261120-ai-probes.md",
@@ -22682,6 +22682,44 @@
 			"owner": "rpc",
 			"status": "deferred",
 			"followUp": "The tool-call leg needs chat open in tab windows, which it is not (project owner decision, 2026-11-17); deferred to the chat-in-tabs increment (coordinator, 2026-11-20)."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP2-1",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "The agent-host probes' measuredBy still named the REH's count as the measurement after the gate log became the only judged source.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record correction in expectations.json; nothing to test."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP2-2",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "A setup check failed the run on the REH's own wrap record, and records a window's teardown wrote could carry into the next phase.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "Harness bookkeeping: no verdict reads these facts (check-probes judges the gate log only); the final runs show per-phase counts."
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP2-3",
+			"round": "round 2",
+			"severity": "low",
+			"summary": "The tab probe's port pin comes from a run record inside the tab's writable extensions directory, so it is not independent of the tab.",
+			"component": "fixture: test/containment/ai-tab-probe",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Nothing inside a tab is independent of it, the extension's code included, and the tab's environment is cleared; the fixture does nothing a hostile tab couldn't, and the RPC filter denies the call in every build.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-ai-probes.md",
+				"quote": "Nothing inside a tab is independent of it, the extension's code included"
+			}
 		}
 	]
 }
