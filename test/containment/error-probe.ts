@@ -74,15 +74,10 @@ fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\n
 fs.writeFileSync(path.join(ws, 'README.md'), 'error-probe workspace\n');
 
 // The canary install path. A test build runs only from .work/test-builds/ (EDR fetched-app-binding),
-// with its build info beside it.
+// with its build info beside it. Cloned once the teardown is in place, so a failed copy is cleaned
+// up with the rest of the run (PR review on #78).
 const cloneRoot = path.join(repoRoot, '.work', 'test-builds', `error-probe-${mode}`);
-fs.rmSync(cloneRoot, { recursive: true, force: true });
 const cloneDir = path.join(cloneRoot, canary);
-fs.mkdirSync(cloneDir, { recursive: true });
-execFileSync('cp', ['-c', '-R', app, cloneDir]);
-for (const f of fs.readdirSync(path.dirname(app)).filter(f => /^build-info.*\.json$/.test(f))) {
-	fs.copyFileSync(path.join(path.dirname(app), f), path.join(cloneDir, f));
-}
 const clonedApp = path.join(cloneDir, path.basename(app));
 
 writeSnapshot(base);
@@ -95,6 +90,12 @@ process.on('exit', code => {
 		process.exitCode = 1;
 	}
 });
+fs.rmSync(cloneRoot, { recursive: true, force: true });
+fs.mkdirSync(cloneDir, { recursive: true });
+execFileSync('cp', ['-c', '-R', app, cloneDir]);
+for (const f of fs.readdirSync(path.dirname(app)).filter(f => /^build-info.*\.json$/.test(f))) {
+	fs.copyFileSync(path.join(path.dirname(app), f), path.join(cloneDir, f));
+}
 fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'security.workspace.trust.enabled': false,
