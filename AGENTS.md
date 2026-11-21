@@ -490,7 +490,9 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
 - `./seclab build linux editor` needs at least 12 GB of Docker memory (esbuild is OOM-killed at 8 GB).
 - Broker tests (see `broker/AGENTS.md`), and the RPC inventory and drift check (RPC-lockdown session).
 - **Bump upstream:**
-  1. Edit `upstream.lock` (tag + SHA from `git ls-remote`).
+  1. Edit `upstream.lock` (tag + SHA from `git ls-remote`). `code-oss`'s `ageExempt` in
+     `deps/registry.json` covers only the commit it names, so the new pin needs the owner's
+     approval through the coordinator before it lands (EDR pin-age-cooldown).
   2. `./seclab build linux`, which re-runs fetch, jq and the `patches/series` queue; fix any patch that fails to apply (and keep `series` exact).
   3. Drift check.
   4. `./seclab template sbx seclab-tab:b-NAME && ./seclab image oci --tag b-NAME`: per-build

@@ -4,7 +4,7 @@
     {
       "id": "code-oss",
       "track": { "github": "microsoft/vscode", "version": "1.145.3" },
-      "ageExempt": { "reason": "A git commit, not fetched through CFS. Its npm tree is dated as a whole: a lockfile can't name a version published after it was committed, and the local CFS fetch (seclab npm_fetch_cfs) fails on any entry CFS won't serve.", "record": "docs/edr/20261106-pin-age-cooldown.md" },
+      "ageExempt": { "reason": "A git commit, not fetched through CFS. Its npm tree is dated as a whole: a lockfile can't name a version published after it was committed, and the local CFS fetch (seclab npm_fetch_cfs) fails on any entry CFS won't serve.", "pins": ["upstream:dcd3ad6e368fbe19d03f37054a40dbaf40d676f4"], "record": "docs/edr/20261106-pin-age-cooldown.md" },
       "name": "Code-OSS (microsoft/vscode) 1.145.3",
       "kind": "source",
       "publisher": "Microsoft (microsoft/vscode)",
@@ -579,7 +579,7 @@
       "bar": "official-pinned",
       "record": "docs/edr/20261105-pinned-tools.md",
       "bump": "Fork-build session: re-pin the digest, rebuild the template (./seclab template sbx), run the sbx suites.",
-      "ageExempt": { "reason": "Host-dictated: the template must match the kit the installed sbx release runs; not fetched through CFS.", "record": "docs/edr/20261106-pin-age-cooldown.md" },
+      "ageExempt": { "reason": "Host-dictated: the template must match the kit the installed sbx release runs; not fetched through CFS.", "pins": ["docker.io/sbx/shell@sha256:897303c25b0eef2a4464a99efccb1d65bb3083d7180041c045aadeaa5022f0b2"], "record": "docs/edr/20261106-pin-age-cooldown.md" },
       "gap": "Unsigned and without provenance; re-check with sbx kit verify / provenance on each bump and switch to verification once Docker signs its kits."
     },
     {

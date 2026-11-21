@@ -90,7 +90,7 @@ for (const d of deps) {
 			try {
 				const now = await new Registry(ref).tagDigest(ref.tag);
 				// The 7-day rule (EDR pin-age-cooldown): suggest a moved tag only once its image is old enough.
-				if (now !== ref.digest && ageDays(await imageDate(`${ref.host}/${ref.repo}@${now}`)) >= COOLDOWN_DAYS) {
+				if (now !== ref.digest && ageDays(await imageDate(`${ref.host}/${ref.repo}:${ref.tag}@${now}`)) >= COOLDOWN_DAYS) {
 					rows.push(`| ${d.id} | tag \`${safe(ref.tag)}\` moved | \`${ref.digest.slice(0, 19)}…\` | \`${safe(now).slice(0, 19)}…\` |`);
 				}
 			} catch (e) {

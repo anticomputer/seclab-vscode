@@ -42,7 +42,8 @@ usage: ./seclab <command>
   lint mounts                   Single-file container mounts (deps outdated, image verify) cover their imports
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
   lint pin-age [--days N] [--verbose]
-                                No register pin younger than 7 days (the feed's hold; EDR pin-age-cooldown). Network
+                                No register pin younger than 7 days (the feed's hold; EDR pin-age-cooldown); image pins
+                                only when new or changed against main (PIN_AGE_BASE overrides the base). Network
   lint secrets [BASE]           gitleaks (built from pinned source) over git diff BASE..HEAD (default: merge base
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets and the
@@ -2196,8 +2197,21 @@ lint_pin_age() {
 			done <<<"$pins"
 		fi
 	fi
-	git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -e CI -v "$ROOT:/repo:ro" ${dates:+-v "$dates:/npm-dates.json:ro"} -w /repo "$(node_image)" \
-		node build/pin-age.ts "$@" ${dates:+--npm-dates /npm-dates.json} -
+	# Image pins are judged only when new or changed against main's register at the merge base
+	# (EDR pin-age-cooldown, 2026-11-20). PIN_AGE_BASE overrides the base commit, locally only: CI
+	# always judges against the merge base (IMB-11). No base fails; the base used is printed.
+	local base override="${PIN_AGE_BASE:-}"
+	[[ -n "${CI:-}" ]] && override=""
+	base="${override:-$(git -C "$ROOT" merge-base origin/main HEAD 2>/dev/null)}" \
+		&& git -C "$ROOT" cat-file -e "$base^{commit}" 2>/dev/null \
+		|| { echo "pin-age: no base to judge changed pins against (fetch origin/main, or set PIN_AGE_BASE)" >&2; exit 1; }
+	mkdir -p "$ROOT/.work"
+	git -C "$ROOT" show "$base:deps/registry.json" > "$ROOT/.work/pin-age-base-registry.json" \
+		|| { echo "pin-age: deps/registry.json missing at base $base" >&2; exit 1; }
+	echo "pin-age: base $(git -C "$ROOT" rev-parse "$base^{commit}")${override:+ (PIN_AGE_BASE)}"
+	git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -e CI -v "$ROOT:/repo:ro" ${dates:+-v "$dates:/npm-dates.json:ro"} \
+		-v "$ROOT/.work/pin-age-base-registry.json:/base-registry.json:ro" -w /repo "$(node_image)" \
+		node build/pin-age.ts --base /base-registry.json "$@" ${dates:+--npm-dates /npm-dates.json} -
 }
 
 # Every command but the hook's own warns when this worktree isn't pushing through the gate (R23-1).
