@@ -22599,7 +22599,7 @@
 			"component": "probes: AI features (agent-host-patches#3)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"gap": "The probe-payload lint (rpc-filter/tools/lint.sh, in the required unit check) is the check: 7 violations on the reviewed commit with a harness run's gitignored guard copy present (2 on a clean checkout), none on the fix."
+			"gap": "The probe-payload lint (rpc-filter/tools/lint.sh, in the required unit check) is the check: 7 violations on the reviewed commit with a harness run's guard copy present (2 on a clean checkout), none on the fix; the tab probe is now staged in the run's own directory, so no copy is made in the tree."
 		},
 		{
 			"record": "20261120-ai-probes.md",
@@ -22719,6 +22719,26 @@
 			"ref": {
 				"file": "docs/security-reviews/20261120-ai-probes.md",
 				"quote": "Nothing inside a tab is independent of it, the extension's code included"
+			}
+		},
+		{
+			"record": "20261120-ai-probes.md",
+			"anchor": "AIP3-1",
+			"round": "PR review (#77)",
+			"severity": "medium",
+			"summary": "Patch 0015's gate logs ahp-gate.opened before it checks a transport, so the agent-host control and baseline accepted a transport the gate refused.",
+			"component": "probes: AI features (agent-host-patches#3)",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:f48229b9bbe350a4f85dbbfe01abce38cb933661",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the agent-host probes are judged host-side: the agents-on control, no transport opened and the gate refusal"
+			},
+			"preFix": "patch:e15567df90bffb20762a7ccf72f1df920d42bd77",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-ai-probes.md",
+				"quote": "the case \"the agent-host probes are judged host-side: the agents-on control, no transport opened and the gate refusal\" fails there, since a control and a baseline that only a refused transport opened passed"
 			}
 		}
 	]
