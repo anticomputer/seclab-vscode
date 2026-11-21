@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 102 | 314 | 480 | 62 | 972 |
+| fixed | 14 | 102 | 315 | 480 | 62 | 973 |
 | fixed-before-landing | 2 | 8 | 3 | 1 | 0 | 14 |
 | fixed-untested | 0 | 5 | 67 | 209 | 82 | 363 |
-| accepted-residual | 0 | 2 | 13 | 74 | 27 | 116 |
+| accepted-residual | 0 | 2 | 13 | 75 | 27 | 117 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 10 | 12 | 8 | 31 |
-| false-positive | 0 | 0 | 0 | 1 | 31 | 32 |
-| **all** | 18 | 119 | 421 | 792 | 213 | 1563 |
+| false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
+| **all** | 18 | 119 | 422 | 793 | 214 | 1566 |
 
 ## Baseline: open high and critical findings
 
@@ -389,6 +389,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-2** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | A supersede link resolved by basename across record kinds, and any mention counted as a back-link. | docs-check has no self-test; the whole tree is checked on every push, and a moved back-link was shown failing. |
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-3** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | After update-branch the procedure re-armed before the new review, and the EDR named no resolver. | Procedure text in AGENTS.md and the EDR. |
 | [20261118-bump-alpine-zizmor-nginx](20261118-bump-alpine-zizmor-nginx.md) **BMP-2** | low | fixed-untested | dependency register (deps/registry.json) | The dependency register's alpine entry omitted one of its pin sites from its used list. | A register data fix; deps check's pin scan already fails on a missed pin site, but nothing checks the used list itself. |
+| [20261120-hook-refuse-main](20261120-hook-refuse-main.md) **RMP-2** | low | accepted-residual | pre-push hook (build/hooks/pre-push refuse_main_push) | The refusal applies to refs/heads/main on every remote, so pushing main to a fork or mirror needs --no-verify, which skips both scans. | accepted by an agent: The coordinator's rule (2026-11-20) is any push whose remote ref is refs/heads/main: a remote's name doesn't say which repository it is, and this clone's work reaches main only through a PR. Documented in the hook and EDR pr-landing. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -2750,6 +2751,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | IMB-10 | medium | fixed-untested | The EDR claimed every image pin was 7 days old by publication when it landed, but pins already on main were judged by build date, and the lint summary read as assurance for them. | A statement of the guarantee in the EDR and the wording of the summary line; no behaviour to test. |
 | IMB-11 | low | fixed | A caller-supplied --base or PIN_AGE_BASE could replace the computed base unnoticed, and a run that judged nothing printed the same as one that passed. | patch:6567370dd05bcafc6385f0854f3bf96484d3e598 · `test/safety/gate-inputs.test.ts` "pin-age: a cooldown below 7 days and an empty or foreign file list are refused, before any network (GATE-14)" |
 | IMB-12 | info | false-positive | Prompt injection. | The review recorded no issue. |
+
+### [20261120-hook-refuse-main](20261120-hook-refuse-main.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| RMP-1 | medium | fixed | The refusal of pushes to main returned its message's exit status, so with stderr closed a push to main went on to the scans and out. | patch:e0c1860789c1d06ba89a98ccef28b0c15925c256 · `test/hooks/hook-lock.test.sh` "a push to main with stderr closed is still refused (RMP-1)" |
+| RMP-2 | low | accepted-residual | The refusal applies to refs/heads/main on every remote, so pushing main to a fork or mirror needs --no-verify, which skips both scans. | accepted by an agent: The coordinator's rule (2026-11-20) is any push whose remote ref is refs/heads/main: a remote's name doesn't say which repository it is, and this clone's work reaches main only through a PR. Documented in the hook and EDR pr-landing. |
+| RMP-3 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

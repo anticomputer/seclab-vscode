@@ -190,4 +190,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-20 | [the AI-feature probes on a scripted stand-in agent (agent-host-patches#3)](20261120-ai-probes.md) | see record | see record |
 | 2026-11-20 | [broker Python base image 3.13 to 3.15 (round 21)](20261120-broker-python-315.md) | "deps: broker python base image 3.13 to 3.15". The broker's Python tool images move | see record |
 | 2026-11-20 | [alpine and rust image bumps, superseding Dependabot #59 (round IMB)](20261120-bump-images-supersede-59.md) | round IMB, by an Opus-class model, of the image bumps that replace Dependabot PR #59: | see record |
+| 2026-11-20 | [the pre-push hook refuses pushes to main (round RMP)](20261120-hook-refuse-main.md) | round RMP, by an Opus-class model, of the shared pre-push hook's refusal of any ref | see record |
 <!-- index:end -->
