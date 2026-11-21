@@ -169,8 +169,14 @@ const factsOf = (kind: 'ordinary' | 'tab'): Record<string, unknown> => {
 };
 
 // The tab-side probe, packaged in a container (no network) and installed into the tab. Its run
-// record (the nonce and the beacon port it may call) is packaged with it, on the host (AIP-2).
-const extDir = path.join(import.meta.dirname, 'ai-tab-probe');
+// record (the nonce and the beacon port it may call) is packaged with it, on the host (AIP-2), from
+// a copy staged in this run's own directory, so concurrent runs never share their inputs (PR review).
+const extSrc = path.join(import.meta.dirname, 'ai-tab-probe');
+const extDir = path.join(base, 'ai-tab-probe-pkg');
+fs.mkdirSync(extDir, { recursive: true });
+for (const f of ['extension.js', 'package.json', 'target.js']) {
+	fs.copyFileSync(path.join(extSrc, f), path.join(extDir, f));
+}
 fs.copyFileSync(path.join(import.meta.dirname, 'probe-safety.js'), path.join(extDir, 'probe-safety.js'));
 fs.writeFileSync(path.join(extDir, 'run.json'), JSON.stringify({ nonce, port }));
 ensureVsceImage();

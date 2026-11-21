@@ -239,7 +239,7 @@ async function phase(name: string, agentsEnabled: boolean) {
 	const gate = gateRules(logDirs().filter(d => !before.has(d)));
 	return {
 		serverWrappedClaimed: reh.wrapped, rehCalls: reh.calls, rehConnects: reh.connects, rehListens: reh.listens,
-		gateDisabled: gate['ahp-gate.disabled'] ?? 0, gateOpened: gate['ahp-gate.opened'] ?? 0, gateVerified: gate['ahp-gate.verified'] ?? 0,
+		gateDisabled: gate['ahp-gate.disabled'] ?? 0, gateOpened: gate['ahp-gate.opened'] ?? 0, gateVerified: gate['ahp-gate.verified'] ?? 0, gateRefused: gate['ahp-gate.refused'] ?? 0,
 	};
 }
 
@@ -258,8 +258,11 @@ console.log(`the hostile REH reports its agentHostProxy wrap in place (claim): a
 // The REH's counts are the tab's claim, reported and never judged (reviews AID-1, AIP-5): what is
 // judged is host-side, the gate log, where the window itself records a transport opened or refused.
 const facts = {
-	armConnectsClaimed: arm.rehConnects, armCallsClaimed: arm.rehCalls, armListensClaimed: arm.rehListens, armGateOpened: arm.gateOpened, armGateDisabled: arm.gateDisabled,
-	controlConnectsClaimed: control?.rehConnects ?? -1, controlGateOpened: control?.gateOpened ?? -1,
+	armConnectsClaimed: arm.rehConnects, armCallsClaimed: arm.rehCalls, armListensClaimed: arm.rehListens,
+	armGateOpened: arm.gateOpened, armGateVerified: arm.gateVerified, armGateRefused: arm.gateRefused, armGateDisabled: arm.gateDisabled,
+	// `opened` is logged before the gate checks a transport, so a working transport is `verified`
+	// (PR review: a refused one logs `opened` too).
+	controlConnectsClaimed: control?.rehConnects ?? -1, controlGateOpened: control?.gateOpened ?? -1, controlGateVerified: control?.gateVerified ?? -1, controlGateRefused: control?.gateRefused ?? -1,
 };
 fs.writeFileSync(path.join(evidence, 'harness-probes.json'), JSON.stringify({ results: [
 	{ id: 'ai-agent-host-token-push', policyRef: 'push:agentHostProxy:frame', outcome: 'succeeded', facts },
