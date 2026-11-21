@@ -23249,6 +23249,57 @@
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with TE-15's object losing its fields"
 			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-1",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "A rejected byte view or buffer was passed as it was, so properties of its own reached the serialiser.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:815690f85674d4e4ccd83353af8c2f06fed676e7",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:51c10863ce4759f5d0fac76dc1452d13fd587256",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-1's binary data and PR78-2's second toJSON sending a host stack"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-2",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "A toJSON on the result of toJSON was copied, and the serialiser asked it again after the cleaning.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:815690f85674d4e4ccd83353af8c2f06fed676e7",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:51c10863ce4759f5d0fac76dc1452d13fd587256",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-1's binary data and PR78-2's second toJSON sending a host stack"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-3",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace.",
+			"component": "tests: error probes",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test harness correction; nothing to test."
 		}
 	]
 }
