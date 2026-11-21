@@ -1,7 +1,7 @@
 # An error that crosses to a tab carries no host stack, and a refusal answers in upstream's form
 
 - **Date:** 2026-11-20
-- **Status:** accepted. Runtime proof: baseline recorded below; the patched run is pending.
+- **Status:** accepted. Runtime proof: see below.
 - **Owner:** the RPC follow-ups session (register owner `rpc`).
 - **Related:** [review record](../security-reviews/20261120-tab-errors.md), the AI-feature probes
   review that found it (AIP-4), [RPC lockdown](../RPC-LOCKDOWN.md) section 8.2 (hard denial reads
@@ -91,10 +91,14 @@ request the policy denies to a tab.
   - Baseline: main `d34da65f`, containment build run 44841250059: 10/10. Both refusals reached
     the tab as `Error: Unsupported operation` with 32 and 33 stack lines of host frames naming the
     canary install path; the control's stack carried them too; the canary and the bundle path are
-    in the tab's log. Teardown clean.
-  - Patched: pending.
-- **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` baseline
-  on 2026-11-20 (run 44841250059, above); patched pending.
+    in the tab's log.
+  - Patched: branch `9f274e32`, containment build run 44847427182: 13/13. Both refusals and the
+    control reached the tab with a one-line stack (`Error: Unsupported operation` for the
+    refusals, the control's own message naming its file), and neither the canary nor the bundle
+    path is anywhere in the tab's logs. The decision log holds the refusal (control). Both runs,
+    with the harness as committed here, tore down clean.
+- **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` in both
+  modes on 2026-11-20 (runs 44841250059 and 44847427182, above).
 
 ## Consequences
 - Diagnosing a failure a tab sees needs the window's logs: the tab gets the message only. The
