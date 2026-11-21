@@ -143,4 +143,5 @@ Same rules as ADRs:
 | 2026-11-19 | [Every tab test in the patch series agrees with the RPC filter's, in any case](20261119-tab-authority-case.md) | accepted |
 | 2026-11-19 | [A tab window installs no terminal auto reply on the shared local pty host](20261119-tab-auto-replies.md) | accepted |
 | 2026-11-20 | [The AI-feature probes run on a scripted stand-in agent (agent-host-patches#3)](20261120-ai-probes.md) | accepted |
+| 2026-11-20 | [An error that crosses to a tab carries no host stack, and a refusal answers in upstream's form](20261120-tab-errors.md) | accepted |
 <!-- index:end -->

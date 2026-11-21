@@ -23023,6 +23023,122 @@
 				"file": "docs/security-reviews/20261120-hook-refuse-main.md",
 				"quote": "None found in the diff, the tests or the docs"
 			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-1",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "A rejection that isn't an Error lost only a top-level stack; a plain object carrying one deeper, or an error-like object of another class, passed as it was.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:114ce16b67f62515af848bdb3475cd2569e021f4",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:f8637374fdcceef3565613ee12fcb16da4f4bd77",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails with TE-1's nested stack sent"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-2",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "An error whose fields throw when read made the cleaning throw inside the reply handler, so the tab's call never settled.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:114ce16b67f62515af848bdb3475cd2569e021f4",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:f8637374fdcceef3565613ee12fcb16da4f4bd77",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails with TE-1's nested stack sent"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-3",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "0030's answer is upstream's text, but upstream never refuses its four remote CLI commands and stays silent for a terminal the window doesn't own, so the tab's server can still tell a refusal from upstream's behaviour.",
+			"component": "patch 0030: remote CLI push refusal",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "The tab's server knows it serves a tab; what the fix removes is the policy name and the host stack. Recorded in the EDR.",
+			"ref": {
+				"file": "docs/edr/20261120-tab-errors.md",
+				"quote": "where 0030 answers every push (review TE-3)"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-4",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "The unit suite built 0009's error itself, so a change to 0009's message would have passed.",
+			"component": "tests: error probes",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-5",
+			"round": "round 1",
+			"severity": "low",
+			"summary": "The runtime harness judged stack shape from facts the extension writes inside the tab.",
+			"component": "tests: error probes",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A test correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-6",
+			"round": "round 1",
+			"severity": "info",
+			"summary": "The EDR and liveness entry read as complete while the runtime runs were pending.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-7",
+			"round": "round 1",
+			"severity": "info",
+			"summary": "The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Fail-safe: the server's stacks are the tab's own. Recorded in the EDR.",
+			"ref": {
+				"file": "docs/edr/20261120-tab-errors.md",
+				"quote": "The IPC logger, when tracing is on, sees the cleaned reply"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "TE-8",
+			"round": "round 1",
+			"severity": "info",
+			"summary": "One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A record correction; nothing to test."
 		}
 	]
 }
