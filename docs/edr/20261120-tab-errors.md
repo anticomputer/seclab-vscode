@@ -95,8 +95,10 @@ request the policy denies to a tab.
   - Patched: branch `9f274e32`, containment build run 44847427182: 13/13. Both refusals and the
     control reached the tab with a one-line stack (`Error: Unsupported operation` for the
     refusals, the control's own message naming its file), and neither the canary nor the bundle
-    path is anywhere in the tab's logs. The decision log holds the refusal (control). Both runs,
-    with the harness as committed here, tore down clean.
+    path is anywhere in the tab's logs. The decision log holds the refusal (control). Both runs
+    tore down clean. Later commits change only how 0062 cleans rejections that aren't errors
+    (TE-15, PR78-1, PR78-2), which none of the probe's calls makes, when the harness clones the
+    app (PR78-3), the unit tests and the records.
 - **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` in both
   modes on 2026-11-20 (runs 44841250059 and 44847427182, above).
 
