@@ -19118,7 +19118,7 @@
 			"commit": "14898471b342",
 			"test": {
 				"file": "build/release-dates.test.ts",
-				"name": "BMP-1: an index is dated by the newest platform we run, not by linux/amd64 alone"
+				"name": "publication date: a Docker Hub pin that is the current digest of its tag is dated by the last push of the tag"
 			}
 		},
 		{
@@ -22739,6 +22739,239 @@
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-ai-probes.md",
 				"quote": "the case \"the agent-host probes are judged host-side: the agents-on control, no transport opened and the gate refusal\" fails there, since a control and a baseline that only a refused transport opened passed"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-1",
+			"round": "Round IMB",
+			"severity": "medium",
+			"summary": "The gitleaks build toolchain was pinned one Go security release behind one already past the hold.",
+			"component": "build toolchain pins (build/tools/Dockerfile)",
+			"owner": "fork-build",
+			"status": "deferred",
+			"followUp": "golang stays at 1.27.2 in this change: 1.27.4's only digest with a publication record, the tag's 2026-11-16 push, passes the 7-day hold on 2026-11-23; the follow-up bump pins it then and re-takes gitleaks' binary pins from CI."
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-2",
+			"round": "Round IMB",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "image bumps (deps/registry.json, build/tools)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
+				"quote": "None found in the diff"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-3",
+			"round": "Round IMB",
+			"severity": "medium",
+			"summary": "The pin-age lint dated an image index by its images' created, so a digest re-pushed inside the hold passed it.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: a Docker Hub pin that is the current digest of its tag is dated by the last push of the tag"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "CR74-1",
+			"round": "Copilot review (PR 74)",
+			"severity": "medium",
+			"summary": "With Docker Hub's record unavailable, the pin-age rule fell back to created, so a re-pushed digest could pass.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: with Docker Hub down, a digest is undated, never dated by the image"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "CR74-2",
+			"round": "Copilot review (PR 74)",
+			"severity": "medium",
+			"summary": "A moved tag bounded the age of any digest pinned with it, so an old tag paired with a new digest passed unread.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: an old tag paired with a new digest is not dated by the tag"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "CR74-3",
+			"round": "Copilot review (PR 74)",
+			"severity": "medium",
+			"summary": "The pin-age rule dated a digest by its images' provenance build times, which are not publication evidence, so a new index of old images passed the 7-day hold at once.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: a re-indexed digest of old images is undated, so it fails"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "CR74-4",
+			"round": "Copilot review (PR 74)",
+			"severity": "medium",
+			"summary": "pin-age counted a pin the base register exempted as already judged, so removing an exemption skipped the pin instead of judging it.",
+			"component": "pin-age lint (build/release-dates.ts imagePinsToJudge)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "changed pins: a pin the base exempted was never judged, so dropping its exemption has it judged"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-4",
+			"round": "Round IMB2",
+			"severity": "medium",
+			"summary": "Unsigned, unchecked provenance attestations dated a pin, so a publisher could backdate a freshly pushed image past the 7-day hold.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: a re-indexed digest of old images is undated, so it fails"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-5",
+			"round": "Round IMB2",
+			"severity": "low",
+			"summary": "The first attestation manifest bound to an image dated it, so a backdated duplicate shadowed the real one.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: a re-indexed digest of old images is undated, so it fails"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-6",
+			"round": "Round IMB2",
+			"severity": "low",
+			"summary": "A failed Docker Hub lookup silently fell back to the older, publisher-asserted build time.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "publication date: with Docker Hub down, a digest is undated, never dated by the image"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-7",
+			"round": "Round IMB2",
+			"severity": "info",
+			"summary": "The publication-date rule was rewritten during the round and needed a review round of its own.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "A process note, not a defect: round IMB3 reviews the rule.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
+				"quote": "needs a round of its own"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-8",
+			"round": "Round IMB2",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "pin-age lint (build/release-dates.ts imageDate)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
+				"quote": "None found in the diff, registry and Hub metadata"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-9",
+			"round": "Round IMB3",
+			"severity": "medium",
+			"summary": "An ageExempt covered every pin of its entry permanently, so every later bump of an exempt entry went unchecked.",
+			"component": "pin-age lint (build/pin-age.ts, build/release-dates.ts, seclab lint pin-age)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "build/release-dates.test.ts",
+				"name": "ageExempt: an exemption covers only the exact pins it lists, so a bump falls outside it (IMB-9)"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-10",
+			"round": "Round IMB3",
+			"severity": "medium",
+			"summary": "The EDR claimed every image pin was 7 days old by publication when it landed, but pins already on main were judged by build date, and the lint summary read as assurance for them.",
+			"component": "pin-age lint (build/pin-age.ts, build/release-dates.ts, seclab lint pin-age)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"gap": "A statement of the guarantee in the EDR and the wording of the summary line; no behaviour to test."
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-11",
+			"round": "Round IMB3",
+			"severity": "low",
+			"summary": "A caller-supplied --base or PIN_AGE_BASE could replace the computed base unnoticed, and a run that judged nothing printed the same as one that passed.",
+			"component": "pin-age lint (build/pin-age.ts, build/release-dates.ts, seclab lint pin-age)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6567370dd05bcafc6385f0854f3bf96484d3e598",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "pin-age: a cooldown below 7 days and an empty or foreign file list are refused, before any network (GATE-14)"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "IMB-12",
+			"round": "Round IMB3",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "pin-age lint (build/pin-age.ts, build/release-dates.ts, seclab lint pin-age)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
+				"quote": "None found in the diff, the register, the records or the test fixtures"
 			}
 		}
 	]
