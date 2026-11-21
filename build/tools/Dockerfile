@@ -24,7 +24,7 @@ RUN echo "$SHA256  /tmp/actionlint.tar.gz" | sha256sum -c - && tar -xzf /tmp/act
 ENTRYPOINT ["actionlint"]
 
 # ---- gitleaks (built from source; reproducible, binary sha256 pinned and attested in CI) -----------
-FROM golang:1.27.2-trixie@sha256:47667934874913a449b96faa7ef4777fa285d9ec29126ee80ed61c45b7cccf0e AS gitleaks-build
+FROM golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS gitleaks-build
 ARG GIT
 ARG TAG
 ARG COMMIT
