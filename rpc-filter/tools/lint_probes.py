@@ -40,6 +40,7 @@ EXEMPT = (
     "test/containment/benign-extension/probe-safety.js",
     "test/containment/response-probe/probe-safety.js",
     "test/containment/search-probe/probe-safety.js",
+    "test/containment/error-probe/probe-safety.js",
 )
 
 
@@ -102,6 +103,7 @@ MUST_ARM = (
     "test/containment/rogue-reh/probes.js",
     "test/containment/rogue-extension/extension.js",
     "test/containment/response-probe/extension.js",
+    "test/containment/error-probe/extension.js",
 )
 # An arming gate must not merely be MENTIONED: the call has to be followed
 # closely by a bail-out, so a future edit cannot keep the call while gutting the
@@ -158,6 +160,7 @@ RECORD_WRITERS = (
     "test/containment/rogue-reh/probes.js",
     "test/containment/benign-extension/extension.js",
     "test/containment/response-probe/extension.js",
+    "test/containment/error-probe/extension.js",
 )
 WRITE_CALL = re.compile(r"\b(?:fs\.(?:writeFileSync|writeFile|appendFileSync|appendFile)|workspace\.fs\.writeFile)\s*\(")
 RECORD_DATA = re.compile(r"""^(?:(?:enc\.encode|Buffer\.from)\(\s*)?(?:safety\.recordJson\(|(['"])(?:(?!\1)[^\\\n]|\\.)*\1\s*\)?$)""")
@@ -718,7 +721,7 @@ def main(argv: list | None = None) -> int:
     if os.path.isfile(src):
         with open(src, "rb") as fh:
             want = fh.read()
-        for d in ("rogue-extension", "rogue-reh", "benign-extension", "response-probe", "search-probe"):
+        for d in ("rogue-extension", "rogue-reh", "benign-extension", "response-probe", "search-probe", "error-probe"):
             copy = os.path.join(root, "test/containment", d, "probe-safety.js")
             if os.path.isfile(copy):
                 with open(copy, "rb") as fh:

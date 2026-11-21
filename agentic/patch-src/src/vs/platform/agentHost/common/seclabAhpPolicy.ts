@@ -54,6 +54,9 @@ const MAX_TEXT = 80;
 const STRIP_KEYS = new Set(['protectedResources', 'mcpApp', 'auth', 'authorization_servers', 'oauthClient', 'protectedResourceMetadata']);
 /** Error code for requests the gate refuses (JSON-RPC "method not found"). */
 export const SECLAB_AHP_REFUSED = -32601;
+/** The code upstream's client gives a reverse request it has no handler for (agentHostProtocolClient
+ *  `sendError`: neither a permission nor a file-system error). */
+export const SECLAB_AHP_UNKNOWN_METHOD = -32000;
 const REFUSED_MESSAGE = 'Refused by the seclab agent-host gate';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -249,10 +252,12 @@ export class SeclabAhpFilter {
 		const hasId = 'id' in msg;
 		if (typeof method === 'string' && hasId) {
 			// A16, A5, A26, A7: the agent host asks the trusted side to act (files, certificates,
-			// proxies, credentials). The gate answers every such request itself.
+			// proxies, credentials). The gate answers every such request itself, as upstream's
+			// client answers a request it has no handler for (review AIP-4): the agent host runs in
+			// the tab, so the reply names no gate.
 			this.deny('ahp-gate.reverse-request', 'in', method);
 			if (!inner) {
-				out.toUpstream.push(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: SECLAB_AHP_REFUSED, message: REFUSED_MESSAGE } }));
+				out.toUpstream.push(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: SECLAB_AHP_UNKNOWN_METHOD, message: `Unknown method: ${method}` } }));
 			}
 			return undefined;
 		}

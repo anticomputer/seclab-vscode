@@ -78,3 +78,7 @@
 # 0061: a tab window installs terminal auto replies only on its tab's own backend, never on the
 # local pty host every window shares (review R5-32).
 0061-seclab-no-tab-auto-replies-on-the-local-pty-host.patch
+# 0062: an error that crosses to a tab carries no host stack, and an RPC refusal takes upstream's
+# acknowledged path, so a denial reads as an unsupported operation (review AIP-4). After 0005 and
+# 0006, whose rpcProtocol.ts and ipc.ts changes it builds on.
+0062-seclab-tab-errors-carry-no-host-stack.patch
