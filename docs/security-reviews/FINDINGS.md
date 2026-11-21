@@ -16,13 +16,13 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 316 | 480 | 62 | 974 |
-| fixed-before-landing | 2 | 8 | 3 | 4 | 1 | 18 |
-| fixed-untested | 0 | 5 | 67 | 211 | 88 | 371 |
+| fixed-before-landing | 2 | 8 | 3 | 6 | 1 | 20 |
+| fixed-untested | 0 | 5 | 67 | 212 | 88 | 372 |
 | accepted-residual | 0 | 2 | 13 | 76 | 29 | 120 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 9 | 12 | 8 | 30 |
 | false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 799 | 223 | 1581 |
+| **all** | 18 | 119 | 422 | 802 | 223 | 1584 |
 
 ## Baseline: open high and critical findings
 
@@ -537,6 +537,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-1** | low | fixed-untested | probes: AI features (agent-host-patches#3) | The agent-host probes' measuredBy still named the REH's count as the measurement after the gate log became the only judged source. | A record correction in expectations.json; nothing to test. |
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-2** | low | fixed-untested | probes: AI features (agent-host-patches#3) | A setup check failed the run on the REH's own wrap record, and records a window's teardown wrote could carry into the next phase. | Harness bookkeeping: no verdict reads these facts (check-probes judges the gate log only); the final runs show per-phase counts. |
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-3** | low | accepted-residual | fixture: test/containment/ai-tab-probe | The tab probe's port pin comes from a run record inside the tab's writable extensions directory, so it is not independent of the tab. | accepted by an agent: Nothing inside a tab is independent of it, the extension's code included, and the tab's environment is cleared; the fixture does nothing a hostile tab couldn't, and the RPC filter denies the call in every build. |
+| [20261120-tab-errors](20261120-tab-errors.md) **PR78-3** | low | fixed-untested | tests: error probes | The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace. | A test harness correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-3** | low | accepted-residual | patch 0030: remote CLI push refusal | 0030's answer is upstream's text, but upstream never refuses its four remote CLI commands and stays silent for a terminal the window doesn't own, so the tab's server can still tell a refusal from upstream's behaviour. | accepted by an agent: The tab's server knows it serves a tab; what the fix removes is the policy name and the host stack. Recorded in the EDR. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-4** | low | fixed-untested | tests: error probes | The unit suite built 0009's error itself, so a change to 0009's message would have passed. | A test correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-5** | low | fixed-untested | tests: error probes | The runtime harness judged stack shape from facts the extension writes inside the tab. | A test correction; nothing to test. |
@@ -2789,6 +2790,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | TE-13 | info | fixed-untested | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | A test correction; nothing to test. |
 | TE-14 | info | fixed-untested | The depth-bound mutant was caught only through the reply's size, which rests on how deep serialising a stack-deep result gets. | A test correction; nothing to test. |
 | TE-15 | info | fixed-before-landing | A toJSON returning its own object was asked again until the depth bound, so the value was lost. | patch:51c10863ce4759f5d0fac76dc1452d13fd587256 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:f0d92bae034880d10cb82a20f218a3605f1a0fe4 |
+| PR78-1 | low | fixed-before-landing | A rejected byte view or buffer was passed as it was, so properties of its own reached the serialiser. | patch:815690f85674d4e4ccd83353af8c2f06fed676e7 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:51c10863ce4759f5d0fac76dc1452d13fd587256 |
+| PR78-2 | low | fixed-before-landing | A toJSON on the result of toJSON was copied, and the serialiser asked it again after the cleaning. | patch:815690f85674d4e4ccd83353af8c2f06fed676e7 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:51c10863ce4759f5d0fac76dc1452d13fd587256 |
+| PR78-3 | low | fixed-untested | The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace. | A test harness correction; nothing to test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

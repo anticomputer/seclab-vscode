@@ -62,3 +62,12 @@ Round 3 reviewed the branch with round 2's fixes and found no high or critical. 
 |---|---|---|---|---|---|---|
 | TE-14 | Info | tests | The depth-bound mutant was caught only through the reply's size, which rests on how deep serialising a stack-deep result gets. | fixed | The mutant's expectation takes any of the ways the loss shows. | none |
 | TE-15 | Info | patch 0062 | A `toJSON` returning its own object (URI's shape) was asked again until the depth bound, so the value was lost; JSON asks once. | fixed | `toJSON` is asked once and its result walked. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+
+## PR review on #78
+Copilot's review of the pull request. On its head the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with PR78-1's binary data and PR78-2's second toJSON sending a host stack; it passes with the fix.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PR78-1 | Low | patch 0062 | A rejected byte view or buffer was passed as it was, so properties of its own (a stack among them) reached the serialiser. | fixed | Binary data is sent as a fresh copy of its bytes. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+| PR78-2 | Low | patch 0062 | A `toJSON` on the result of `toJSON` was copied, and the serialiser asked it again after the cleaning. | fixed | No `toJSON` is copied. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+| PR78-3 | Low | tests | The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace. | fixed | It clones once the teardown is in place. | none |
