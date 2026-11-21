@@ -69,5 +69,8 @@ Copilot's review of the pull request. On its head the case "patched: every refus
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | PR78-1 | Low | patch 0062 | A rejected byte view or buffer was passed as it was, so properties of its own (a stack among them) reached the serialiser. | fixed | Binary data is sent as a fresh copy of its bytes. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
-| PR78-2 | Low | patch 0062 | A `toJSON` on the result of `toJSON` was copied, and the serialiser asked it again after the cleaning. | fixed | No `toJSON` is copied. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+| PR78-2 | Low | patch 0062 | A `toJSON` on the result of `toJSON` was copied, and the serialiser asked it again after the cleaning. | fixed | No function is sent (PR78-4's fix), a copied `toJSON` included. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
 | PR78-3 | Low | tests | The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace. | fixed | It clones once the teardown is in place. | none |
+| PR78-4 | Low | patch 0062 | A function, as a field or as what `toJSON` returns, was sent as it was, and a `toJSON` of its own ran in the serialiser after the cleaning. | fixed | No function is sent. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+
+On the head before PR78-4's fix the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with PR78-4's function field and function from toJSON sending a host stack.

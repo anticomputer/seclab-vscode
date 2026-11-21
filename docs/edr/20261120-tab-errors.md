@@ -55,7 +55,9 @@ Anything `seclabErrorForTab` can't read (a throwing getter, say) becomes `Error:
 operation`, so the tab always gets an answer (TE-2). An error-like object (a string `stack` and a
 `message`, from another realm, say) is cleaned as an error. Any other object, its `toJSON` result
 first as JSON would take it, is copied without a `stack` or `stacktrace` at any level, to a depth
-of eight (TE-1, TE-9); binary data passes as it is.
+of eight (TE-1, TE-9). Binary data goes as a copy of its bytes, and no function is sent, since a
+function serialises only through a `toJSON` that would run after the cleaning (PR78-1, PR78-2,
+PR78-4).
 
 Not tab-facing, checked: patch 0009's throws reach a tab only as RPC replies (cleaned); 0031
 answers with the text unresolved (no error); 0050's refusal is a launch message shown in the window;
@@ -97,7 +99,7 @@ request the policy denies to a tab.
     refusals, the control's own message naming its file), and neither the canary nor the bundle
     path is anywhere in the tab's logs. The decision log holds the refusal (control). Both runs
     tore down clean. Later commits change only how 0062 cleans rejections that aren't errors
-    (TE-15, PR78-1, PR78-2), which none of the probe's calls makes, when the harness clones the
+    (TE-15, PR78-1, PR78-2, PR78-4), which none of the probe's calls makes, when the harness clones the
     app (PR78-3), the unit tests and the records.
 - **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` in both
   modes on 2026-11-20 (runs 44841250059 and 44847427182, above).

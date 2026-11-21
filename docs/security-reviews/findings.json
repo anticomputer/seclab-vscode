@@ -23300,6 +23300,26 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "A test harness correction; nothing to test."
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-4",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "A function, as a field or as what toJSON returns, was sent as it was, and a toJSON of its own ran in the serialiser after the cleaning.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:ec3bf45a1abf156b19401eea105ad56f92bd8652",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:815690f85674d4e4ccd83353af8c2f06fed676e7",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-4's function field"
+			}
 		}
 	]
 }
