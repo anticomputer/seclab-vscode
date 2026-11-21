@@ -322,6 +322,8 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 		// TE-9: an instance of another class carrying a stack below it; TE-13: a cycle, and a chain
 		// deeper than the bound with a stack at its end.
 		foreign: () => new (class Wrapped { kept = `foreign ${NONCE}`; detail = { stack: hostStack }; })(),
+		// TE-15: a toJSON that returns its own object (URI's shape): its fields, not undefined.
+		selfjson: () => new (class SelfJson { kept = `selfjson ${NONCE}`; detail = { stack: hostStack }; toJSON() { return this; } })(),
 		cyclic: () => {
 			const a: Record<string, unknown> = { kept: `cyclic ${NONCE}` };
 			a.self = a;
@@ -398,7 +400,7 @@ function judge(seen: Record<string, Seen>): string[] {
 			if (name === 'rpc-odd-plain' && !s.wire.includes(`kept ${NONCE}`)) {
 				problems.push(`${name}: the object's other fields were not sent`);
 			}
-			for (const kept of ['foreign', 'cyclic']) {
+			for (const kept of ['foreign', 'cyclic', 'selfjson']) {
 				if (name === `rpc-odd-${kept}` && !s.wire.includes(`${kept} ${NONCE}`)) {
 					problems.push(`${name}: the object's other fields were not sent`);
 				}
@@ -441,7 +443,7 @@ const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 // On a tree without 0062 (main before it) the "patched" case runs that tree's own series, and fails.
 const p0062 = existsSync(join(REPO, 'patches', P0062)) ? patchText(P0062) : undefined;
-const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-foreign', 'rpc-odd-plain', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-foreign', 'rpc-odd-plain', 'rpc-odd-selfjson', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
 // Main's window can fail to answer (an unreadable error throws inside upstream's reply); that is a
 // result here, not a crash of the suite.
 let unanswered = 0;
@@ -480,7 +482,9 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['an error-like object is passed as data', p => p.replace(" || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)", ''), /^rpc-odd-errorlike: the error's message did not arrive/],
 	['an unreadable error is not caught', p => p.replace('+\t} catch {\n+\t\treturn bare(', '+\t} finally {\n+\t\tvoid bare(').replace("bare('Error', 'Unsupported operation');", "bare('Error', 'Unsupported operation'), 0;"), /^rpc-odd-unreadable: the tab got no reply/],
 	['only plain objects are walked', p => p.replace("+\t\tif (e && typeof e === 'object') {", "+\t\tif (e && typeof e === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(e))) {"), /^rpc-odd-foreign: the window sent/],
-	['the depth is not bounded', p => p.replace('+\t\t\tif (depth >= 8) {\n+\t\t\t\treturn undefined;\n+\t\t\t}\n', ''), /^rpc-odd-cyclic: the reply is unbounded/],
+	// The bound shows as an unbounded reply, or, should serialising that fail, as lost fields (review TE-14).
+	['the depth is not bounded', p => p.replace('+\t\t\tif (depth >= 8) {\n+\t\t\t\treturn undefined;\n+\t\t\t}\n', ''), /^rpc-odd-cyclic: (the reply is unbounded|the object's other fields were not sent|the tab got no reply)/],
+	['toJSON is asked again', p => p.replace("+\t\t\tif (!v || typeof v !== 'object') {", "+\t\t\tif (v !== e || typeof (e as { toJSON?: unknown }).toJSON === 'function') {\n+\t\t\t\treturn seclabErrorForTab(v, depth + 1);\n+\t\t\t}\n+\t\t\tif (!v || typeof v !== 'object') {"), /^rpc-odd-selfjson: the object's other fields were not sent/],
 ];
 mutants.forEach(([name, mutate, expected], i) => {
 	test(`rejects the mutant "${name}"`, async () => {
