@@ -247,7 +247,7 @@ function activate(context) {
 			const seen = REENABLE_KEYS.filter(k => c.inspect(k)?.workspaceValue !== undefined).length;
 			// And whether it reads `chat.disableAIFeatures: false` from the remote user settings the
 			// tab supplies (ai-disable-ai-features-reenable's in-run control).
-			const remoteOn = c.inspect('chat.disableAIFeatures')?.userRemoteValue === false;
+			const remoteOn = c.inspect('chat.disableAIFeatures')?.globalRemoteValue === false;
 			if (seen !== facts.reenableSettingsSeen || remoteOn !== facts.remoteAiFeaturesOn) {
 				facts.reenableSettingsSeen = seen;
 				facts.remoteAiFeaturesOn = remoteOn;

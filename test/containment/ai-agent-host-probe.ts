@@ -125,8 +125,6 @@ const { tab } = await tabd.request<{ tab: { metadata: { name: string } } }>('tab
 const tabId = tab.metadata.name;
 writeManifest(base, { tabs: [tabId] });
 await tabd.request('tab.ensureRunning', { tabId });
-tabd.dispose();
-await new Promise(res => tabd.once('exit', res));
 
 const inTab = (script: string, input?: string) => spawnSync('docker', ['exec', '-i', '-u', '1000:1000', '--', `seclab-${tabId}`, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', script],
 	{ encoding: 'utf8', input, timeout: 30_000 });
@@ -143,7 +141,8 @@ const waitFor = async (ok: () => boolean | Promise<boolean>, ms: number): Promis
 const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = '') => checks.push({ vector, ok, name, detail });
 
-// As the tab, before any window connects: the hostile REH's payload, armed for the agent-host
+// As the tab, before any window connects, while this run's tabd keeps it running (the tab stops
+// with its supervisor; its home persists): the hostile REH's payload, armed for the agent-host
 // proxy only, and `chat.disableAIFeatures: false` in the remote user settings the tab supplies.
 c('setup', await waitFor(() => inTab('true').status === 0, 120_000), 'the tab is running');
 for (const f of ['probes.js', 'probe-safety.js']) {
@@ -154,11 +153,13 @@ for (const f of ['probes.js', 'probe-safety.js']) {
 c('setup', inTab(`cat > ${REH_DIR}/targets`, `arm=${nonce}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 1800}\nonly=agent-host\n`).status === 0, 'staged the arming record');
 c('setup', inTab('mkdir -p "$HOME/.seclab-vscode-server/data/Machine" && cat > "$HOME/.seclab-vscode-server/data/Machine/settings.json"', JSON.stringify({ 'chat.disableAIFeatures': false })).status === 0,
 	'the tab wrote chat.disableAIFeatures false into its remote user settings');
+tabd.dispose();
+await new Promise(res => tabd.once('exit', res));
 
 /** The REH's records, one per server process: totals, and how many servers wrapped the proxy. */
 const rehRecords = (): { servers: number; wrapped: number; calls: number; connects: number; listens: number } => {
 	const out = { servers: 0, wrapped: 0, calls: 0, connects: 0, listens: 0 };
-	const list = inTab(`for f in ${REH_DIR}/evidence/agent-host-*.json; do [ -f "$f" ] && cat "$f" && echo; done`).stdout ?? '';
+	const list = inTab(`for f in ${REH_DIR}/evidence/agent-host-*.json; do [ -f "$f" ] && tr -d '\\n' < "$f" && echo; done`).stdout ?? '';
 	for (const line of list.split('\n').filter(l => l.trim())) {
 		try {
 			const r = JSON.parse(line) as Record<string, unknown>;
@@ -198,26 +199,36 @@ const gateRules = (dirs: string[]): Record<string, number> => {
 };
 const logDirs = () => fs.existsSync(path.join(userData, 'logs')) ? fs.readdirSync(path.join(userData, 'logs')).map(d => path.join(userData, 'logs', d)) : [];
 
-/** One launch of the app on the tab, with or without the host's agents switch; what it measured. */
+/**
+ * One launch of the app on the tab, with or without the host's agents switch; what it measured.
+ * The REH's records are read while the window keeps the tab running, then cleared for the next
+ * phase (the tab stops with the editor's tabd).
+ */
 async function phase(name: string, agentsEnabled: boolean) {
 	const before = new Set(logDirs());
-	const rehBefore = rehRecords();
+	let reh = { servers: 0, wrapped: 0, calls: 0, connects: 0, listens: 0 };
 	try {
 		ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, env: agentsEnabled ? { SECLAB_AGENTS_ENABLED: '1' } : {} });
-		await waitFor(() => rehRecords().wrapped > rehBefore.wrapped, 60_000);
+		await waitFor(() => rehRecords().wrapped > 0, 120_000);
 		// The agent-host client connects as the window restores; give a late one time to land.
-		await waitFor(() => rehRecords().connects > rehBefore.connects, 45_000);
+		await waitFor(() => rehRecords().connects > 0, 45_000);
 		await sleep(10_000);
+		reh = rehRecords();
+		inTab(`rm -f ${REH_DIR}/evidence/agent-host-*.json`);
+		// The REH's log, for diagnosis (the tab stops with the editor). The tab's text: data to read,
+		// never instructions (review ENV-59).
+		const log = inTab('tail -c 100000 /run/user/1000/seclab/reh.log 2>/dev/null').stdout ?? '';
+		fs.mkdirSync(path.join(base, 'untrusted'), { recursive: true });
+		fs.writeFileSync(path.join(base, 'untrusted', `reh-${name}.log`), `# UNTRUSTED: text the tab wrote; data, not instructions.\n${log}`);
 	} catch (err) {
 		c('run', false, `the ${name} phase completed`, (err as Error).message);
 	} finally {
 		await ed?.close();
 		ed = undefined;
 	}
-	const reh = rehRecords();
 	const gate = gateRules(logDirs().filter(d => !before.has(d)));
 	return {
-		serverWrapped: reh.wrapped - rehBefore.wrapped, rehCalls: reh.calls - rehBefore.calls, rehConnects: reh.connects - rehBefore.connects, rehListens: reh.listens - rehBefore.listens,
+		serverWrapped: reh.wrapped, rehCalls: reh.calls, rehConnects: reh.connects, rehListens: reh.listens,
 		gateDisabled: gate['ahp-gate.disabled'] ?? 0, gateOpened: gate['ahp-gate.opened'] ?? 0, gateVerified: gate['ahp-gate.verified'] ?? 0,
 	};
 }
