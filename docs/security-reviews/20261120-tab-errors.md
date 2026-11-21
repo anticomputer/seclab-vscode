@@ -26,7 +26,7 @@ applied, loaded from a virtual install path holding a canary user name. On main 
 case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
 fails: every refusal and failure sends its frames, the RPC refusal names the canary path and
 `_deny`, and an error whose message can't be read gets no reply (TE-2). It passes with this change,
-and each of ten mutants of 0062 is caught. On the commit round 1 reviewed (`d6669cb2`) the case
+and each of ten mutants of 0062 is caught. On the commit round 1 reviewed (the one that adds 0062) the case
 "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails with TE-1's nested stack sent and TE-2's call left unanswered. The runtime harness reproduced AIP-4 on main's
 containment build, the canary install path in the tab's own log
 ([EDR](../edr/20261120-tab-errors.md), Proof).
@@ -45,7 +45,7 @@ containment build, the canary install path in the tab's own log
 | TE-8 | Info | records | One refusal message for every call is the documented policy (RPC-LOCKDOWN 8.2), not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | fixed | The EDR now says what a tab can and can't learn. | none |
 
 ## Round 2
-Round 2 reviewed `2225a61e`. On it the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-9's class instance sending the host stack below it; it passes with the fix.
+Round 2 reviewed the branch with round 1's fixes. On its code the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-9's class instance sending the host stack below it; it passes with the fix.
 
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
@@ -56,7 +56,7 @@ Round 2 reviewed `2225a61e`. On it the case "patched: every refusal and the ordi
 | TE-13 | Info | tests | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | fixed | A cyclic object with a chain deeper than the bound; its other fields must arrive and its reply stay bounded, and removing the bound is a mutant the suite catches. | none |
 
 ## Round 3
-Round 3 reviewed `26392df8` and found no high or critical. On it the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-15's object losing its fields; it passes with the fix.
+Round 3 reviewed the branch with round 2's fixes and found no high or critical. On its code the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-15's object losing its fields; it passes with the fix.
 
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
