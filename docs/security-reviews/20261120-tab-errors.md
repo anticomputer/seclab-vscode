@@ -16,7 +16,9 @@ No high or critical finding. The reviewer traced every window-to-tab error path 
 window-to-tab requests that carry an error, IPC replies, the agent-host gate, the terminal pushes)
 and found AIP-4's property holding on each; the tab can't switch the IPC cleaning off, since the
 window's channel server context is built locally. Eight low or informational findings, all handled
-here: five fixed (four with a regression test), three recorded in the EDR.
+here: six fixed (two with a regression test), two recorded in the EDR as residuals. Round 2
+reviewed those fixes and found no high or critical: five more low or informational findings, all
+handled (TE-9 to TE-13).
 
 ## How the evidence was made
 The unit suite runs upstream's real RPC protocol and IPC channel server and client with the series
@@ -41,3 +43,14 @@ containment build, the canary install path in the tab's own log
 | TE-6 | Info | records | The EDR and liveness entry read as complete while the runtime runs were pending. | fixed | The EDR says which runs are recorded. | none |
 | TE-7 | Info | patch 0062 | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted-residual | Recorded in the EDR; fail-safe, the server's stacks are the tab's own. | none |
 | TE-8 | Info | records | One refusal message for every call is the documented policy (RPC-LOCKDOWN 8.2), not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | fixed | The EDR now says what a tab can and can't learn. | none |
+
+## Round 2
+Round 2 reviewed `2225a61e`. On it the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-9's class instance sending the host stack below it; it passes with the fix.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| TE-9 | Low | patch 0062 | Only plain objects and arrays were walked, so an instance of another class, or a plain object of another realm, crossed whole with any stack below it. | fixed | Every object is copied without `stack` or `stacktrace` (its `toJSON` result first, as JSON would take it); binary data passes as it is. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+| TE-10 | Info | patch 0062 | A rejection that is a string, or a message, could still carry a stack's text; none is produced on the window side. | accepted-residual | Recorded in the EDR: a message is the call's answer, judged per surface. | none |
+| TE-11 | Info | records | The EDR's liveness evidence line said both modes had run while the patched run was pending. | fixed | The line names each run as it is recorded. | none |
+| TE-12 | Info | tests | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | fixed | Each entry must appear exactly once; the canary and the bundle path, which only the host knows, stay the anchor. | none |
+| TE-13 | Info | tests | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | fixed | A cyclic object with a chain deeper than the bound; its other fields must arrive and its reply stay bounded, and removing the bound is a mutant the suite catches. | none |
