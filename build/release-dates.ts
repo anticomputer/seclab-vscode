@@ -3,7 +3,7 @@
 // (build/deps-outdated.ts). Anonymous reads (a GitHub token only from the environment, for
 // rate limits); every answer is data, never interpreted.
 
-import { parseRef, Registry } from './registry.ts';
+import { parseRef } from './registry.ts';
 
 export const COOLDOWN_DAYS = 7;
 const DAY = 86_400_000;
@@ -90,52 +90,107 @@ export async function npmDatePublic(name: string, version: string): Promise<stri
 	return t;
 }
 
-// The platforms we pull: hosted runners (amd64) and Docker Desktop on Apple silicon (arm64).
-const RUN_ARCHES = new Set(['amd64', 'arm64']);
+/** Docker Hub's record of a tag: its current digest and when that was pushed. */
+export interface HubTag { digest?: string; tag_last_pushed?: string }
+type Hub = (repo: string, tag: string) => Promise<HubTag>;
 
-type Get = (kind: 'manifests' | 'blobs', digest: string) => Promise<Buffer | string>;
+async function hubTag(repo: string, tag: string): Promise<HubTag> {
+	if (!/^[a-z0-9._-]+\/[a-z0-9._-]+$/.test(repo) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(tag)) {
+		throw new Error(`bad Docker Hub reference ${repo}:${tag}`);
+	}
+	return await json(`https://hub.docker.com/v2/repositories/${repo}/tags/${tag}`) as HubTag;
+}
+
+const realDate = (x: unknown): x is string => typeof x === 'string' && Number.isFinite(Date.parse(x));
 
 /**
- * An image's build date: the config's `created`. For an index, the newest `created` over the
- * images we run from it (linux/amd64 and linux/arm64), so neither platform we pull is younger
- * than the date the hold is measured from (review BMP-1); an index with neither is dated over
- * every image it holds. Attestation manifests aside. `get` is injectable for the self-test.
+ * When a pinned image digest was published, the date the 7-day hold counts from. Only a
+ * publication record counts (EDR pin-age-cooldown, addendum of 2026-11-20): Docker Hub's
+ * `tag_last_pushed` for a tagged Docker Hub pin that is the tag's current digest. Nothing about
+ * the image itself dates its publication: Docker Official Images keep `created` across rebuilds,
+ * an index is re-pushed under a new digest when a platform is added, and a new index of old
+ * images carries old build times (review of PR 74). So a digest its tag has moved on from, a
+ * failed Hub lookup, an untagged pin and any other registry are undated, and an undated pin fails
+ * unless its register entry records an owner-approved `ageExempt`. pin-age judges only pins a
+ * change adds or alters (`imagePinsToJudge`), so a tag moving on later doesn't fail a pin judged
+ * when it landed. `hub` is injectable for the tests (build/release-dates.test.ts).
  */
-export async function imageDate(pin: string, get?: Get): Promise<string> {
+export async function imageDate(pin: string, opts: { hub?: Hub } = {}): Promise<string> {
 	const ref = parseRef(pin);
 	if (!ref?.digest) {
 		throw new Error(`not a digest pin: ${pin.slice(0, 80)}`);
 	}
-	if (!get) {
-		const reg = new Registry(ref);
-		get = (kind, digest) => reg.byDigest(kind, digest);
+	if (ref.host !== 'registry-1.docker.io' || !ref.tag) {
+		throw new Error(`${ref.host} ${ref.tag ? '' : '(untagged) '}has no publication date for a digest: needs an owner-approved ageExempt`);
 	}
-	const fetchJson = async (kind: 'manifests' | 'blobs', digest: string) => JSON.parse((await get!(kind, digest)).toString());
-	const top = await fetchJson('manifests', ref.digest) as {
-		manifests?: Array<{ digest: string; platform?: { os?: string; architecture?: string }; annotations?: Record<string, string> }>;
-	};
-	let digests = [ref.digest];
-	if (top.manifests) {
-		const images = top.manifests.filter(x => !x.annotations?.['vnd.docker.reference.type'] && x.platform?.os !== 'unknown');
-		const run = images.filter(x => x.platform?.os === 'linux' && RUN_ARCHES.has(x.platform.architecture ?? ''));
-		digests = (run.length ? run : images).map(x => x.digest);
+	let rec: HubTag;
+	try {
+		rec = await (opts.hub ?? hubTag)(ref.repo, ref.tag);
+	} catch (e) {
+		throw new Error(`Docker Hub lookup failed, so the digest is undated: ${(e as Error).message.slice(0, 80)}`);
 	}
-	if (!digests.length) {
-		throw new Error(`${pin.slice(0, 60)}: index has no image`);
+	if (rec.digest !== ref.digest) {
+		throw new Error(`not the current digest of ${ref.repo}:${ref.tag}, so Docker Hub has no publication date for it: pin the tag's current digest`);
 	}
-	let newest = '';
-	for (const d of digests) {
-		const m = (d === ref.digest ? top : await fetchJson('manifests', d)) as { config?: { digest: string } };
-		if (!m.config?.digest) {
-			throw new Error(`${pin.slice(0, 60)}: manifest has no config`);
+	if (!realDate(rec.tag_last_pushed)) {
+		throw new Error(`Docker Hub has no push date for ${ref.repo}:${ref.tag}`);
+	}
+	return rec.tag_last_pushed;
+}
+
+/** An image pin: a digest reference that isn't a deb, asset or tool pin. */
+export const isImagePin = (p: string) => /@sha256:[0-9a-f]{64}$/.test(p) && !/^(deb|asset|tool):/.test(p);
+
+/**
+ * The image pins pin-age dates: those the base register (main's, at the merge base) doesn't
+ * already hold as judged. An unchanged pin was judged by publication date when it landed;
+ * re-judging it would fail every pin whose tag has since moved on, on every unrelated change. A
+ * pin the base exempted was never judged, so it doesn't count as held: dropping its exemption
+ * has it judged (review of PR 74). A base exemption without a pin list covered all its pins.
+ */
+export function imagePinsToJudge(pins: string[], base: { deps: Array<{ pins?: unknown; ageExempt?: unknown }> }): { judge: string[]; unchanged: string[] } {
+	if (!Array.isArray(base?.deps)) {
+		throw new Error('the base register has no deps array');
+	}
+	const strings = (x: unknown) => Array.isArray(x) ? x.filter((p): p is string => typeof p === 'string') : [];
+	const held = new Set(base.deps.flatMap(d => {
+		if (!d.ageExempt) {
+			return strings(d.pins);
 		}
-		const cfg = await fetchJson('blobs', m.config.digest) as { created?: string };
-		if (!cfg.created || Number.isNaN(Date.parse(cfg.created))) {
-			throw new Error(`${pin.slice(0, 60)}: config has no created date`);
-		}
-		if (!newest || Date.parse(cfg.created) > Date.parse(newest)) {
-			newest = cfg.created;
-		}
+		const scoped = (d.ageExempt as { pins?: unknown }).pins;
+		const exempt = new Set(Array.isArray(scoped) ? strings(scoped) : strings(d.pins));
+		return strings(d.pins).filter(p => !exempt.has(p));
+	}));
+	const images = pins.filter(isImagePin);
+	return { judge: images.filter(p => !held.has(p)), unchanged: images.filter(p => held.has(p)) };
+}
+
+/** The reason an `ageExempt` records, or an error: an exemption is an owner-approved exception and must say why. */
+export function ageExemptReason(x: unknown): string {
+	const r = (x as { reason?: unknown } | null)?.reason;
+	if (typeof r !== 'string' || r.trim().length < 20) {
+		throw new Error('an ageExempt must record its reason (at least 20 characters)');
 	}
-	return newest;
+	return r.trim();
+}
+
+/**
+ * The pins an entry's `ageExempt` covers: exactly the pins it lists, each still one of the entry's
+ * pins (review IMB-9). An exemption is approved for the pins it names, so a bump falls outside it
+ * and is judged (and fails, for a pin with no publication date) until a new approval names it.
+ */
+export function ageExemptPins(d: { pins: string[]; ageExempt?: unknown }): Set<string> {
+	if (!d.ageExempt) {
+		return new Set();
+	}
+	ageExemptReason(d.ageExempt);
+	const listed = (d.ageExempt as { pins?: unknown }).pins;
+	if (!Array.isArray(listed) || !listed.length || !listed.every((p): p is string => typeof p === 'string')) {
+		throw new Error('an ageExempt must list the exact pins it covers (ageExempt.pins)');
+	}
+	const stale = listed.filter(p => !d.pins.includes(p));
+	if (stale.length) {
+		throw new Error(`ageExempt.pins names ${stale.length} pin(s) the entry no longer holds: the exemption doesn't carry over to a bump`);
+	}
+	return new Set(listed);
 }

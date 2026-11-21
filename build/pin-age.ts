@@ -1,13 +1,16 @@
 // The 7-day rule (EDR pin-age-cooldown): no pin in the dependency register may be younger than
 // the feed's hold on new versions, so a local build through CFS never waits on a pin and nothing
 // lands that hasn't been public for a week. Network; runs in CI's lint job.
-//   node build/pin-age.ts [--days N] [--verbose] [--npm-dates FILE] [--list-npm] [-]
-//     (`-`: `git ls-files -z` on stdin; --npm-dates: {"name@version": iso} resolved through CFS)
-// Every register pin is dated, or exempt with its reason printed (Debian apt/debs; an entry's
-// recorded `ageExempt`); an unknown date fails.
+//   node build/pin-age.ts --base FILE [--days N] [--verbose] [--npm-dates FILE] [--list-npm] [-]
+//     (`-`: `git ls-files -z` on stdin; --npm-dates: {"name@version": iso} resolved through CFS;
+//      --base: deps/registry.json at the merge base with main, from ./seclab lint pin-age)
+// Every register pin is dated, or exempt with its reason printed (Debian apt/debs; the exact pins an
+// entry's `ageExempt` lists, refused without a reason); an unknown date fails. Image pins are judged
+// only when new or changed against --base: an unchanged one was judged when it landed.
 //   upstream:<sha>, git:<url>@<sha>, actions        commit date (GitHub)
 //   tool:<name>:<arch>@sha256, asset:ripgrep-v…     GitHub release publish date
-//   images                                          image config `created` (an index: newest of amd64, arm64)
+//   images (new or changed only)                    publication: Docker Hub's `tag_last_pushed`, for the
+//                                                   tag's current digest only; else undated
 //   pip:<file>                                      every `==` pin: first upload to PyPI
 //   npm installs of name@x.y.z in tracked Dockerfiles   npm publish time (CFS packument locally,
 //                                                       the public registry in CI only)
@@ -19,7 +22,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ageDays, commitDate, COOLDOWN_DAYS, imageDate, npmDatePublic, pypiDate, releaseDate } from './release-dates.ts';
+import { ageDays, ageExemptPins, ageExemptReason, commitDate, COOLDOWN_DAYS, imageDate, imagePinsToJudge, isImagePin, npmDatePublic, pypiDate, releaseDate } from './release-dates.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const daysArg = process.argv.indexOf('--days');
@@ -30,13 +33,34 @@ if (!(minDays >= COOLDOWN_DAYS)) {
 	process.exit(2);
 }
 
-interface Dep { id: string; kind: string; pins: string[]; track?: { github?: string }; ageExempt?: { reason: string } }
+interface Dep { id: string; kind: string; pins: string[]; track?: { github?: string }; ageExempt?: { reason: string; pins?: string[] } }
 const deps = (JSON.parse(fs.readFileSync(path.join(repo, 'deps/registry.json'), 'utf8')) as { deps: Dep[] }).deps;
 const tools = JSON.parse(fs.readFileSync(path.join(repo, 'build/tools/tools.json'), 'utf8')) as Record<string, { url?: string }>;
 
 interface Item { dep: string; what: string; date: () => Promise<string> }
 const items: Item[] = [];
 const exempt: string[] = [];
+const refused: string[] = [];
+
+// Fail closed: without main's register every image pin would be judged, or none.
+// A second --base is refused, so no caller-supplied one can shadow the computed base (IMB-11).
+const baseArg = process.argv.indexOf('--base');
+if ((baseArg < 0 && !process.argv.includes('--list-npm')) || process.argv.lastIndexOf('--base') !== baseArg) {
+	console.error('usage: pin-age.ts --base FILE, once (deps/registry.json at the merge base with main; ./seclab lint pin-age supplies it)');
+	process.exit(2);
+}
+const exemptOf = new Map<string, Set<string>>();
+for (const d of deps) {
+	try {
+		exemptOf.set(d.id, ageExemptPins(d));
+	} catch (e) {
+		exemptOf.set(d.id, new Set());
+		refused.push(`${d.id}: ${(e as Error).message}`);
+	}
+}
+const judged = baseArg < 0 ? { judge: [] as string[], unchanged: [] as string[] }
+	: imagePinsToJudge(deps.flatMap(d => d.pins.filter(p => !exemptOf.get(d.id)!.has(p))), JSON.parse(fs.readFileSync(process.argv[baseArg + 1], 'utf8')));
+const toJudge = new Set(judged.judge);
 
 /** Requirement pins (`name==version`) in a pip requirements file; continuation and option lines skipped. */
 export function pipPins(text: string): Array<[string, string]> {
@@ -51,11 +75,11 @@ export function pipPins(text: string): Array<[string, string]> {
 }
 
 for (const d of deps) {
-	if (d.ageExempt) {
-		exempt.push(`${d.id}: ${d.ageExempt.reason}`);
-		continue;
+	const ex = exemptOf.get(d.id)!;
+	if (ex.size) {
+		exempt.push(`${d.id}: ${[...ex].map(p => p.slice(0, 50)).join(', ')}: ${ageExemptReason(d.ageExempt)}`);
 	}
-	for (const p of d.pins) {
+	for (const p of d.pins.filter(x => !ex.has(x))) {
 		let m: RegExpExecArray | null;
 		if ((m = /^upstream:([0-9a-f]{40})$/.exec(p))) {
 			const sha = m[1];
@@ -78,8 +102,10 @@ for (const d of deps) {
 			// cooldown covers the release date.
 			const [, r, sha] = m;
 			items.push({ dep: d.id, what: p, date: () => commitDate(r, sha) });
-		} else if (/@sha256:[0-9a-f]{64}$/.test(p) && !/^(deb|asset|tool):/.test(p)) {
-			items.push({ dep: d.id, what: p, date: () => imageDate(p) });
+		} else if (isImagePin(p)) {
+			if (toJudge.has(p)) {
+				items.push({ dep: d.id, what: p, date: () => imageDate(p) });
+			}
 		} else if ((m = /^pip:(.+)$/.exec(p))) {
 			for (const [name, version] of pipPins(fs.readFileSync(path.join(repo, m[1]), 'utf8'))) {
 				items.push({ dep: d.id, what: `${name}==${version} (${m[1]})`, date: () => pypiDate(name, version) });
@@ -162,13 +188,16 @@ for (const r of results) {
 		console.log(`ok    ${line}`);
 	}
 }
+// What this run judged, so a run that judged nothing reads differently from one that passed (IMB-11).
+console.log(`pin-age: image pins judged as new or changed against the base: ${judged.judge.length ? judged.judge.map(p => p.slice(0, 60)).join(', ') : 'none'}`);
 for (const e of exempt) {
 	console.log(`exempt ${e}`);
 }
+bad.push(...refused);
 for (const b of bad) {
 	console.log(`FAIL  ${b}`);
 }
 console.log(bad.length
-	? `pin-age: ${bad.length} of ${results.length} pin(s) younger than ${minDays} days or undated (re-pin to a version at least ${minDays} days old; never wait out the CFS hold)`
-	: `pin-age: ok (${results.length} pins at least ${minDays} days old, ${exempt.length} exempt)`);
+	? `pin-age: ${bad.length} of ${results.length} pin(s) younger than ${minDays} days, undated or wrongly exempt (re-pin to a version at least ${minDays} days old; never wait out the CFS hold)`
+	: `pin-age: ok (${results.length} pins at least ${minDays} days old, ${judged.unchanged.length} image pin(s) unchanged since the base and not re-judged, ${exempt.length} exempt)`);
 process.exit(bad.length ? 1 : 0);

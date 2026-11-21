@@ -82,3 +82,59 @@ silicon), not by linux/amd64 alone (`imageDate` in `build/release-dates.ts`; tes
   was added or rebuilt (the `nginx:alpine` pin `fed7e14b…` holds a riscv64 image from
   2026-11-13, while its amd64 and arm64 images are from 2026-11-05). Accepted: those bytes are
   never fetched.
+
+## Addendum (review of PR 74, 2026-11-20): publication dates, for new and changed pins only
+The 7-day hold is about publication: nothing lands before it has been public for a week. The
+2026-11-18 addendum dated an index by the newest `created` of its linux/amd64 and linux/arm64
+images, and no image field is a publication date. `golang:1.27.4-trixie` was first pushed on
+2026-11-10 and re-pushed on 2026-11-16, under a new index digest, when riscv64 was added. Docker
+Official Images keep `created` across rebuilds, so the new digest read as 10 days old while Docker
+Hub's record said 4. Build times in provenance attestations fail the same way: a new index made of
+old images carries old build times however recently it was published.
+
+Decided by the coordinator, 2026-11-20 (option (a)):
+- **An image pin is dated only by a publication record.** For a tagged Docker Hub pin, that is the
+  tag's `tag_last_pushed` (`hub.docker.com/v2/repositories/<repo>/tags/<tag>`), and only while
+  the pinned digest is the tag's current one (`imageDate` in `build/release-dates.ts`). A digest
+  the tag has moved on from, a failed Hub lookup, an untagged pin and any other registry are
+  undated, and an undated pin fails. A tag record proves nothing about another digest, since
+  `tag@digest` pulls the digest whatever the tag says.
+- **Other registries** use a real publication date where one exists. None does today without a
+  credential: ghcr's packages API (version `created_at`) needs a token with `read:packages`, and an
+  anonymous request is refused. When such a pin is bumped (zizmor on ghcr), its entry needs an
+  `ageExempt`.
+- **`ageExempt` is a supply-chain exception** and needs the owner's approval, brought to the
+  coordinator one at a time with its reason. It covers only the exact pins it lists
+  (`ageExempt.pins`, review IMB-9): a bump falls outside it and is judged like any other pin, so
+  each new pin needs a new approval. pin-age and `build/deps.ts` refuse an exemption with no
+  reason (fewer than 20 characters), with no pins, or naming a pin the entry no longer holds.
+- **Only image pins that are new or changed are judged**, against main's register at the merge
+  base (`imagePinsToJudge`; `./seclab lint pin-age` reads `deps/registry.json` at
+  `git merge-base origin/main HEAD` and fails if there is no base). Locally `PIN_AGE_BASE`
+  overrides the base; CI ignores it. Each run prints the base commit and the pins it judged
+  (review IMB-11).
+
+**The change in guarantee for unchanged pins.** Before, every run re-dated every image pin, so
+pin-age asserted that every image on main was at least 7 days old by its build date, as of that
+run. Now an unchanged image pin isn't re-dated. From this change on, an image pin lands only with a
+publication record at least 7 days old, or an owner-approved exemption naming it: that is checked
+once, when it lands. A re-check can't do better, because once its tag moves on, Docker Hub holds
+no publication record for the pinned digest.
+
+The image pins already on main when this rule landed (2026-11-20) are grandfathered (review
+IMB-10). They were judged by build date (`created`, then provenance build times), which this
+addendum says isn't publication evidence, so for them the rule asserts nothing about publication.
+Two could not be dated under it at all: `ghcr.io/zizmorcore/zizmor` (another registry) and
+`nginx:alpine` (its tag has moved on). Each is judged by publication date, or brought to the owner
+for an exemption, at its next bump. pin-age reports them as "unchanged since the base and not
+re-judged", not as dated. On a push to main the merge base is main itself, so no image pin is judged
+there; the PR that added each pin was judged on a head containing current main (the ruleset's
+strict up-to-date rule). Non-image pins (commits, releases, PyPI and npm versions) are still
+re-dated on every run: their dates are publication facts that don't change.
+
+This also closes the 2026-11-18 residual (platforms we don't pull): Hub's record dates the push of
+the whole index. Tests (`build/release-dates.test.ts`): the re-pushed golang digest is dated
+inside the hold; a re-indexed digest of old images is undated and fails (the injected case, also
+run through `./seclab lint pin-age` with the 2026-11-10 golang index pinned); an old tag with a new
+digest; Hub down; another registry and an untagged pin; only the pins main lacks are judged; an
+exemption without a reason is refused.

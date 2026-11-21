@@ -63,7 +63,12 @@ test('pin-age: a cooldown below 7 days and an empty or foreign file list are ref
 	const days = run(['build/pin-age.ts', '--days', '0', '-']);
 	assert.equal(days.status, 2, days.stdout + days.stderr);
 	assert.match(days.stderr, /at least 7/);
-	const empty = spawnSync(process.execPath, ['build/pin-age.ts', '-'], { cwd: repo, encoding: 'utf8', input: '' });
+	const noBase = spawnSync(process.execPath, ['build/pin-age.ts', '-'], { cwd: repo, encoding: 'utf8', input: 'build/vsce/Dockerfile\0' });
+	assert.equal(noBase.status, 2, 'without main\'s register no image pin can be judged as new or changed');
+	assert.match(noBase.stderr, /--base FILE/);
+	const twice = spawnSync(process.execPath, ['build/pin-age.ts', '--base', 'deps/registry.json', '--base', 'deps/registry.json', '-'], { cwd: repo, encoding: 'utf8', input: 'build/vsce/Dockerfile\0' });
+	assert.equal(twice.status, 2, 'a second --base could shadow the computed one (IMB-11)');
+	const empty = spawnSync(process.execPath, ['build/pin-age.ts', '--base', 'deps/registry.json', '-'], { cwd: repo, encoding: 'utf8', input: '' });
 	assert.equal(empty.status, 1, empty.stdout + empty.stderr);
 	assert.match(empty.stdout, /file list \(0 Dockerfile\(s\), 0 npm pin\(s\)\) is empty or isn't this repository's/);
 	const foreign = spawnSync(process.execPath, ['build/pin-age.ts', '--list-npm', '-'], { cwd: repo, encoding: 'utf8', input: 'sandbox/oci/Dockerfile.tab\0' });

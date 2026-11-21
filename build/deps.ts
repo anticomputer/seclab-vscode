@@ -58,10 +58,10 @@ export interface Dep {
 	/** Update tracking for build/deps-outdated.ts. */
 	track?: { github?: string; version?: string };
 	/**
-	 * Exempt from the 7-day pin-age rule (build/pin-age.ts): why, and the EDR recording the
-	 * decision. Only for pins whose availability is proven otherwise or dictated by the host.
+	 * Exempt from the 7-day pin-age rule (build/pin-age.ts): why, the exact pins it covers, and the
+	 * EDR recording the owner-approved decision. Only for pins with no publication date.
 	 */
-	ageExempt?: { reason: string; record: string };
+	ageExempt?: { reason: string; record: string; pins?: string[] };
 }
 
 export interface TreePin {
@@ -239,9 +239,13 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 		// A pin-age exemption is a recorded decision that names this entry (EDR pin-age-cooldown).
 		if (d.ageExempt) {
 			const a = d.ageExempt;
-			if (!a.reason?.trim() || !/^docs\/edr\/[^/]+\.md$/.test(a.record ?? '') || !exists(a.record)
+			if ((a.reason?.trim().length ?? 0) < 20 || !/^docs\/edr\/[^/]+\.md$/.test(a.record ?? '') || !exists(a.record)
 				|| !new RegExp(`\`${d.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``).test(read(a.record) ?? '')) {
-				problems.push(`${at}: ageExempt needs a reason and an existing EDR record that lists \`${d.id}\``);
+				problems.push(`${at}: ageExempt needs a reason (at least 20 characters) and an existing EDR record that lists \`${d.id}\``);
+			}
+			// Scoped to the exact pins approved (IMB-9): a bump isn't covered by the old approval.
+			if (!Array.isArray(a.pins) || !a.pins.length || a.pins.some((p: unknown) => typeof p !== 'string' || !d.pins.includes(p))) {
+				problems.push(`${at}: ageExempt.pins must list the exact pins it covers, each one of the entry's pins`);
 			}
 		}
 		// A claimed verification must be implemented in the tree (apt verifies by default) (DD-3).
@@ -343,13 +347,17 @@ function selfTest(): number {
 	const base: Dep = { id: 'alpine', name: 'alpine', kind: 'oci-image', publisher: 'Docker Official Images', official: true, purpose: 'p', pins: [pin], used: ['x'], provenance: 'p', verify: 'v', bar: 'official-pinned', record: 'docs/adr/x.md', bump: 'b' };
 	const tree = [...pinsIn('x.sh', `docker run ${pin} true\n`), ...pinsIn('.github/workflows/a.yml', `  - uses: actions/checkout@${sha} # v7\n`),
 		...pinsIn('Dockerfile', `FROM ${pin}\nRUN apt-get install -y --no-install-recommends \\\n  git curl=8.1 \\\n && rm -rf x\n`), ...pinsIn('README.md', pin)];
+	const WHY = 'A reason long enough to be one.';
 	const cases: Array<[string, boolean]> = [
 		['tree pins', tree.length === 4 && tree.some(t => t.pin === `apt:Dockerfile:curl,git`)],
 		['unregistered action and apt set are found', validate([base], tree, () => true).filter(p => /unregistered/.test(p)).length === 2],
 		['stale registered pin', validate([{ ...base, pins: [pin, 'gone@sha256:' + 'c'.repeat(64)] }], tree.slice(0, 1), () => true).some(p => /no longer in the tree/.test(p))],
 		['exception needs an EDR', validate([{ ...base, bar: 'exception' }], tree.slice(0, 1), () => true).some(p => /needs an EDR/.test(p))],
-		['ageExempt needs an EDR listing the entry', validate([{ ...base, ageExempt: { reason: 'r', record: 'docs/edr/x.md' } }], tree.slice(0, 1), () => true, () => 'no mention').some(p => /ageExempt/.test(p))
-			&& validate([{ ...base, ageExempt: { reason: 'r', record: 'docs/edr/x.md' } }], tree.slice(0, 1), () => true, () => `\`${base.id}\``).every(p => !/ageExempt/.test(p))],
+		['ageExempt needs an EDR listing the entry', validate([{ ...base, ageExempt: { reason: WHY, record: 'docs/edr/x.md', pins: [pin] } }], tree.slice(0, 1), () => true, () => 'no mention').some(p => /ageExempt/.test(p))
+			&& validate([{ ...base, ageExempt: { reason: WHY, record: 'docs/edr/x.md', pins: [pin] } }], tree.slice(0, 1), () => true, () => `\`${base.id}\``).every(p => !/ageExempt/.test(p))],
+		// IMB-9: a short reason, and an exemption not scoped to the entry's exact pins, are refused.
+		['ageExempt needs a real reason and its exact pins', [{ reason: 'r', pins: [pin] }, { reason: WHY }, { reason: WHY, pins: [] }, { reason: WHY, pins: ['gone@sha256:' + 'c'.repeat(64)] }]
+			.every(a => validate([{ ...base, ageExempt: { ...a, record: 'docs/edr/x.md' } }], tree.slice(0, 1), () => true, () => `\`${base.id}\``).some(p => /ageExempt/.test(p)))],
 		['official-pinned needs official', validate([{ ...base, official: false }], tree.slice(0, 1), () => true).some(p => /requires an official/.test(p))],
 		['missing record file', validate([base], tree.slice(0, 1), () => false).some(p => /does not exist/.test(p))],
 		['clean', validate([base], tree.slice(0, 1), () => true).length === 0],
