@@ -1,12 +1,10 @@
 diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 --- a/src/vs/base/common/errors.ts	2026-11-20 21:26:11
-+++ b/src/vs/base/common/errors.ts	2026-11-20 21:26:11
-@@ -170,6 +170,56 @@
- 
- 	// return as is
++++ b/src/vs/base/common/errors.ts	2026-11-20 21:40:46
+@@ -172,6 +172,63 @@
  	return error;
-+}
-+
+ }
+ 
 +/**
 + * seclab: `error` as it may cross to a sandboxed tab. An error (or error-like object) keeps its name,
 + * message, code and cause, and its stack is only its first line, because a host stack names the
@@ -18,6 +16,11 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +export function seclabErrorForTab(error: unknown, depth = 0): unknown {
 +	const bare = (name: string, message: string) => Object.assign(new Error(message), { name, stack: message ? `${name}: ${message}` : name });
 +	try {
++		// A function serialises only through a `toJSON` of its own, which would run after the cleaning,
++		// so none is sent, a copied `toJSON` included (PR review on #78).
++		if (typeof error === 'function') {
++			return undefined;
++		}
 +		const e = error as { name?: unknown; message?: unknown; stack?: unknown; code?: unknown; cause?: unknown } | null;
 +		if (error instanceof Error || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)) {
 +			const clean: Error & { code?: unknown } = bare(String(e!.name ?? 'Error'), String(e!.message ?? ''));
@@ -42,22 +45,26 @@ diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 +			}
 +			// As JSON: `toJSON` once, its result walked but not asked again.
 +			const v: unknown = typeof (e as { toJSON?: unknown }).toJSON === 'function' ? (e as { toJSON(): unknown }).toJSON() : e;
++			if (typeof v === 'function') {
++				return undefined;
++			}
 +			if (!v || typeof v !== 'object') {
 +				return v;
 +			}
 +			if (Array.isArray(v)) {
 +				return v.map(x => seclabErrorForTab(x, depth + 1));
 +			}
-+			// No `toJSON` is copied: the serialiser would ask it again, after the cleaning (PR review on #78).
-+			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace' && k !== 'toJSON').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
++			return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, x]) => [k, seclabErrorForTab(x, depth + 1)]));
 +		}
 +		return error;
 +	} catch {
 +		return bare('Error', 'Unsupported operation');
 +	}
- }
- 
++}
++
  export function transformErrorFromSerialization(data: SerializedError): Error {
+ 	let error: Error;
+ 	if (data.noTelemetry) {
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
 --- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 21:26:11
 +++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 21:26:11

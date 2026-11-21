@@ -327,6 +327,9 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 		// PR review on #78: binary data with properties of its own, and a toJSON whose result has one.
 		binary: () => Object.assign(new Uint8Array([1, 2]), { detail: { stack: hostStack } }),
 		json2: () => ({ toJSON: () => ({ kept: `json2 ${NONCE}`, toJSON: () => ({ stack: hostStack }) }) }),
+		// A function with a toJSON of its own, as a field and as what toJSON returns.
+		fnfield: () => ({ kept: `fnfield ${NONCE}`, detail: Object.assign(() => 0, { toJSON: () => ({ stack: hostStack }) }) }),
+		fnjson: () => ({ toJSON: () => Object.assign(() => 0, { toJSON: () => ({ stack: hostStack }) }) }),
 		cyclic: () => {
 			const a: Record<string, unknown> = { kept: `cyclic ${NONCE}` };
 			a.self = a;
@@ -403,7 +406,7 @@ function judge(seen: Record<string, Seen>): string[] {
 			if (name === 'rpc-odd-plain' && !s.wire.includes(`kept ${NONCE}`)) {
 				problems.push(`${name}: the object's other fields were not sent`);
 			}
-			for (const kept of ['foreign', 'cyclic', 'selfjson', 'json2']) {
+			for (const kept of ['foreign', 'cyclic', 'selfjson', 'json2', 'fnfield']) {
 				if (name === `rpc-odd-${kept}` && !s.wire.includes(`${kept} ${NONCE}`)) {
 					problems.push(`${name}: the object's other fields were not sent`);
 				}
@@ -446,7 +449,7 @@ const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 // On a tree without 0062 (main before it) the "patched" case runs that tree's own series, and fails.
 const p0062 = existsSync(join(REPO, 'patches', P0062)) ? patchText(P0062) : undefined;
-const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-binary', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-foreign', 'rpc-odd-json2', 'rpc-odd-plain', 'rpc-odd-selfjson', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-binary', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-fnfield', 'rpc-odd-fnjson', 'rpc-odd-foreign', 'rpc-odd-json2', 'rpc-odd-plain', 'rpc-odd-selfjson', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
 // Main's window can fail to answer (an unreadable error throws inside upstream's reply); that is a
 // result here, not a crash of the suite.
 let unanswered = 0;
@@ -481,7 +484,7 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['the cause is passed on as it is', p => p.replace('+\t\t\t\tclean.cause = seclabErrorForTab(e!.cause, depth + 1);', '+\t\t\t\tclean.cause = e!.cause;'), /^rpc-ordinary: the window sent/],
 	['the cause is dropped', p => p.replace('+\t\t\t\tclean.cause = seclabErrorForTab(e!.cause, depth + 1);', '+\t\t\t\tvoid 0;'), /^rpc-ordinary: the cause or code was not sent/],
 	['only a tab context is not checked', p => p.replace('+\t\t\tif (seclabIsTabContext(this.ctx)) {', '+\t\t\tif (seclabIsTabContext(undefined)) {'), /^ipc-ordinary: the window sent/],
-	['nested stacks are kept', p => p.replace(".filter(([k]) => k !== 'stack' && k !== 'stacktrace' && k !== 'toJSON')", ".filter(([k]) => k !== 'toJSON')"), /^rpc-odd-plain: the window sent/],
+	['nested stacks are kept', p => p.replace(".filter(([k]) => k !== 'stack' && k !== 'stacktrace')", ''), /^rpc-odd-plain: the window sent/],
 	['an error-like object is passed as data', p => p.replace(" || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)", ''), /^rpc-odd-errorlike: the error's message did not arrive/],
 	['an unreadable error is not caught', p => p.replace('+\t} catch {\n+\t\treturn bare(', '+\t} finally {\n+\t\tvoid bare(').replace("bare('Error', 'Unsupported operation');", "bare('Error', 'Unsupported operation'), 0;"), /^rpc-odd-unreadable: the tab got no reply/],
 	['only plain objects are walked', p => p.replace("+\t\tif (e && typeof e === 'object') {", "+\t\tif (e && typeof e === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(e))) {"), /^rpc-odd-foreign: the window sent/],
@@ -489,7 +492,8 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['the depth is not bounded', p => p.replace('+\t\t\tif (depth >= 8) {\n+\t\t\t\treturn undefined;\n+\t\t\t}\n', ''), /^rpc-odd-cyclic: (the reply is unbounded|the object's other fields were not sent|the tab got no reply)/],
 	['toJSON is asked again', p => p.replace("+\t\t\tif (!v || typeof v !== 'object') {", "+\t\t\tif (v !== e || typeof (e as { toJSON?: unknown }).toJSON === 'function') {\n+\t\t\t\treturn seclabErrorForTab(v, depth + 1);\n+\t\t\t}\n+\t\t\tif (!v || typeof v !== 'object') {"), /^rpc-odd-selfjson: the object's other fields were not sent/],
 	['binary data passes as it is', p => p.replace('+\t\t\t\treturn new Uint8Array(e.buffer, e.byteOffset, e.byteLength).slice();', '+\t\t\t\treturn e;'), /^rpc-odd-binary: the window sent/],
-	['a toJSON is copied', p => p.replace(" && k !== 'toJSON'", ''), /^rpc-odd-json2: the window sent/],
+	['a function field is kept', p => p.replace("+\t\tif (typeof error === 'function') {\n+\t\t\treturn undefined;", "+\t\tif (typeof error === 'function') {\n+\t\t\treturn error;"), /^rpc-odd-fnfield: the window sent/],
+	['a function from toJSON is kept', p => p.replace("+\t\t\tif (typeof v === 'function') {\n+\t\t\t\treturn undefined;", "+\t\t\tif (typeof v === 'function') {\n+\t\t\t\treturn v;"), /^rpc-odd-fnjson: the window sent/],
 ];
 mutants.forEach(([name, mutate, expected], i) => {
 	test(`rejects the mutant "${name}"`, async () => {
