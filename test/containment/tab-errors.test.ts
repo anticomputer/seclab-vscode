@@ -27,6 +27,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as vm from 'node:vm';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SRC = process.env.SECLAB_UPSTREAM_SRC;
@@ -316,8 +317,21 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 	const hostStack = new Error('host').stack!;
 	const odd: Record<string, () => unknown> = {
 		plain: () => ({ data: { stack: hostStack, detail: `kept ${NONCE}` }, list: [{ stacktrace: hostStack }] }),
-		errorlike: () => new (class ForeignError { name = 'Error'; message = `like ${NONCE}`; stack = hostStack; })(),
+		errorlike: () => vm.runInNewContext(`new Error(${JSON.stringify(`like ${NONCE}`)})`),
 		unreadable: () => Object.defineProperty(new Error('x'), 'message', { get() { throw new Error('unreadable'); } }),
+		// TE-9: an instance of another class carrying a stack below it; TE-13: a cycle, and a chain
+		// deeper than the bound with a stack at its end.
+		foreign: () => new (class Wrapped { kept = `foreign ${NONCE}`; detail = { stack: hostStack }; })(),
+		cyclic: () => {
+			const a: Record<string, unknown> = { kept: `cyclic ${NONCE}` };
+			a.self = a;
+			let deep: Record<string, unknown> = { stack: hostStack };
+			for (let i = 0; i < 10; i++) {
+				deep = { deeper: deep };
+			}
+			a.deep = deep;
+			return a;
+		},
 	};
 	const errorsId = ids.createProxyIdentifier('MainThreadErrors');
 	windowSide.set(errorsId, {
@@ -326,11 +340,11 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 	for (const name of Object.keys(odd)) {
 		const before = p.sent.length;
 		const settled = await Promise.race([
-			tabSide.getProxy(errorsId).$onUnexpectedError(name).then(() => 'resolved', () => 'rejected'),
-			new Promise(r => setTimeout(() => r('no reply'), 2000)),
+			tabSide.getProxy(errorsId).$onUnexpectedError(name).then(() => ({ how: 'resolved', message: '' }), (e: { message?: unknown } | undefined) => ({ how: 'rejected', message: String(e?.message ?? '') })),
+			new Promise<{ how: string; message: string }>(r => setTimeout(() => r({ how: 'no reply', message: '' }), 2000)),
 		]);
 		const sent = p.sent.slice(before);
-		seen[`rpc-odd-${name}`] = { name: String(settled), message: '', stack: undefined, acked: sent.length > 1 && sent[0][0] === 5, wire: sent.map(b => Buffer.from(b).toString('latin1')).join('\n') };
+		seen[`rpc-odd-${name}`] = { name: settled.how, message: settled.message, stack: undefined, acked: sent.length > 1 && sent[0][0] === 5, wire: sent.map(b => Buffer.from(b).toString('latin1')).join('\n') };
 	}
 
 	// ---- IPC: the channels a tab's server calls on the window, with the tab's connection context.
@@ -384,6 +398,18 @@ function judge(seen: Record<string, Seen>): string[] {
 			if (name === 'rpc-odd-plain' && !s.wire.includes(`kept ${NONCE}`)) {
 				problems.push(`${name}: the object's other fields were not sent`);
 			}
+			for (const kept of ['foreign', 'cyclic']) {
+				if (name === `rpc-odd-${kept}` && !s.wire.includes(`${kept} ${NONCE}`)) {
+					problems.push(`${name}: the object's other fields were not sent`);
+				}
+			}
+			// An error of another realm (instanceof misses it) still reaches the tab as an error.
+			if (name === 'rpc-odd-errorlike' && s.message !== `like ${NONCE}`) {
+				problems.push(`${name}: the error's message did not arrive`);
+			}
+			if (s.wire.length > 65536) {
+				problems.push(`${name}: the reply is unbounded (${s.wire.length} bytes)`);
+			}
 			continue;
 		}
 		const header = s.message ? `${s.name}: ${s.message}` : s.name;
@@ -415,7 +441,7 @@ const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 // On a tree without 0062 (main before it) the "patched" case runs that tree's own series, and fails.
 const p0062 = existsSync(join(REPO, 'patches', P0062)) ? patchText(P0062) : undefined;
-const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-errorlike', 'rpc-odd-plain', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-cyclic', 'rpc-odd-errorlike', 'rpc-odd-foreign', 'rpc-odd-plain', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
 // Main's window can fail to answer (an unreadable error throws inside upstream's reply); that is a
 // result here, not a crash of the suite.
 let unanswered = 0;
@@ -451,8 +477,10 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['the cause is dropped', p => p.replace('+\t\t\t\tclean.cause = seclabErrorForTab(e!.cause, depth + 1);', '+\t\t\t\tvoid 0;'), /^rpc-ordinary: the cause or code was not sent/],
 	['only a tab context is not checked', p => p.replace('+\t\t\tif (seclabIsTabContext(this.ctx)) {', '+\t\t\tif (seclabIsTabContext(undefined)) {'), /^ipc-ordinary: the window sent/],
 	['nested stacks are kept', p => p.replace(".filter(([k]) => k !== 'stack' && k !== 'stacktrace')", ''), /^rpc-odd-plain: the window sent/],
-	['an error-like object is passed as data', p => p.replace(" || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)", ''), /^rpc-odd-errorlike: the window sent/],
+	['an error-like object is passed as data', p => p.replace(" || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)", ''), /^rpc-odd-errorlike: the error's message did not arrive/],
 	['an unreadable error is not caught', p => p.replace('+\t} catch {\n+\t\treturn bare(', '+\t} finally {\n+\t\tvoid bare(').replace("bare('Error', 'Unsupported operation');", "bare('Error', 'Unsupported operation'), 0;"), /^rpc-odd-unreadable: the tab got no reply/],
+	['only plain objects are walked', p => p.replace("+\t\tif (e && typeof e === 'object') {", "+\t\tif (e && typeof e === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(e))) {"), /^rpc-odd-foreign: the window sent/],
+	['the depth is not bounded', p => p.replace('+\t\t\tif (depth >= 8) {\n+\t\t\t\treturn undefined;\n+\t\t\t}\n', ''), /^rpc-odd-cyclic: the reply is unbounded/],
 ];
 mutants.forEach(([name, mutate, expected], i) => {
 	test(`rejects the mutant "${name}"`, async () => {
