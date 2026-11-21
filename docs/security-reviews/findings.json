@@ -50,7 +50,6 @@
 	"baseline": [
 		"20261104-probe-safety.md#3#2",
 		"20261104-probe-safety.md#5",
-		"20261105-agent-host-patches.md#3",
 		"20261105-rpc-filter-rereview.md#4",
 		"20261105-secure-agentic-experiences-design.md#2",
 		"20261105-secure-agentic-experiences-design.md#3",
@@ -5707,8 +5706,13 @@
 			"summary": "All six AI probes were declared required and none existed; their policyRefs could not match coverage.json by construction.",
 			"component": "containment probes (trusted AI surface)",
 			"owner": "rpc",
-			"status": "open",
-			"gap": "All six ai-* probes are now implemented and required: the dial in reh-push (review 20261119-ai-dial-probe.md); the other five in test/containment/ai-probe.ts and ai-agent-host-probe.ts on the containment variant's scripted stand-in agent (EDR 20261120-ai-probes, review 20261120-ai-probes.md). The high closes in a follow-up once that change is on main; the autoapprove probe's tool-call leg is deferred (AIP-6)."
+			"status": "fixed",
+			"commit": "2a2e34517dc2e65287f8aaf3903ada524765fc3a",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "the AI chat probes are judged from the harness record, with the ordinary-window control"
+			},
+			"note": "All six ai-* probes are implemented and required: the dial in reh-push (review 20261119-ai-dial-probe.md); the other five in test/containment/ai-probe.ts and ai-agent-host-probe.ts on the containment variant's scripted stand-in agent (EDR 20261120-ai-probes, review 20261120-ai-probes.md, which records the runs on the patched build and the build-only baseline without 0009, 0010 and 0018). The autoapprove probe's tool-call leg is deferred (AIP-6)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
