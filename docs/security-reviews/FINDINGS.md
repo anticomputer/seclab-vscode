@@ -16,13 +16,13 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 316 | 480 | 62 | 974 |
-| fixed-before-landing | 2 | 8 | 3 | 7 | 1 | 21 |
+| fixed-before-landing | 2 | 8 | 3 | 9 | 1 | 23 |
 | fixed-untested | 0 | 5 | 67 | 212 | 88 | 372 |
 | accepted-residual | 0 | 2 | 13 | 76 | 29 | 120 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 9 | 12 | 8 | 30 |
 | false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 803 | 223 | 1585 |
+| **all** | 18 | 119 | 422 | 805 | 223 | 1587 |
 
 ## Baseline: open high and critical findings
 
@@ -2794,6 +2794,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | PR78-2 | low | fixed-before-landing | A toJSON on the result of toJSON was copied, and the serialiser asked it again after the cleaning. | patch:815690f85674d4e4ccd83353af8c2f06fed676e7 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:51c10863ce4759f5d0fac76dc1452d13fd587256 |
 | PR78-3 | low | fixed-untested | The runtime harness cloned the app before its manifest and exit handler were in place, so a failed copy left the clone and the armed workspace. | A test harness correction; nothing to test. |
 | PR78-4 | low | fixed-before-landing | A function, as a field or as what toJSON returns, was sent as it was, and a toJSON of its own ran in the serialiser after the cleaning. | patch:ec3bf45a1abf156b19401eea105ad56f92bd8652 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:815690f85674d4e4ccd83353af8c2f06fed676e7 |
+| PR78-5 | low | fixed-before-landing | A rejected buffer was copied with its own slice, which takes the input's species, so a subclass could add a stack to the copy. | patch:7870648611b27c96fc1d558adb4e9a5493c09df7 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:ec3bf45a1abf156b19401eea105ad56f92bd8652 |
+| PR78-6 | low | fixed-before-landing | A rejected array was copied with its own map, which an array can override and whose species a subclass chooses, so either could put a stack back. | patch:7870648611b27c96fc1d558adb4e9a5493c09df7 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:ec3bf45a1abf156b19401eea105ad56f92bd8652 |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

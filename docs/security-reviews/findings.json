@@ -23320,6 +23320,46 @@
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-4's function field"
 			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-5",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "A rejected buffer was copied with its own slice, which takes the input's species, so a subclass could add a stack to the copy.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:7870648611b27c96fc1d558adb4e9a5493c09df7",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:ec3bf45a1abf156b19401eea105ad56f92bd8652",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-5's buffer and PR78-6's arrays"
+			}
+		},
+		{
+			"record": "20261120-tab-errors.md",
+			"anchor": "PR78-6",
+			"round": "PR review on #78",
+			"severity": "low",
+			"summary": "A rejected array was copied with its own map, which an array can override and whose species a subclass chooses, so either could put a stack back.",
+			"component": "patch 0062: errors that cross to a tab",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:7870648611b27c96fc1d558adb4e9a5493c09df7",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "patch:ec3bf45a1abf156b19401eea105ad56f92bd8652",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261120-tab-errors.md",
+				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-5's buffer and PR78-6's arrays"
+			}
 		}
 	]
 }

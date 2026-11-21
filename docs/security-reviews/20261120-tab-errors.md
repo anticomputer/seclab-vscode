@@ -74,3 +74,10 @@ Copilot's review of the pull request. On its head the case "patched: every refus
 | PR78-4 | Low | patch 0062 | A function, as a field or as what `toJSON` returns, was sent as it was, and a `toJSON` of its own ran in the serialiser after the cleaning. | fixed | No function is sent. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
 
 On the head before PR78-4's fix the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with PR78-4's function field and function from toJSON sending a host stack.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PR78-5 | Low | patch 0062 | A rejected buffer was copied with its own `slice`, which takes the input's species, so a subclass could add a stack to the copy. | fixed | A buffer is copied through a new `Uint8Array`. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+| PR78-6 | Low | patch 0062 | A rejected array was copied with its own `map`, which an array can override and whose species a subclass chooses, so either could put a stack back. | fixed | An array is rebuilt by index into a plain array. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
+
+On the head before these two fixes the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with PR78-5's buffer and PR78-6's arrays sending a host stack.
