@@ -181,10 +181,12 @@ RPC-lockdown session adds. Keep them consistent with this file.
      Replies are public: run them through `./seclab scan-text` first, with no internal detail.
      A push gets a new review, so repeat this step. A review that arrives after the merge is
      handled in a follow-up PR.
-  6. If the PR touches `.github/workflows/**`, `seclab` or anything under `build/`, message the
-     coordinator and wait for its go-ahead before arming. The required jobs run that code, so a
-     change to it can make them pass vacuously ([EDR](docs/edr/20261117-required-jobs-gate.md),
-     RJG-1). Then `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks
+  6. If the PR touches `.github/workflows/**`, `seclab`, anything under `build/` or
+     `deps/registry.json`, message the coordinator and wait for its go-ahead before arming. The
+     required jobs run that code, so a change to it can make them pass vacuously
+     ([EDR](docs/edr/20261117-required-jobs-gate.md), RJG-1); and an `ageExempt` in the register
+     is an owner-approved exception that only this review checks
+     ([EDR](docs/edr/20261106-pin-age-cooldown.md)). Then `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks
      pass and every thread is resolved.
   7. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
      <number> --rebase`, and the checks re-run (`patch:` citations survive it). If that fails on a
