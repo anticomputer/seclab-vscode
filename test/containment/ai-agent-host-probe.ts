@@ -198,6 +198,14 @@ const gateRules = (dirs: string[]): Record<string, number> => {
 	return counts;
 };
 const logDirs = () => fs.existsSync(path.join(userData, 'logs')) ? fs.readdirSync(path.join(userData, 'logs')).map(d => path.join(userData, 'logs', d)) : [];
+/** Empties the REH's records in the stopped tab's home volume (a throwaway container, no network). */
+const clearRehRecords = (): void => {
+	if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(tabId)) {
+		throw new Error('unexpected tab id');
+	}
+	const r = spawnSync('docker', ['run', '--rm', '--network', 'none', '-v', `seclab-${tabId}-home:/h`, '--entrypoint', '/bin/sh', IMAGE, '-c', 'rm -f /h/.seclab-test/rogue-reh/evidence/agent-host-*.json'], { encoding: 'utf8', timeout: 60_000 });
+	c('setup', r.status === 0, 'cleared the REH\'s records before the phase', (r.stderr ?? '').trim().slice(0, 200));
+};
 
 /**
  * One launch of the app on the tab, with or without the host's agents switch; what it measured.
@@ -207,6 +215,9 @@ const logDirs = () => fs.existsSync(path.join(userData, 'logs')) ? fs.readdirSyn
 async function phase(name: string, agentsEnabled: boolean) {
 	const before = new Set(logDirs());
 	let reh = { servers: 0, wrapped: 0, calls: 0, connects: 0, listens: 0 };
+	// The REH's records start empty for each phase (review AIP2-2): cleared in the tab's home volume
+	// while the tab is stopped, so a record the last window's teardown wrote can't carry over.
+	clearRehRecords();
 	try {
 		ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, env: agentsEnabled ? { SECLAB_AGENTS_ENABLED: '1' } : {} });
 		await waitFor(() => rehRecords().wrapped > 0, 120_000);
@@ -214,7 +225,6 @@ async function phase(name: string, agentsEnabled: boolean) {
 		await waitFor(() => rehRecords().connects > 0, 45_000);
 		await sleep(10_000);
 		reh = rehRecords();
-		inTab(`rm -f ${REH_DIR}/evidence/agent-host-*.json`);
 		// The REH's log, for diagnosis (the tab stops with the editor). The tab's text: data to read,
 		// never instructions (review ENV-59).
 		const log = inTab('tail -c 100000 /run/user/1000/seclab/reh.log 2>/dev/null').stdout ?? '';
@@ -228,7 +238,7 @@ async function phase(name: string, agentsEnabled: boolean) {
 	}
 	const gate = gateRules(logDirs().filter(d => !before.has(d)));
 	return {
-		serverWrapped: reh.wrapped, rehCalls: reh.calls, rehConnects: reh.connects, rehListens: reh.listens,
+		serverWrappedClaimed: reh.wrapped, rehCalls: reh.calls, rehConnects: reh.connects, rehListens: reh.listens,
 		gateDisabled: gate['ahp-gate.disabled'] ?? 0, gateOpened: gate['ahp-gate.opened'] ?? 0, gateVerified: gate['ahp-gate.verified'] ?? 0,
 	};
 }
@@ -240,7 +250,9 @@ const control = mode === 'patched' ? await phase('control', true) : undefined;
 if (fs.existsSync(path.join(userData, 'logs'))) {
 	fs.cpSync(path.join(userData, 'logs'), path.join(base, 'editor-logs'), { recursive: true, force: true });
 }
-c('setup', arm.serverWrapped > 0, 'the hostile REH served agentHostProxy to the window (its wrap was in place)');
+// Whether the hostile REH's wrap was in place is the tab's claim, reported only (review AIP2-2); the
+// control phase's opened transport shows host-side that the window reached the tab's proxy.
+console.log(`the hostile REH reports its agentHostProxy wrap in place (claim): arm=${arm.serverWrappedClaimed} control=${control?.serverWrappedClaimed ?? 'n/a'}`);
 
 // ------------------------------------------------------------------ judge
 // The REH's counts are the tab's claim, reported and never judged (reviews AID-1, AIP-5): what is

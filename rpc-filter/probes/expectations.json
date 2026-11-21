@@ -13,7 +13,7 @@
       "why": "a rogue agent host asserts _meta.autoApproveBySetting for a host tool. With agents off for the host (the default, and the only configuration this build opens) a tab window makes no agent-host connection, so no agent host can ask for anything; the tool-call leg itself needs chat open in tab windows, which is not (project owner decision, 2026-11-17)",
       "runner": "ai-agent-host-probe",
       "patchedOutcome": "succeeded",
-      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy and refuses every connect. Judged from patch 0015's host-side gate log only: with agents off for the host the tab window opens no agent-host transport (ahp-gate.opened absent) and the gate logs its refusal (ahp-gate.disabled), while the same app relaunched with SECLAB_AGENTS_ENABLED=1 opens one (the positive control). The REH's call counts are the tab's claim, reported only. Written to harness-probes.json and judged here."
     },
     "ai-agent-host-token-push": {
       "required": true,
@@ -22,7 +22,7 @@
       "why": "a rogue REH serves agentHostProxy and advertises api.github.com in protectedResources; the client would resolve the user's auth session and forward the real accessToken. Client->server, so neither the RPC choke point nor the channel guard sees it",
       "runner": "ai-agent-host-probe",
       "patchedOutcome": "succeeded",
-      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy and refuses every connect. Judged from patch 0015's host-side gate log only: with agents off for the host the tab window opens no agent-host transport (ahp-gate.opened absent) and the gate logs its refusal (ahp-gate.disabled), while the same app relaunched with SECLAB_AGENTS_ENABLED=1 opens one (the positive control). The REH's call counts are the tab's claim, reported only. Written to harness-probes.json and judged here."
     },
     "ai-disable-ai-features-reenable": {
       "required": true,
@@ -31,7 +31,7 @@
       "why": "chat.disableAIFeatures is WINDOW scope and the tab supplies remote user settings, so a tab-written false must not revive the agent host client",
       "runner": "ai-agent-host-probe",
       "patchedOutcome": "succeeded",
-      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy, counts every call that arrives and refuses every connect; with agents off for the host the window makes no connection (the REH's count, corroborated by the host-side gate log), and the same app relaunched with SECLAB_AGENTS_ENABLED=1 does connect (the positive control); written to harness-probes.json and judged here."
+      "measuredBy": "test/containment/ai-agent-host-probe.ts: the tab's REH serves agentHostProxy and refuses every connect. Judged from patch 0015's host-side gate log only: with agents off for the host the tab window opens no agent-host transport (ahp-gate.opened absent) and the gate logs its refusal (ahp-gate.disabled), while the same app relaunched with SECLAB_AGENTS_ENABLED=1 opens one (the positive control). The REH's call counts are the tab's claim, reported only. Written to harness-probes.json and judged here."
     },
     "ai-instructions-tool-call": {
       "required": true,
