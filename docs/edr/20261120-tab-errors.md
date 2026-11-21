@@ -1,7 +1,7 @@
-# An error that crosses to a tab carries no host stack, and a refusal reads as upstream's own
+# An error that crosses to a tab carries no host stack, and a refusal answers in upstream's form
 
 - **Date:** 2026-11-20
-- **Status:** accepted. Runtime proof: see below.
+- **Status:** accepted. Runtime proof: baseline recorded below; the patched run is pending.
 - **Owner:** the RPC follow-ups session (register owner `rpc`).
 - **Related:** [review record](../security-reviews/20261120-tab-errors.md), the AI-feature probes
   review that found it (AIP-4), [RPC lockdown](../RPC-LOCKDOWN.md) section 8.2 (hard denial reads
@@ -42,8 +42,19 @@ Patch 0062, and the refusal text of 0030 and 0015:
 
 Every refusal a tab can receive is now `Error: Unsupported operation` with a one-line stack,
 acknowledged like any failure, or upstream's own text for that request. It is still a failure of a
-call upstream would serve, so the tab knows the call failed; it learns nothing of why, of the
-policy, or of the host.
+call upstream would serve, so the tab knows the call failed, and a tab that knows upstream's
+answer for a call (`command 'x' not found` for a command it knows exists, say) can still tell that
+some layer refused it: the policy keeps one refusal message (RPC-LOCKDOWN 8.2) rather than
+mimicking each call's failure. What it no longer learns is the host: no path, user name or frame,
+and no filter internals. The same holds for 0030: its text is upstream's, but upstream never
+refuses its four remote CLI commands and stays silent for a terminal the window doesn't own,
+where 0030 answers every push (review TE-3). The tab's server knows it is a tab's server either
+way.
+
+Anything `seclabErrorForTab` can't read (a throwing getter, say) becomes `Error: Unsupported
+operation`, so the tab always gets an answer (TE-2). An error-like object (a string `stack` and a
+`message`, from another realm, say) is cleaned as an error, and a plain object or array loses every
+`stack` and `stacktrace` however deep (TE-1); other objects are sent as upstream sends them.
 
 Not tab-facing, checked: patch 0009's throws reach a tab only as RPC replies (cleaned); 0031
 answers with the text unresolved (no error); 0050's refusal is a launch message shown in the window;
@@ -57,27 +68,38 @@ request the policy denies to a tab.
   `./seclab test rpc-filter`) runs upstream's real `RPCProtocol`, `ChannelServer` and
   `ChannelClient`, with every series patch applied, loaded from a virtual install path holding a
   canary user name. For the filter's refusal, the command taint's, the fail-closed route's, 0009's
-  throw, the unguarded channel refusal, the channel guard's and an ordinary failure on each
-  protocol, it checks the window's raw bytes and the error the tab builds: no canary, install
-  path, frame or filter name; a one-line stack; acknowledged; the ordinary failure's message,
-  code and cause still sent (the control). It also pins 0030's and the gate's answers to
-  upstream's text in the pinned source. On main (`d34da65f`) the case "patched: every refusal and
-  the ordinary failure reach the tab with no host stack (AIP-4)" fails: every call sends its
-  frames, and the refusal names the canary path and `_deny`. Every mutant of 0062 is caught.
+  throw (its message read from the patch), the unguarded channel refusal, the channel guard's and
+  an ordinary failure on each protocol, it checks the window's raw bytes and the error the tab
+  builds: no canary, install path, frame or filter name; a one-line stack; acknowledged; the
+  ordinary failure's message, code and cause still sent (the control). Three rejections that aren't
+  plain errors (a plain object with stacks at depth, an error-like object of another class, an
+  error whose message throws) must each be answered with no host detail. It also pins 0030's and
+  the gate's answers to upstream's text in the pinned source. On main (`d34da65f`) the case
+  "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+  fails: every call sends its frames, the refusal names the canary path and `_deny`, and the
+  unreadable error gets no reply. Every mutant of 0062 is caught.
 - **Runtime:** `test/containment/error-probe.ts` in a real OCI tab of the containment build. The
-  run clones the app into a directory named for a canary, and a tab extension makes a call the
-  filter refuses, a command it refuses, and an ordinary failing call (the control), logging each
-  stack it receives to its own log. The harness reads the tab's logs in memory and looks for the
-  canary and the app's bundle path.
-  - Baseline: pending.
+  run clones the app (APFS clone) into a directory named for a canary under
+  `.work/test-builds/`, and a tab extension makes a call the filter refuses (`getCommands`), a
+  command it refuses, and an ordinary failing call (opening a missing file of its own workspace,
+  the control), logging each stack it receives to its own log. The harness reads the tab's logs
+  in memory and judges from them, not from the extension's facts (review TE-5): each logged stack's
+  header and length, its frames, and the canary and the app's bundle path anywhere in the logs.
+  - Baseline: main `d34da65f`, containment build run 44841250059: 10/10. Both refusals reached
+    the tab as `Error: Unsupported operation` with 32 and 33 stack lines of host frames naming the
+    canary install path; the control's stack carried them too; the canary and the bundle path are
+    in the tab's log. Teardown clean.
   - Patched: pending.
+- **`fixture:test/containment/error-probe`:** run by `test/containment/error-probe.ts` in both
+  modes on 2026-11-20 (runs above).
 
 ## Consequences
 - Diagnosing a failure a tab sees needs the window's logs: the tab gets the message only. The
   decision log already holds every refusal.
 - Errors a tab's server sends the window over IPC are cleaned on the server too (the server's
   connection context is the tab's authority); the window's view of a server failure keeps its
-  message and loses the server's stack.
+  message and loses the server's stack. The IPC logger, when tracing is on, sees the cleaned reply
+  (review TE-7).
 - A message can still carry host detail if upstream puts it there (a host file path in an
   allowed call's failure, say). That is the call's answer, not its stack, and is judged per
   surface by the policy.

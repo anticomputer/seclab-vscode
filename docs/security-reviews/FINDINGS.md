@@ -16,13 +16,13 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 315 | 480 | 62 | 973 |
-| fixed-before-landing | 2 | 8 | 3 | 1 | 0 | 14 |
-| fixed-untested | 0 | 5 | 67 | 209 | 82 | 363 |
-| accepted-residual | 0 | 2 | 13 | 75 | 27 | 117 |
+| fixed-before-landing | 2 | 8 | 3 | 3 | 0 | 16 |
+| fixed-untested | 0 | 5 | 67 | 211 | 84 | 367 |
+| accepted-residual | 0 | 2 | 13 | 76 | 28 | 119 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 10 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 793 | 214 | 1566 |
+| **all** | 18 | 119 | 422 | 798 | 217 | 1574 |
 
 ## Baseline: open high and critical findings
 
@@ -538,6 +538,9 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-1** | low | fixed-untested | probes: AI features (agent-host-patches#3) | The agent-host probes' measuredBy still named the REH's count as the measurement after the gate log became the only judged source. | A record correction in expectations.json; nothing to test. |
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-2** | low | fixed-untested | probes: AI features (agent-host-patches#3) | A setup check failed the run on the REH's own wrap record, and records a window's teardown wrote could carry into the next phase. | Harness bookkeeping: no verdict reads these facts (check-probes judges the gate log only); the final runs show per-phase counts. |
 | [20261120-ai-probes](20261120-ai-probes.md) **AIP2-3** | low | accepted-residual | fixture: test/containment/ai-tab-probe | The tab probe's port pin comes from a run record inside the tab's writable extensions directory, so it is not independent of the tab. | accepted by an agent: Nothing inside a tab is independent of it, the extension's code included, and the tab's environment is cleared; the fixture does nothing a hostile tab couldn't, and the RPC filter denies the call in every build. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-3** | low | accepted-residual | patch 0030: remote CLI push refusal | 0030's answer is upstream's text, but upstream never refuses its four remote CLI commands and stays silent for a terminal the window doesn't own, so the tab's server can still tell a refusal from upstream's behaviour. | accepted by an agent: The tab's server knows it serves a tab; what the fix removes is the policy name and the host stack. Recorded in the EDR. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-4** | low | fixed-untested | tests: error probes | The unit suite built 0009's error itself, so a change to 0009's message would have passed. | A test correction; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-5** | low | fixed-untested | tests: error probes | The runtime harness judged stack shape from facts the extension writes inside the tab. | A test correction; nothing to test. |
 | [20261104-rpc-probes-increment](20261104-rpc-probes-increment.md) **PR-M4** | info | open | containment probes (raw RPC) | The raw-RPC test hook does not exist, so the two raw-RPC probes report ERROR. | No test hook provides the raw main-thread RPC handle; the probes remain ERROR and the identity-spoof surface is unmeasured. |
 | [20261104-supply-chain](20261104-supply-chain.md) **info** | info | fixed-untested | rpc-filter/tools/test.sh | \`--platform linux/arm64\` was pinned in the RPC filter's test.sh while CI runs on x86. | The flag is gone (multi-arch digest), but nothing asserts that no platform override returns. |
 | [20261104-write-back-engine](20261104-write-back-engine.md) **note#2** | info | deferred | RPC capability filter (M4) | Until the M4 RPC filter enforces, a rogue extension can invoke seclab.reviewChanges/confirmDeletes to pop dialogs (a click is still needed). | follow-up: RPC capability filter series (patches 0005-0011 / 0030-0034, \`rpc\` session): \`seclab.*\` must stay outside the filter's allowed set. Not on main: patches/series has only the reserved ranges, no filter patch. |
@@ -568,6 +571,9 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-59** | info | fixed-untested | patch 0059: tab server locations and host extension management | The saved REH log is the tab's text, unmarked. | A record, harness or test-fixture correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-65** | info | fixed-untested | patch 0059: tab server locations and host extension management | Round 15 made \`_reset\` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | Upstream code restored; nothing of ours to test. |
 | [20261118-tab-terminal-settings](20261118-tab-terminal-settings.md) **R5-7** | info | fixed-untested | patches 0053-0058: terminal settings in tab windows | The change had no EDR. | A record; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-6** | info | fixed-untested | patch 0062: errors that cross to a tab | The EDR and liveness entry read as complete while the runtime runs were pending. | A record correction; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-7** | info | accepted-residual | patch 0062: errors that cross to a tab | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted by an agent: Fail-safe: the server's stacks are the tab's own. Recorded in the EDR. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-8** | info | fixed-untested | patch 0062: errors that cross to a tab | One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | A record correction; nothing to test. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **RPC-R3** | info | accepted-residual | rpc-filter policy coverage | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 
 ### Security findings register
@@ -2759,6 +2765,19 @@ Every other commit the register cites is on main's history, or on the branch its
 | RMP-1 | medium | fixed | The refusal of pushes to main returned its message's exit status, so with stderr closed a push to main went on to the scans and out. | patch:e0c1860789c1d06ba89a98ccef28b0c15925c256 · `test/hooks/hook-lock.test.sh` "a push to main with stderr closed is still refused (RMP-1)" |
 | RMP-2 | low | accepted-residual | The refusal applies to refs/heads/main on every remote, so pushing main to a fork or mirror needs --no-verify, which skips both scans. | accepted by an agent: The coordinator's rule (2026-11-20) is any push whose remote ref is refs/heads/main: a remote's name doesn't say which repository it is, and this clone's work reaches main only through a PR. Documented in the hook and EDR pr-landing. |
 | RMP-3 | info | false-positive | Prompt injection. | The review recorded no issue. |
+
+### [20261120-tab-errors](20261120-tab-errors.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| TE-1 | low | fixed-before-landing | A rejection that isn't an Error lost only a top-level stack; a plain object carrying one deeper, or an error-like object of another class, passed as it was. | patch:114ce16b67f62515af848bdb3475cd2569e021f4 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:f8637374fdcceef3565613ee12fcb16da4f4bd77 |
+| TE-2 | low | fixed-before-landing | An error whose fields throw when read made the cleaning throw inside the reply handler, so the tab's call never settled. | patch:114ce16b67f62515af848bdb3475cd2569e021f4 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:f8637374fdcceef3565613ee12fcb16da4f4bd77 |
+| TE-3 | low | accepted-residual | 0030's answer is upstream's text, but upstream never refuses its four remote CLI commands and stays silent for a terminal the window doesn't own, so the tab's server can still tell a refusal from upstream's behaviour. | accepted by an agent: The tab's server knows it serves a tab; what the fix removes is the policy name and the host stack. Recorded in the EDR. |
+| TE-4 | low | fixed-untested | The unit suite built 0009's error itself, so a change to 0009's message would have passed. | A test correction; nothing to test. |
+| TE-5 | low | fixed-untested | The runtime harness judged stack shape from facts the extension writes inside the tab. | A test correction; nothing to test. |
+| TE-6 | info | fixed-untested | The EDR and liveness entry read as complete while the runtime runs were pending. | A record correction; nothing to test. |
+| TE-7 | info | accepted-residual | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted by an agent: Fail-safe: the server's stacks are the tab's own. Recorded in the EDR. |
+| TE-8 | info | fixed-untested | One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | A record correction; nothing to test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
