@@ -16,13 +16,13 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 315 | 480 | 62 | 973 |
-| fixed-before-landing | 2 | 8 | 3 | 4 | 0 | 17 |
-| fixed-untested | 0 | 5 | 67 | 211 | 87 | 370 |
+| fixed-before-landing | 2 | 8 | 3 | 4 | 1 | 18 |
+| fixed-untested | 0 | 5 | 67 | 211 | 88 | 371 |
 | accepted-residual | 0 | 2 | 13 | 76 | 29 | 120 |
 | deferred | 2 | 1 | 14 | 15 | 3 | 35 |
 | open | 0 | 1 | 10 | 12 | 8 | 31 |
 | false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 799 | 221 | 1579 |
+| **all** | 18 | 119 | 422 | 799 | 223 | 1581 |
 
 ## Baseline: open high and critical findings
 
@@ -575,6 +575,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-11** | info | fixed-untested | patch 0062: errors that cross to a tab | The EDR's liveness evidence line said both modes had run while the patched run was pending. | A record correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-12** | info | fixed-untested | tests: error probes | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | A test correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-13** | info | fixed-untested | tests: error probes | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | A test correction; nothing to test. |
+| [20261120-tab-errors](20261120-tab-errors.md) **TE-14** | info | fixed-untested | tests: error probes | The depth-bound mutant was caught only through the reply's size, which rests on how deep serialising a stack-deep result gets. | A test correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-6** | info | fixed-untested | patch 0062: errors that cross to a tab | The EDR and liveness entry read as complete while the runtime runs were pending. | A record correction; nothing to test. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-7** | info | accepted-residual | patch 0062: errors that cross to a tab | The REH cleans its own error replies too (its connection context is the tab's), and the IPC logger sees the cleaned reply. | accepted by an agent: Fail-safe: the server's stacks are the tab's own. Recorded in the EDR. |
 | [20261120-tab-errors](20261120-tab-errors.md) **TE-8** | info | fixed-untested | patch 0062: errors that cross to a tab | One refusal message for every call is the documented policy, not each call's own upstream failure, so the EDR's first claim was stronger than what ships. | A record correction; nothing to test. |
@@ -2787,6 +2788,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | TE-11 | info | fixed-untested | The EDR's liveness evidence line said both modes had run while the patched run was pending. | A record correction; nothing to test. |
 | TE-12 | info | fixed-untested | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | A test correction; nothing to test. |
 | TE-13 | info | fixed-untested | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | A test correction; nothing to test. |
+| TE-14 | info | fixed-untested | The depth-bound mutant was caught only through the reply's size, which rests on how deep serialising a stack-deep result gets. | A test correction; nothing to test. |
+| TE-15 | info | fixed-before-landing | A toJSON returning its own object was asked again until the depth bound, so the value was lost. | patch:51c10863ce4759f5d0fac76dc1452d13fd587256 · `test/containment/tab-errors.test.ts` "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" · failed on patch:96b6039b9dc6c73a38458af641cabeb8c038ade7 |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

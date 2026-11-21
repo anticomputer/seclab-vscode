@@ -18,7 +18,7 @@ and found AIP-4's property holding on each; the tab can't switch the IPC cleanin
 window's channel server context is built locally. Eight low or informational findings, all handled
 here: six fixed (two with a regression test), two recorded in the EDR as residuals. Round 2
 reviewed those fixes and found no high or critical: five more low or informational findings, all
-handled (TE-9 to TE-13).
+handled (TE-9 to TE-13). Round 3 found none either, and two informational findings (TE-14, TE-15), both fixed.
 
 ## How the evidence was made
 The unit suite runs upstream's real RPC protocol and IPC channel server and client with the series
@@ -54,3 +54,11 @@ Round 2 reviewed `2225a61e`. On it the case "patched: every refusal and the ordi
 | TE-11 | Info | records | The EDR's liveness evidence line said both modes had run while the patched run was pending. | fixed | The line names each run as it is recorded. | none |
 | TE-12 | Info | tests | The runtime harness took the first matching entry in the tab's log, which the tab writes, so a planted earlier entry would have been judged. | fixed | Each entry must appear exactly once; the canary and the bundle path, which only the host knows, stay the anchor. | none |
 | TE-13 | Info | tests | The depth bound had no case: a cyclic rejection, or one deeper than the bound, was untested. | fixed | A cyclic object with a chain deeper than the bound; its other fields must arrive and its reply stay bounded, and removing the bound is a mutant the suite catches. | none |
+
+## Round 3
+Round 3 reviewed `26392df8` and found no high or critical. On it the case "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" fails, with TE-15's object losing its fields; it passes with the fix.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| TE-14 | Info | tests | The depth-bound mutant was caught only through the reply's size, which rests on how deep serialising a stack-deep result gets. | fixed | The mutant's expectation takes any of the ways the loss shows. | none |
+| TE-15 | Info | patch 0062 | A `toJSON` returning its own object (URI's shape) was asked again until the depth bound, so the value was lost; JSON asks once. | fixed | `toJSON` is asked once and its result walked. | test/containment/tab-errors.test.ts "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)" |
