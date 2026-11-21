@@ -22653,8 +22653,18 @@
 			"summary": "The RPC filter's denial errors reach the tab with their host-side stack: the host user's home path and app location, and frames that tell a policy denial apart from an unsupported operation.",
 			"component": "rpc filter (seclabRpcFilter denial errors)",
 			"owner": "rpc",
-			"status": "open",
-			"gap": "Predates the AI-probes change, which surfaced it in a run's logs; given to its own session (coordinator, 2026-11-20)."
+			"status": "fixed",
+			"commit": "patch:c22eec99e6279295d95aff2bbdcfe7dabc2004e3",
+			"test": {
+				"file": "test/containment/tab-errors.test.ts",
+				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
+			},
+			"preFix": "d34da65f",
+			"preFixRef": {
+				"file": "docs/edr/20261120-tab-errors.md",
+				"quote": "On main (`d34da65f`) the case \"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails"
+			},
+			"note": "Fixed by patch 0062 and the refusal text of 0030 and 0015 (review record 20261120-tab-errors.md, EDR 20261120-tab-errors.md); runtime proof: test/containment/error-probe.ts."
 		},
 		{
 			"record": "20261120-ai-probes.md",
@@ -23038,7 +23048,7 @@
 				"file": "test/containment/tab-errors.test.ts",
 				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
 			},
-			"preFix": "patch:f8637374fdcceef3565613ee12fcb16da4f4bd77",
+			"preFix": "patch:c22eec99e6279295d95aff2bbdcfe7dabc2004e3",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails with TE-1's nested stack sent"
@@ -23058,7 +23068,7 @@
 				"file": "test/containment/tab-errors.test.ts",
 				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
 			},
-			"preFix": "patch:f8637374fdcceef3565613ee12fcb16da4f4bd77",
+			"preFix": "patch:c22eec99e6279295d95aff2bbdcfe7dabc2004e3",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails with TE-1's nested stack sent"
@@ -23154,7 +23164,7 @@
 				"file": "test/containment/tab-errors.test.ts",
 				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
 			},
-			"preFix": "patch:e93f857a2d65adced840f552dd40712d71f7b525",
+			"preFix": "patch:114ce16b67f62515af848bdb3475cd2569e021f4",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with TE-9's class instance sending the host stack below it"
@@ -23234,7 +23244,7 @@
 				"file": "test/containment/tab-errors.test.ts",
 				"name": "patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)"
 			},
-			"preFix": "patch:96b6039b9dc6c73a38458af641cabeb8c038ade7",
+			"preFix": "patch:f0d92bae034880d10cb82a20f218a3605f1a0fe4",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with TE-15's object losing its fields"
