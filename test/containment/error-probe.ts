@@ -167,16 +167,33 @@ if (fs.existsSync(path.join(userData, 'logs'))) {
 }
 
 // ------------------------------------------------------------------ judge
+// The tab's claim, reported: the extension's facts. Judged: what the tab's own log holds.
 type Fact = { failed?: unknown; timedOut?: unknown; unsupported?: unknown; namesItsFile?: unknown; oneLineStack?: unknown; stackLines?: unknown; stackCanaries?: unknown };
 const facts: Record<string, Fact> = results.probeRan ? JSON.parse(fs.readFileSync(marker, 'utf8')) : {};
+/** The stack the probe logged for `key`, read out of the tab's log: up to the next log line. */
+const loggedStack = (key: string): string | undefined => {
+	const head = `${key} failed; the stack the tab received:\n`;
+	const at = tabLogs.indexOf(head);
+	if (at < 0) {
+		return undefined;
+	}
+	const rest = tabLogs.slice(at + head.length);
+	const end = rest.search(/\n\d{4}-\d\d-\d\d \d\d:\d\d:\d\d/);
+	return (end < 0 ? rest : rest.slice(0, end)).replace(/\n+$/, '');
+};
 for (const k of ['denyRpc', 'denyCommand', 'control']) {
 	const f = facts[k] ?? {};
 	results[`${k}Failed`] = f.failed === true && f.timedOut !== true;
 	results[`${k}Unsupported`] = f.unsupported === true;
-	results[`${k}OneLine`] = f.oneLineStack === true;
-	results[`${k}StackLines`] = typeof f.stackLines === 'number' ? f.stackLines : -1;
-	results[`${k}StackCanary`] = Array.isArray(f.stackCanaries) && f.stackCanaries.includes(canary);
+	results[`${k}ClaimedOneLine`] = f.oneLineStack === true;
+	const logged = loggedStack(k);
+	results[`${k}Logged`] = logged !== undefined;
+	results[`${k}LoggedLines`] = logged === undefined ? -1 : logged.split('\n').length;
+	results[`${k}LoggedFrames`] = logged !== undefined && /\n\s+at\s/.test(logged);
+	results[`${k}LoggedCanary`] = logged !== undefined && logged.includes(canary);
+	results[`${k}LoggedUnsupported`] = logged !== undefined && logged.split('\n')[0] === 'Error: Unsupported operation';
 }
+results.controlLoggedNamesItsFile = (loggedStack('control') ?? '').split('\n')[0].includes(`missing-${id}.txt`);
 results.controlNamesItsFile = facts.control?.namesItsFile === true;
 results.logHasCanary = tabLogs.includes(canary);
 results.logHasBundlePath = tabLogs.includes('Contents/Resources/app');
@@ -190,19 +207,20 @@ c('control', results.explorerListed === true, 'positive control: the window list
 c('control', results.probeRan === true, 'positive control: the probe extension ran in the tab and recorded its calls');
 c('control', results.tabLogsRead === true && results.logHasProbeLines === true, 'positive control: the tab\'s logs were read and hold the probe\'s lines');
 c('control', results.decisionLogDeniedGetCommands === true, 'positive control: the host decision log holds $getCommands denied');
-c('control', results.controlFailed === true && results.controlNamesItsFile === true && results.controlUnsupported !== true,
-	'control: an ordinary upstream failure reaches the tab with its own message');
+c('control', results.controlLogged === true && results.controlLoggedNamesItsFile === true && results.controlLoggedUnsupported !== true,
+	'control: an ordinary upstream failure reaches the tab with its own message (its log)');
 for (const k of ['denyRpc', 'denyCommand']) {
-	c('refusal', results[`${k}Failed`] === true && results[`${k}Unsupported`] === true, `${k}: the refusal reaches the tab as "Unsupported operation"`);
+	c('refusal', results[`${k}Logged`] === true && results[`${k}LoggedUnsupported`] === true, `${k}: the refusal reaches the tab as "Unsupported operation" (its log)`);
 }
 if (mode === 'patched') {
 	for (const k of ['denyRpc', 'denyCommand', 'control']) {
-		c('stack', results[`${k}OneLine`] === true && results[`${k}StackCanary`] !== true, `patched: ${k} reaches the tab with a one-line stack and no canary`, `lines ${results[`${k}StackLines`]}`);
+		c('stack', results[`${k}Logged`] === true && results[`${k}LoggedLines`] === 1 && results[`${k}LoggedFrames`] !== true && results[`${k}LoggedCanary`] !== true,
+			`patched: ${k} reached the tab with a one-line stack and no canary (its log)`, `lines ${results[`${k}LoggedLines`]}`);
 	}
 	c('log', results.logHasCanary !== true, 'patched: the canary in the host install path is nowhere in the tab\'s logs');
 	c('log', results.logHasBundlePath !== true, 'patched: the host app\'s bundle path is nowhere in the tab\'s logs');
 } else {
-	c('stack', results.denyRpcStackCanary === true && results.denyRpcOneLine !== true, 'baseline: the RPC refusal reaches the tab with host frames naming the canary');
+	c('stack', results.denyRpcLoggedCanary === true && results.denyRpcLoggedFrames === true, 'baseline: the RPC refusal reached the tab with host frames naming the canary (its log)');
 	c('log', results.logHasCanary === true, 'baseline: the canary in the host install path is in the tab\'s log');
 }
 process.exit(report(checks) ? 0 : 1);

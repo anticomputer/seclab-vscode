@@ -43,6 +43,10 @@ const CANARY = `seclabcanary_${randomBytes(6).toString('hex')}`;
 const INSTALL = `/Users/${CANARY}/Applications/seclab-vscode.app/Contents/Resources/app/out/vs/`;
 const TAB = 't-aaaaaaaaaaaaaaaaaaaaaaaaaa';
 const AUTH = `seclab+${TAB}`;
+// Patch 0009's refusals reach a tab only as RPC replies; its one message is read from the patch.
+const P0009_THROWS = [...patchText('0009-seclab-no-builtin-chat-in-tabs.patch').matchAll(/^\+.*\bthrow new Error\((.*)\);\s*$/gm)].map(m => m[1]);
+assert.ok(P0009_THROWS.length > 0 && P0009_THROWS.every(t => t === P0009_THROWS[0]), 'patch 0009 throws more than one message');
+const P0009_THROW = JSON.parse(P0009_THROWS[0].replace(/^'(.*)'$/, '"$1"')) as string;
 
 /** One file's section of a patch (`diff -ruN` or `diff --git`). */
 const section = (patch: string, rel: string) => patch.split(/^(?=diff (?:-ruN|--git) )/m).find(p => p.split('\n')[0].includes(`/src/vs/${rel} `));
@@ -281,7 +285,7 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 		ordinary,
 		taint: () => F.seclabTaintInFlight('workbench.action.restartExtensionHost', filter),
 		route: () => F.seclabExecuteCommandFromTab({}, 'x', [], filter),
-		'0009': () => new Error('Unsupported operation'),
+		'0009': () => new Error(P0009_THROW),
 	};
 	windowSide.set(extService, {
 		$onWillActivateExtension: (which: string) => {
@@ -306,6 +310,27 @@ async function observe(variantName: string, p0062: string | undefined): Promise<
 	await call('rpc-deny', () => tabSide.getProxy(clipboard).$readText());
 	for (const name of Object.keys(cases)) {
 		await call(`rpc-${name}`, () => tabSide.getProxy(extService).$onWillActivateExtension(name));
+	}
+	// Rejections that aren't plain errors (review TE-1, TE-2): a plain object carrying stacks at
+	// depth, an error-like object from another realm, and an error whose message can't be read.
+	const hostStack = new Error('host').stack!;
+	const odd: Record<string, () => unknown> = {
+		plain: () => ({ data: { stack: hostStack, detail: `kept ${NONCE}` }, list: [{ stacktrace: hostStack }] }),
+		errorlike: () => new (class ForeignError { name = 'Error'; message = `like ${NONCE}`; stack = hostStack; })(),
+		unreadable: () => Object.defineProperty(new Error('x'), 'message', { get() { throw new Error('unreadable'); } }),
+	};
+	const errorsId = ids.createProxyIdentifier('MainThreadErrors');
+	windowSide.set(errorsId, {
+		$onUnexpectedError: (which: string) => Promise.reject(odd[which]()),
+	});
+	for (const name of Object.keys(odd)) {
+		const before = p.sent.length;
+		const settled = await Promise.race([
+			tabSide.getProxy(errorsId).$onUnexpectedError(name).then(() => 'resolved', () => 'rejected'),
+			new Promise(r => setTimeout(() => r('no reply'), 2000)),
+		]);
+		const sent = p.sent.slice(before);
+		seen[`rpc-odd-${name}`] = { name: String(settled), message: '', stack: undefined, acked: sent.length > 1 && sent[0][0] === 5, wire: sent.map(b => Buffer.from(b).toString('latin1')).join('\n') };
 	}
 
 	// ---- IPC: the channels a tab's server calls on the window, with the tab's connection context.
@@ -347,11 +372,24 @@ const LEAK = new RegExp([CANARY, '/Users/', '/repo/', 'Contents/Resources/app', 
 function judge(seen: Record<string, Seen>): string[] {
 	const problems: string[] = [];
 	for (const [name, s] of Object.entries(seen)) {
+		const leak = s.wire.match(LEAK);
+		if (name.startsWith('rpc-odd-')) {
+			// What arrives is upstream's business; that something does, and carries no host detail, is ours.
+			if (leak) {
+				problems.push(`${name}: the window sent ${leak[0]}`);
+			}
+			if (s.name !== 'rejected') {
+				problems.push(`${name}: the tab got no reply (${s.name})`);
+			}
+			if (name === 'rpc-odd-plain' && !s.wire.includes(`kept ${NONCE}`)) {
+				problems.push(`${name}: the object's other fields were not sent`);
+			}
+			continue;
+		}
 		const header = s.message ? `${s.name}: ${s.message}` : s.name;
 		if (s.stack !== header) {
 			problems.push(`${name}: the stack is not its one header line`);
 		}
-		const leak = s.wire.match(LEAK);
 		if (leak) {
 			problems.push(`${name}: the window sent ${leak[0]}`);
 		}
@@ -377,7 +415,11 @@ const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 // On a tree without 0062 (main before it) the "patched" case runs that tree's own series, and fails.
 const p0062 = existsSync(join(REPO, 'patches', P0062)) ? patchText(P0062) : undefined;
-const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+const CALLS = ['ipc-deny', 'ipc-ordinary', 'ipc-unguarded', 'rpc-0009', 'rpc-deny', 'rpc-odd-errorlike', 'rpc-odd-plain', 'rpc-odd-unreadable', 'rpc-ordinary', 'rpc-route', 'rpc-taint'];
+// Main's window can fail to answer (an unreadable error throws inside upstream's reply); that is a
+// result here, not a crash of the suite.
+let unanswered = 0;
+process.on('unhandledRejection', () => { unanswered++; });
 
 test('patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)', async () => {
 	const seen = await observe('patched', p0062);
@@ -392,10 +434,11 @@ test('main (the series without 0062): a refusal reaches the tab with the install
 	assert.ok(seen['rpc-deny'].stack!.includes(CANARY) && seen['rpc-deny'].wire.includes(CANARY), 'the canary install path did not reach the tab');
 	assert.match(seen['rpc-deny'].stack!, /_deny|checkRpc/, 'no filter frame reached the tab');
 	const problems = judge(seen);
-	for (const name of CALLS) {
+	for (const name of CALLS.filter(n => !n.startsWith('rpc-odd-') || n === 'rpc-odd-plain')) {
 		assert.ok(problems.some(p => p.startsWith(`${name}: the window sent`)), `${name} leaked nothing on main`);
 	}
 	assert.ok(problems.includes('rpc-deny: not acknowledged before its answer, unlike an ordinary failure'));
+	assert.ok(problems.some(p => p.startsWith('rpc-odd-unreadable: the tab got no reply')) && unanswered > 0, 'an unreadable error was answered on main');
 });
 
 // Each mutant of 0062 must bring a named problem back.
@@ -403,10 +446,13 @@ const mutants: Array<[string, (p: string) => string, RegExp]> = [
 	['the RPC reply keeps the stack', p => p.replace('this._seclabFilter ? errors.seclabErrorForTab(err) : err', 'err'), /^rpc-deny: the window sent/],
 	['a refusal answers at once, unacknowledged', p => p.replace('+\t\t\tpromise = Promise.reject(refused);', '+\t\t\tthis._protocol.send(MessageIO.serializeReplyErr(req, errors.seclabErrorForTab(refused))); return;'), /^rpc-deny: not acknowledged/],
 	['the IPC reply keeps the stack', p => p.replace('+\t\t\t\terr = seclabErrorForTab(err);', '+\t\t\t\terr = err;'), /^ipc-deny: the window sent/],
-	['the clean error keeps the stack', p => p.replace('+\t\tclean.stack = error.message ? `${error.name}: ${error.message}` : `${error.name}`;', '+\t\tclean.stack = error.stack;'), /^rpc-taint: the window sent/],
-	['the cause is passed on as it is', p => p.replace('+\t\t\tclean.cause = seclabErrorForTab(error.cause, depth + 1);', '+\t\t\tclean.cause = error.cause;'), /^rpc-ordinary: the window sent/],
-	['the cause is dropped', p => p.replace('+\t\t\tclean.cause = seclabErrorForTab(error.cause, depth + 1);', '+\t\t\tvoid 0;'), /^rpc-ordinary: the cause or code was not sent/],
+	['the clean error keeps the stack', p => p.replace('{ name, stack: message ? `${name}: ${message}` : name }', '{ name, stack: (error as Error).stack }'), /^rpc-taint: the window sent/],
+	['the cause is passed on as it is', p => p.replace('+\t\t\t\tclean.cause = seclabErrorForTab(e!.cause, depth + 1);', '+\t\t\t\tclean.cause = e!.cause;'), /^rpc-ordinary: the window sent/],
+	['the cause is dropped', p => p.replace('+\t\t\t\tclean.cause = seclabErrorForTab(e!.cause, depth + 1);', '+\t\t\t\tvoid 0;'), /^rpc-ordinary: the cause or code was not sent/],
 	['only a tab context is not checked', p => p.replace('+\t\t\tif (seclabIsTabContext(this.ctx)) {', '+\t\t\tif (seclabIsTabContext(undefined)) {'), /^ipc-ordinary: the window sent/],
+	['nested stacks are kept', p => p.replace(".filter(([k]) => k !== 'stack' && k !== 'stacktrace')", ''), /^rpc-odd-plain: the window sent/],
+	['an error-like object is passed as data', p => p.replace(" || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)", ''), /^rpc-odd-errorlike: the window sent/],
+	['an unreadable error is not caught', p => p.replace('+\t} catch {\n+\t\treturn bare(', '+\t} finally {\n+\t\tvoid bare(').replace("bare('Error', 'Unsupported operation');", "bare('Error', 'Unsupported operation'), 0;"), /^rpc-odd-unreadable: the tab got no reply/],
 ];
 mutants.forEach(([name, mutate, expected], i) => {
 	test(`rejects the mutant "${name}"`, async () => {

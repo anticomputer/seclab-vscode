@@ -1,44 +1,52 @@
 diff -ruN a/src/vs/base/common/errors.ts b/src/vs/base/common/errors.ts
 --- a/src/vs/base/common/errors.ts	2026-11-20 18:50:56
-+++ b/src/vs/base/common/errors.ts	2026-11-20 18:50:56
-@@ -169,6 +169,34 @@
- 	}
++++ b/src/vs/base/common/errors.ts	2026-11-20 19:24:17
+@@ -170,6 +170,42 @@
  
  	// return as is
-+	return error;
+ 	return error;
 +}
 +
 +/**
-+ * seclab: `error` as it may cross to a sandboxed tab. Name, message, code and cause are kept; the
-+ * stack is only its first line, because a host stack names the app's path, the user's home and the
-+ * code that refused a call (review AIP-4). Another object loses any `stack`; the original is never
-+ * changed, so host-side logs keep the detail.
++ * seclab: `error` as it may cross to a sandboxed tab. An error (or error-like object) keeps its name,
++ * message, code and cause, and its stack is only its first line, because a host stack names the
++ * app's path, the user's home and the code that refused a call (review AIP-4). Plain objects and
++ * arrays lose every `stack` and `stacktrace`, however deep. The original is never changed, so
++ * host-side logs keep the detail; anything that can't be read becomes an unsupported operation.
 + */
 +export function seclabErrorForTab(error: unknown, depth = 0): unknown {
-+	if (error instanceof Error) {
-+		const clean = new Error(error.message);
-+		clean.name = error.name;
-+		clean.stack = error.message ? `${error.name}: ${error.message}` : `${error.name}`;
-+		if ((<ErrorWithCode>error).code !== undefined) {
-+			(<ErrorWithCode>clean).code = (<ErrorWithCode>error).code;
++	const bare = (name: string, message: string) => Object.assign(new Error(message), { name, stack: message ? `${name}: ${message}` : name });
++	try {
++		const e = error as { name?: unknown; message?: unknown; stack?: unknown; code?: unknown; cause?: unknown } | null;
++		if (error instanceof Error || (e && typeof e === 'object' && typeof e.stack === 'string' && 'message' in e)) {
++			const clean: Error & { code?: unknown } = bare(String(e!.name ?? 'Error'), String(e!.message ?? ''));
++			if (typeof e!.code === 'string' || typeof e!.code === 'number') {
++				clean.code = e!.code;
++			}
++			if (e!.cause !== undefined && depth < 8) {
++				clean.cause = seclabErrorForTab(e!.cause, depth + 1);
++			}
++			return clean;
 +		}
-+		if (error.cause !== undefined && depth < 8) {
-+			clean.cause = seclabErrorForTab(error.cause, depth + 1);
++		if (e && typeof e === 'object' && (Array.isArray(e) || [Object.prototype, null].includes(Object.getPrototypeOf(e)))) {
++			if (depth >= 8) {
++				return undefined;
++			}
++			if (Array.isArray(e)) {
++				return e.map(v => seclabErrorForTab(v, depth + 1));
++			}
++			return Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'stack' && k !== 'stacktrace').map(([k, v]) => [k, seclabErrorForTab(v, depth + 1)]));
 +		}
-+		return clean;
++		return error;
++	} catch {
++		return bare('Error', 'Unsupported operation');
 +	}
-+	if (error && typeof error === 'object' && ('stack' in error || 'stacktrace' in error)) {
-+		const rest = { ...(error as Record<string, unknown>) };
-+		delete rest.stack;
-+		delete rest.stacktrace;
-+		return rest;
-+	}
- 	return error;
  }
  
+ export function transformErrorFromSerialization(data: SerializedError): Error {
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
 --- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 18:50:56
-+++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 18:50:56
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-20 19:24:17
 @@ -8,7 +8,7 @@
  import { VSBuffer } from '../../../common/buffer.js';
  import { CancellationToken, CancellationTokenSource } from '../../../common/cancellation.js';
@@ -61,7 +69,7 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
  					id, data: {
 diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/workbench/services/extensions/common/rpcProtocol.ts
 --- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 18:50:56
-+++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 18:50:56
++++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-20 19:24:17
 @@ -365,17 +365,15 @@
  		// seclab: RPC capability filter. Runs after transformIncomingURIs, so
  		// validators see the same values the handler will, and before
