@@ -248,6 +248,43 @@
 			]
 		},
 		{
+			"id": "hook:containment/fake-model",
+			"runBy": "build-macos.yml dispatched with test_variant=containment adds it to the app as a ui-kind built-in (build/test-variant.sh, uiExtension); test/containment/ai-probe.ts and ai-agent-host-probe.ts check it in the app and arm it in a test profile",
+			"evidence": [
+				{
+					"run": 44844653186,
+					"workflow": "build-macos.yml",
+					"job": "build",
+					"sha": "1b3fadd3f1fe9b9257fcee15e0048bea75a6d50f",
+					"date": "2026-11-21"
+				},
+				{
+					"record": "docs/security-reviews/20261120-ai-probes.md",
+					"date": "2026-11-21"
+				}
+			]
+		},
+		{
+			"id": "fixture:test/containment/fake-model/extension",
+			"runBy": "built into the containment variant by the fake-model hook; test/containment/ai-probe.ts and ai-agent-host-probe.ts arm it, with the editor driven headlessly (macOS, local only)",
+			"evidence": [
+				{
+					"record": "docs/security-reviews/20261120-ai-probes.md",
+					"date": "2026-11-21"
+				}
+			]
+		},
+		{
+			"id": "fixture:test/containment/ai-tab-probe",
+			"runBy": "test/containment/ai-probe.ts packages it with the run record and installs it in an OCI tab of the containment test build, with the editor driven headlessly (macOS, local only)",
+			"evidence": [
+				{
+					"record": "docs/security-reviews/20261120-ai-probes.md",
+					"date": "2026-11-21"
+				}
+			]
+		},
+		{
 			"id": "fixture:test/containment/benign-extension",
 			"runBy": "test/containment/check-evidence.ts prepare|check (the positive control beside the rogue extension, or alone with SECLAB_BENIGN_ONLY=1) and test/containment/rpc-trace.ts, with the editor launched by test/window.ts (macOS, local only)",
 			"evidence": [

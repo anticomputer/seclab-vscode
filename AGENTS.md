@@ -403,6 +403,12 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test auto-replies      # patch 0061: a tab window installs no terminal auto reply on the local pty host every window shares, each mutant caught (also in ./seclab test rpc-filter)
 ./seclab test search-excludes   # patch 0060: the host user's exclude and watcher patterns reach a tab no way (upstream's doSearch, watchWorkspace, 0036's snapshot), each mutant caught (also in ./seclab test rpc-filter)
 ./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)
+# The AI-feature probes (EDR ai-probes): the containment build's fake model in a tab window and an
+# ordinary window, then the tab window's agent-host client against the REH's agentHostProxy. Tab
+# images: build-images.sh --test-variant containment --tag b-aip (patched) or b-aipbase (the build-only
+# baseline without 0009, 0010 and 0018; SECLAB_APP_SHA names its commit). About 4 and 6 minutes.
+node test/containment/ai-probe.ts patched ~/.seclab-test/aip --app '.work/test-builds/containment/<app>'
+node test/containment/ai-agent-host-probe.ts patched ~/.seclab-test/aah --app '.work/test-builds/containment/<app>'
 # One-pass RPC measurement of an ordinary session (unfiltered build, benign fixtures only):
 # prepare prints a `node test/window.ts launch --rpc-trace .work/...` line; check derives method
 # names and counts into .work/rpc-trace/derived.json, deletes the raw trace, then tears down.
