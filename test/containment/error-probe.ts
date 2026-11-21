@@ -173,10 +173,11 @@ const facts: Record<string, Fact> = results.probeRan ? JSON.parse(fs.readFileSyn
 /** The stack the probe logged for `key`, read out of the tab's log: up to the next log line. */
 const loggedStack = (key: string): string | undefined => {
 	const head = `${key} failed; the stack the tab received:\n`;
-	const at = tabLogs.indexOf(head);
-	if (at < 0) {
+	// Exactly one: a planted or repeated entry fails rather than being judged (review TE-12).
+	if (tabLogs.split(head).length !== 2) {
 		return undefined;
 	}
+	const at = tabLogs.indexOf(head);
 	const rest = tabLogs.slice(at + head.length);
 	const end = rest.search(/\n\d{4}-\d\d-\d\d \d\d:\d\d:\d\d/);
 	return (end < 0 ? rest : rest.slice(0, end)).replace(/\n+$/, '');
