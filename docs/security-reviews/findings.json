@@ -22977,6 +22977,52 @@
 				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
 				"quote": "None found in the diff, the register, the records or the test fixtures"
 			}
+		},
+		{
+			"record": "20261120-hook-refuse-main.md",
+			"round": "Round RMP",
+			"component": "pre-push hook (build/hooks/pre-push refuse_main_push)",
+			"owner": "fork-build",
+			"anchor": "RMP-1",
+			"severity": "medium",
+			"summary": "The refusal of pushes to main returned its message's exit status, so with stderr closed a push to main went on to the scans and out.",
+			"status": "fixed",
+			"commit": "patch:e0c1860789c1d06ba89a98ccef28b0c15925c256",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "a push to main with stderr closed is still refused (RMP-1)"
+			}
+		},
+		{
+			"record": "20261120-hook-refuse-main.md",
+			"round": "Round RMP",
+			"component": "pre-push hook (build/hooks/pre-push refuse_main_push)",
+			"owner": "fork-build",
+			"anchor": "RMP-2",
+			"severity": "low",
+			"summary": "The refusal applies to refs/heads/main on every remote, so pushing main to a fork or mirror needs --no-verify, which skips both scans.",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "The coordinator's rule (2026-11-20) is any push whose remote ref is refs/heads/main: a remote's name doesn't say which repository it is, and this clone's work reaches main only through a PR. Documented in the hook and EDR pr-landing.",
+			"ref": {
+				"file": "docs/edr/20261116-pr-landing.md",
+				"quote": "on every remote: this clone's work"
+			}
+		},
+		{
+			"record": "20261120-hook-refuse-main.md",
+			"round": "Round RMP",
+			"component": "pre-push hook (build/hooks/pre-push refuse_main_push)",
+			"owner": "fork-build",
+			"anchor": "RMP-3",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-hook-refuse-main.md",
+				"quote": "None found in the diff, the tests or the docs"
+			}
 		}
 	]
 }
