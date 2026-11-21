@@ -536,7 +536,18 @@ async function runRehProbes(socketServer, router) {
 		return [{ id: safety.lit('harness'), policyRef: safety.lit(''), outcome: OUTCOME.error, error: KIND.notArmed }];
 	}
 	if (targets.only === 'agent-host') {
-		// The agent-host proxy is observed from `early` alone (wrapAgentHostProxy); nothing runs here.
+		// Normally wrapped from `early`, as the channel is registered. A server that was already
+		// running when the run was staged gets the registered channel replaced here instead.
+		const channels = socketServer && socketServer.channels;
+		const current = channels && (typeof channels.get === 'function' ? channels.get('agentHostProxy') : channels.agentHostProxy);
+		if (current && !agentHostProbe.wrapped) {
+			const wrapped = wrapAgentHostProxy(current);
+			if (typeof channels.set === 'function') {
+				channels.set('agentHostProxy', wrapped);
+			} else {
+				channels.agentHostProxy = wrapped;
+			}
+		}
 		return results;
 	}
 	if (targets.only === 'environment') {
