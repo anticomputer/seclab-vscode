@@ -61,3 +61,19 @@ tests proving what they claim.
 | IMB-11 | Low | pin age | A caller's `--base` or `PIN_AGE_BASE` could replace the computed base unnoticed, and a run that judged nothing looked like one that passed. | Fixed | A second `--base` is refused; CI ignores `PIN_AGE_BASE`; every run prints its base commit and the pins it judged. |
 | IMB-12 | Info | prompt injection | None found in the diff, the register, the records or the test fixtures. | No finding | — |
 
+## Follow-up (2026-11-23): IMB-1
+golang 1.27.4's current digest, `f18c3d73` (published 2026-11-16), passed the 7-day hold on
+2026-11-23 and is pinned, with gitleaks' binary pins re-taken from CI's builds of 1.27.4. IMB-1 is
+fixed by that bump, which also supersedes Dependabot PR #79.
+
+## Round GOB (2026-11-23)
+By an Opus-class model, of the follow-up bump: golang 1.27.4 at `f18c3d73`, `docker:29.9.3-cli` at
+`5a7af0dc`, and gitleaks' binary pins. Both pins are their tags' current digests, past the hold,
+official and multi-arch. The two CI runs that produced the gitleaks hashes built from `f18c3d73`
+itself, and a local rebuild reproduced both. `5a7af0dc` rebuilds the same Docker CLI binary on the
+same alpine layer (git, buildx and compose updates), and the harness copies only the CLI binary.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| GOB-1 | Info | prompt injection | None found in the diff, the Docker Hub records, the image configs, Dependabot PR #79 or the CI logs. | No finding | — |
+

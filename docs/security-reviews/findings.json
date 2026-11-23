@@ -22763,8 +22763,9 @@
 			"summary": "The gitleaks build toolchain was pinned one Go security release behind one already past the hold.",
 			"component": "build toolchain pins (build/tools/Dockerfile)",
 			"owner": "fork-build",
-			"status": "deferred",
-			"followUp": "golang stays at 1.27.2 in this change: 1.27.4's only digest with a publication record, the tag's 2026-11-16 push, passes the 7-day hold on 2026-11-23; the follow-up bump pins it then and re-takes gitleaks' binary pins from CI."
+			"status": "fixed-untested",
+			"commit": "patch:7e09c5ab5f5fa6a4e0dd0d2e8c4bca3e1ac54b0e",
+			"gap": "A pin choice: no test can say a newer eligible release exists; the scheduled pin check reports newer releases, and pin-age dates the new pin by publication."
 		},
 		{
 			"record": "20261120-bump-images-supersede-59.md",
@@ -23359,6 +23360,21 @@
 			"preFixRef": {
 				"file": "docs/security-reviews/20261120-tab-errors.md",
 				"quote": "\"patched: every refusal and the ordinary failure reach the tab with no host stack (AIP-4)\" fails, with PR78-5's buffer and PR78-6's arrays"
+			}
+		},
+		{
+			"record": "20261120-bump-images-supersede-59.md",
+			"anchor": "GOB-1",
+			"round": "Round GOB",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "image bumps (build/tools, broker harness)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261120-bump-images-supersede-59.md",
+				"quote": "None found in the diff, the Docker Hub records"
 			}
 		}
 	]
