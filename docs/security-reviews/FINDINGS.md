@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 102 | 316 | 480 | 62 | 974 |
 | fixed-before-landing | 2 | 8 | 3 | 9 | 1 | 23 |
-| fixed-untested | 0 | 5 | 67 | 212 | 88 | 372 |
+| fixed-untested | 0 | 5 | 68 | 212 | 88 | 373 |
 | accepted-residual | 0 | 2 | 13 | 76 | 29 | 120 |
-| deferred | 2 | 1 | 14 | 15 | 3 | 35 |
+| deferred | 2 | 1 | 13 | 15 | 3 | 34 |
 | open | 0 | 1 | 9 | 12 | 8 | 30 |
-| false-positive | 0 | 0 | 0 | 1 | 32 | 33 |
-| **all** | 18 | 119 | 422 | 805 | 223 | 1587 |
+| false-positive | 0 | 0 | 0 | 1 | 33 | 34 |
+| **all** | 18 | 119 | 422 | 805 | 224 | 1588 |
 
 ## Baseline: open high and critical findings
 
@@ -235,7 +235,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-5** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | landing verify used its own checkout's list unchecked and put pairs into an API path and jq unvalidated. | The checkout and pair checks guard the live API path; no test drives landing verify against the API. |
 | [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-7** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | The forged-status residual named only statuses: write, not actions: write cancelling the gate. | A record correction; nothing to run. |
 | [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-9** | medium | fixed-untested | required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify) | An empty required list, or a checkout on another branch, made landing verify check nothing. | The list and ancestry checks guard the live API path; no test drives landing verify against the API. |
-| [20261120-bump-images-supersede-59](20261120-bump-images-supersede-59.md) **IMB-1** | medium | deferred | build toolchain pins (build/tools/Dockerfile) | The gitleaks build toolchain was pinned one Go security release behind one already past the hold. | follow-up: golang stays at 1.27.2 in this change: 1.27.4's only digest with a publication record, the tag's 2026-11-16 push, passes the 7-day hold on 2026-11-23; the follow-up bump pins it then and re-takes gitleaks' binary pins from CI. |
+| [20261120-bump-images-supersede-59](20261120-bump-images-supersede-59.md) **IMB-1** | medium | fixed-untested | build toolchain pins (build/tools/Dockerfile) | The gitleaks build toolchain was pinned one Go security release behind one already past the hold. | A pin choice: no test can say a newer eligible release exists; the scheduled pin check reports newer releases, and pin-age dates the new pin by publication. |
 | [20261120-bump-images-supersede-59](20261120-bump-images-supersede-59.md) **IMB-10** | medium | fixed-untested | pin-age lint (build/pin-age.ts, build/release-dates.ts, seclab lint pin-age) | The EDR claimed every image pin was 7 days old by publication when it landed, but pins already on main were judged by build date, and the lint summary read as assurance for them. | A statement of the guarantee in the EDR and the wording of the summary line; no behaviour to test. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
@@ -2746,7 +2746,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| IMB-1 | medium | deferred | The gitleaks build toolchain was pinned one Go security release behind one already past the hold. | follow-up: golang stays at 1.27.2 in this change: 1.27.4's only digest with a publication record, the tag's 2026-11-16 push, passes the 7-day hold on 2026-11-23; the follow-up bump pins it then and re-takes gitleaks' binary pins from CI. |
+| IMB-1 | medium | fixed-untested | The gitleaks build toolchain was pinned one Go security release behind one already past the hold. | A pin choice: no test can say a newer eligible release exists; the scheduled pin check reports newer releases, and pin-age dates the new pin by publication. |
 | IMB-2 | info | false-positive | Prompt injection. | The review recorded no issue. |
 | IMB-3 | medium | fixed | The pin-age lint dated an image index by its images' created, so a digest re-pushed inside the hold passed it. | patch:6567370dd05bcafc6385f0854f3bf96484d3e598 · `build/release-dates.test.ts` "publication date: a Docker Hub pin that is the current digest of its tag is dated by the last push of the tag" |
 | CR74-1 | medium | fixed | With Docker Hub's record unavailable, the pin-age rule fell back to created, so a re-pushed digest could pass. | patch:6567370dd05bcafc6385f0854f3bf96484d3e598 · `build/release-dates.test.ts` "publication date: with Docker Hub down, a digest is undated, never dated by the image" |
@@ -2762,6 +2762,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | IMB-10 | medium | fixed-untested | The EDR claimed every image pin was 7 days old by publication when it landed, but pins already on main were judged by build date, and the lint summary read as assurance for them. | A statement of the guarantee in the EDR and the wording of the summary line; no behaviour to test. |
 | IMB-11 | low | fixed | A caller-supplied --base or PIN_AGE_BASE could replace the computed base unnoticed, and a run that judged nothing printed the same as one that passed. | patch:6567370dd05bcafc6385f0854f3bf96484d3e598 · `test/safety/gate-inputs.test.ts` "pin-age: a cooldown below 7 days and an empty or foreign file list are refused, before any network (GATE-14)" |
 | IMB-12 | info | false-positive | Prompt injection. | The review recorded no issue. |
+| GOB-1 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### [20261120-hook-refuse-main](20261120-hook-refuse-main.md)
 
