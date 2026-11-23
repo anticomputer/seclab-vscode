@@ -14,8 +14,8 @@ import type { Runner } from './run.ts';
 export const GITLEAKS_IMAGE = 'seclab-tool-gitleaks:8.30.1';
 /** The reproducible binaries' sha256 (build/tools/tools.json binarySha256; a unit test keeps them equal). */
 export const GITLEAKS_BIN_SHA256: Readonly<Record<string, string>> = {
-	arm64: '6949cfae1df1f37a89c6b72d0e118115ea3bb2761d384ddd12d48b45fd48b701',
-	amd64: 'e0e51d58e7592cd4f373043333cc2cd84c6564625bce5acd6d10a04985cce637',
+	arm64: '96695c636f97dd55910a8edfdfc5b29b8dbc8ddedcc5f013f620e20ade8ba78f',
+	amd64: 'cf4647c5499c7d8db14be0977a89a1cb619bf574ae0f8b83c3da87e259b7ac0a',
 };
 
 // Default rules plus our test canary shape (test/canary/canary.ts).
